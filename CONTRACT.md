@@ -50,7 +50,7 @@ The trait column names any trait a system takes on by using the capability.
 
 ## Reference
 
-This repository, `apnex/entity-graph`, private until its first working code is certified.\
+This repository, `apnex/entity-graph`.\
 Currently a scaffold with `VISION.md` and `CONTRACT.md` drafted under `zorg`'s `BL33`.
 
 ---

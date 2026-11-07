@@ -13,7 +13,7 @@ Rulings that shape this component together with others are held in zorg's `docs/
 **Affects:** this repository.
 
 **Ruling.**\
-This component, `entity-graph`, is scaffolded in its own sovereign repository, private until its first working code, on the terms of zorg's `D16` and `D35`.\
+This component, `entity-graph`, is scaffolded in its own sovereign public repository, on the terms of zorg's `D16` and `D35`.\
 Its contract of record is `CONTRACT.md` (zorg's `D17`), and its vision in `VISION.md` is a draft that becomes enduring once cold-read under `D52` and ratified by the director.\
 It layers synchronous in-memory reference indices, declarative cascades, pure per-kind reactions and `{ key, measure }` result invariants, and reversible inverses over `entity-store` (`C4`) and `shape-check` (`C3`).
 
