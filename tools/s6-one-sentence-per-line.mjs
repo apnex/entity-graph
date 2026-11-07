@@ -10,7 +10,7 @@
 // A file passes S6 exactly when this tool has nothing to change. That is the definition of
 // compliance, not an approximation of it.
 //
-//   --check   report the lines a fix would rewrite, and exit non-zero if any
+//   --check   report the lines a fix would rewrite, and exit non-zero if any (the default)
 //   --fix     rewrite them
 //
 // Prose only. Frontmatter, fenced blocks, tables, headings, list items and blockquotes are
@@ -79,9 +79,19 @@ function isStructural(line) {
 		/^\s{2,}\S/.test(line) ||             // indented continuation (list body)
 		/^---$/.test(line) ||                 // horizontal rule
 		/^<!--/.test(line) ||                 // html comment / marker
-		/^\s*`{3,}/.test(line)                // fence
+		/^\s*`{3,}/.test(line) ||             // fence
+		/^\s*\*\*[^*]+:\*\*/.test(line)       // metadata line - see below
 	);
 }
+// The metadata line is a `**Key:** value` header block, and it is not prose. S6 calls it
+// "coupled, each needing its own rendered line"; joining a run of them produces the single
+// rendered block the rule exists to prevent. The join was also unrecoverable: with no sentence
+// terminator between a key's value and the next "**Key:**", the splitter could not undo it, and
+// the tool then reported the damaged file clean - a fix that certifies its own corruption.
+//
+// The colon must sit INSIDE the bold span. That is what separates a metadata key from a bold
+// sentence opener like "**Diffs.** Rewording one sentence...", which is prose and must still
+// split. Both cases are held by tools/s6-one-sentence-per-line.test.sh.
 
 function reflow(src) {
 	const lines = src.split('\n');
@@ -108,21 +118,36 @@ function reflow(src) {
 		}
 		if (fence !== null || isStructural(line)) { out.push(line); i++; continue; }
 
-		// gather one prose paragraph
-		const buf = [];
+		// gather one prose paragraph, preserving an explicit sentence-ending `\` when the next line
+		// begins with a lowercase name (e.g. "opcall keeps...", "zorg's own code..."), which the
+		// joined-line regex cannot distinguish from a mid-sentence abbreviation (`B83`).
+		const segments = [[]];
 		while (i < lines.length && !isStructural(lines[i]) && !/^\s*`{3,}/.test(lines[i])) {
-			buf.push(lines[i].replace(/\\$/, '').trim());
+			const raw = lines[i];
+			const stripped = raw.replace(/\\$/, '').trim();
+			segments[segments.length - 1].push(stripped);
+			const endsSentence = /[.!?]["'*`\)\]]*\\$/.test(raw.trim()) && !ABBREV.test(stripped);
+			const nextLine = i + 1 < lines.length ? lines[i + 1].trim() : '';
+			if (endsSentence && /^[a-z]/.test(nextLine) && !isStructural(lines[i + 1]) && !/^\s*`{3,}/.test(lines[i + 1])) {
+				segments.push([]);
+			}
 			i++;
 		}
-		const { masked, spans } = maskInlineCode(buf.join(' '));
-		const sentences = splitSentences(masked).map((s) => restoreInlineCode(s, spans));
+		const sentences = segments.flatMap((buf) => {
+			if (!buf.length) return [];
+			const { masked, spans } = maskInlineCode(buf.join(' '));
+			return splitSentences(masked).map((s) => restoreInlineCode(s, spans));
+		});
 		sentences.forEach((s, n) => out.push(n < sentences.length - 1 ? `${s}\\` : s));
 	}
 	return out.join('\n');
 }
 
 const args = process.argv.slice(2);
-const check = args.includes('--check');
+// Check unless told to fix. The default once rewrote files when a reader ran it to inspect them, and
+// a stash of pending work could not be restored over the result. A tool that changes files on its
+// default path surprises whoever runs it to look.
+const check = !args.includes('--fix');
 const files = args.filter((a) => !a.startsWith('--'));
 if (!files.length) { console.error('usage: s6-one-sentence-per-line.mjs [--check|--fix] FILE...'); process.exit(2); }
 
