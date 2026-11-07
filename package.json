@@ -1,0 +1,36 @@
+{
+  "name": "@apnex/entity-graph",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Keep an in-memory graph of declared references between typed entities, dated by the store position it reflects, and plan every edit with its cascades, reactions, result invariants and inverse into one atomic change.",
+  "license": "MIT",
+  "author": "apnex",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/apnex/entity-graph.git"
+  },
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p .",
+    "test": "npm run build && node --test \"test/**/*.test.js\"",
+    "docs:check": "tools/check-docs.sh"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "5.9.3"
+  }
+}
