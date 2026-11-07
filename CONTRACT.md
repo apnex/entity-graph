@@ -1,5 +1,5 @@
 ---
-id: unminted
+id: C15
 category: component
 title: entity-graph - synchronous in-memory reference indices and atomic cascade planning over entity-store
 status: draft
@@ -11,9 +11,8 @@ related: [C0, C3, C4, C6, P4, A1, A2, A3]
 
 # entity-graph
 
-The contract of record for entity-graph: what a consumer can depend on, scaffolded as a candidate component under zorg's `D35` and `BL33` (`zorg/docs/BACKLOG.md`); its vision and contract are drafts awaiting cold reading and the director's ratification.\
-It also carries the fields of a mission-kit registry entry, and that entry is generated from this file when the component is filed, never written as a second copy.\
-The registry id is unminted on purpose; one is minted only when the entry is admitted to the registry.
+The contract of record for entity-graph: what a consumer can depend on, scaffolded as a candidate component under zorg's `D35` and `BL33` (`zorg/docs/BACKLOG.md`) and registered as `C15` (`status: draft`) in `mission-kit/components/C15-entity-graph.md`; its vision and contract are drafts awaiting cold reading and the director's ratification.\
+It also carries the fields of its mission-kit registry entry (`C15`).
 
 ---
 
