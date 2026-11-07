@@ -115,3 +115,21 @@ Blinded readers of the draft vision could not decide whether merging concurrent 
 **Alternatives refuted.**\
 Refusing merges outright in the vision - that decides concurrency before the design.\
 Leaving both unstated - readers then decide them silently, and differently.
+
+---
+
+## D7 - The vision is ratified, and the recorded wording of `D2` to `D6` is confirmed
+
+**Ruled by:** the director, 2026-11-07, on review of apnex/entity-graph#1.\
+**Affects:** `VISION.md`, `README.md`, `CONTRACT.md`.
+
+**Ruling.**\
+`VISION.md`, as committed in `f02f5cb`, is ratified and enduring.\
+The wording of `D2` to `D6`, recorded in `439311d` from rulings given in session, is confirmed as the director's.
+
+**Why.**\
+Three blinded cold reads under mission-kit's `M2` found readers of each revision deciding every probe as well as readers of the draft, and giving the new answers where `D2` to `D6` changed them (mission-kit's `docs/audits/eval-entity-graph-vision`).\
+`D1` makes the vision enduring once cold-read under zorg's `D52` and ratified; `D52` cannot be read from this repository, so whether those runs discharge it is not checked here, and the director ratified with that known.
+
+**Alternatives refuted.**\
+Ratifying the rulings alone and leaving the vision a draft until a cold read under zorg's `D52` - that holds a tested statement of purpose in draft for a procedure no reader here can see.

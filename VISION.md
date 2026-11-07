@@ -1,6 +1,6 @@
 # entity-graph - Vision
 
-**Status: draft, 2026-11-07, restated under the director's rulings `D2` to `D6` (`docs/DECISIONS.md`); awaits cold reading and the director's ratification.**\
+**Status: ratified by the director, 2026-11-07 (`docs/DECISIONS.md`, `D7`), restated under the rulings `D2` to `D6`; enduring.**\
 This document states why `entity-graph` exists and what it will never be.\
 It carries no current state, no roadmap, and no schedule.\
 One section is point-in-time and says so: "Questions left open", the last, names the questions the director's rulings leave to the design effort, and everything above it is meant to endure.
