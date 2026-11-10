@@ -41,7 +41,7 @@ A caller can see everything an edit would do, consequences included, before the 
 A refused edit leaves every answer as it was, and says which rule it would break, where, and which part of the edit led there.
 
 **Can be undone exactly** means an edit that has landed can be reversed by a later edit that restores every entity the first one changed, its consequences included, as it was before, identity included.\
-An undo is an edit like any other, held to every commitment in this section.\
+An undo is an edit like any other, held to every commitment in this section; the consequences it carries are those of the edit it reverses, restored as they were recorded rather than worked out again (`D8`).\
 This is the goal, and the last section names a question it leaves open.
 
 ---
