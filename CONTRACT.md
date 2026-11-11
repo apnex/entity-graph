@@ -172,7 +172,7 @@ Each is a question, and any answer keeps every commitment in `VISION.md` and in 
 ## Reference
 
 This repository, `apnex/entity-graph`.\
-Currently a scaffold with `VISION.md` and `CONTRACT.md` drafted under zorg's `BL33`, and no code.\
+Its first milestone is built, serving `dated-graph-view` in memory, the other rows deferred (`D10`); the rest is built milestone by milestone under `docs/BUILD-PLAN.md`.\
 `positioned-graph-sync` takes a store port shaped by the `entity-store` capabilities it requires, with `entity-store` as the reference provider (*The store port*), and `reversible-history` keeps its undo records in the note `entity-store:change-provenance` carries.\
 Those `entity-store` capabilities are designed under `entity-store`'s own `D4` and not yet served: its multi-item `change`, the expected position on a change, and the note.
 

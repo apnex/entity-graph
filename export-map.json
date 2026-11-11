@@ -1,0 +1,17 @@
+{
+  "package": "@apnex/entity-graph",
+  "paths": {
+    ".": {
+      "exports": {
+        "createEntityGraph": { "part": "entity-graph", "serves": ["dated-graph-view"] },
+        "GRAPH_LIMITS": { "part": "entity-graph", "serves": ["dated-graph-view"] }
+      }
+    }
+  },
+  "deferred": {
+    "graph-declaration": "D10",
+    "plan-graph-change": "D10",
+    "reversible-history": "D10",
+    "positioned-graph-sync": "D10"
+  }
+}

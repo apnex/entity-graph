@@ -1,0 +1,6 @@
+{
+  "about": "One list per consumer of entity-graph: words of its vocabulary that entity-graph's source must not hold (docs/DECISIONS.md D10). Test data: never in src/, never in a release. zorg's repositories hold no such list today; one is added here when they do.",
+  "lists": {
+    "draw": ["node", "link", "zone", "pipe", "waypoint", "device", "diagram", "anchor", "glyph", "spawner", "transit", "layout", "junction", "drawv2"]
+  }
+}
