@@ -207,3 +207,81 @@ test("the same edit planned twice is answered alike", () => {
 	const edit = { items: [set("team", "blue", { members: ["m3", "m4", "m1"] }), create("member", "m9")] };
 	assert.deepEqual(g.plan(edit), g.plan(edit));
 });
+
+// --- the independent check's findings on d105140 (docs/DECISIONS.md D19) ---
+
+test("opIndex names the item a breach follows from, not the item that last wrote the entity (D19)", () => {
+	const at = (g, items) => refused(g.plan({ items })).details.opIndex;
+	// a referrer whose reference the edit left alone: the item that deleted its target
+	const shelves = [{ kind: "shelf" }, { kind: "book", references: [ref("shelf", ["shelf"], "one", { onTargetDelete: "refuse" })] }];
+	const g = graph(shelves, [e("shelf", "s1"), e("shelf", "s2"), e("book", "b1", { shelf: "s1", title: "A" })]);
+	assert.equal(at(g, [remove("shelf", "s1")]), 0);
+	assert.equal(at(g, [remove("shelf", "s1"), set("book", "b1", { title: "B" })]), 0, "retitling the book afterwards led to nothing");
+	assert.equal(at(g, [set("book", "b1", { title: "B" }), remove("shelf", "s1")]), 1);
+	// a target the reference newly holds: the item that made it hold it
+	assert.equal(at(g, [set("book", "b1", { shelf: "s2" }), remove("shelf", "s2")]), 0);
+	assert.equal(at(g, [remove("shelf", "s2"), set("book", "b1", { shelf: "s2" })]), 1);
+	// an untouched referrer holding the deleted target and another the edit changed: the deletion
+	const notes = [{ kind: "topic" }, { kind: "note", references: [ref("about", ["topic"], "many", { onTargetDelete: "refuse" })] }];
+	const n = graph(notes, [e("topic", "a"), e("topic", "b"), e("topic", "c"), e("note", "n1", { about: ["a", "b"] })]);
+	assert.equal(at(n, [remove("topic", "a"), set("topic", "b", { label: "x" })]), 0);
+	// the reference changed by one item, a target it already held deleted by a later one: the deletion
+	assert.equal(at(n, [set("note", "n1", { about: ["a", "b", "c"] }), remove("topic", "a")]), 1);
+	// exclusivity: the newest holder alone, not a holder the edit retexted
+	const figures = [{ kind: "figure" }, { kind: "caption", references: [ref("of", ["figure"], "one", { exclusivity: "refuse" })] }];
+	const f = graph(figures, [e("figure", "f1"), e("caption", "c1", { of: "f1", text: "x" })]);
+	assert.deepEqual(refused(f.plan({ items: [create("caption", "c2", { of: "f1" }), set("caption", "c1", { text: "y" })] })).details, { ruleKey: "caption.of.exclusivity", subject: "f1", measure: 1, opIndex: 0, sentence: null });
+	// min: the item that took the reference below it, not a later write of the entity
+	const crews = [{ kind: "sailor" }, { kind: "crew", references: [ref("hands", ["sailor"], "many", { min: 2, onBelowMin: "refuse" })] }];
+	const c = graph(crews, [e("sailor", "a"), e("sailor", "b"), e("crew", "k", { hands: ["a", "b"] })]);
+	assert.equal(at(c, [set("crew", "k", { hands: ["a"] }), set("crew", "k", { label: "z" })]), 0);
+	assert.equal(at(c, [create("crew", "k2", { hands: ["a"] }), set("crew", "k2", { label: "z" })]), 0);
+	// through consequences: a minimum's cascade, and a steal, carry the item they follow from
+	const teams = [
+		{ kind: "member" },
+		{ kind: "team", references: [ref("members", ["member"], "many", { exclusivity: "steal", min: 2, onBelowMin: "cascade-delete" })] },
+		{ kind: "badge", references: [ref("team", ["team"], "one", { onTargetDelete: "refuse" })] },
+	];
+	const t = graph(teams, [e("member", "m1"), e("member", "m2"), e("member", "m3"), e("team", "red", { members: ["m1", "m2"] }), e("badge", "bx", { team: "red" })]);
+	assert.deepEqual(refused(t.plan({ items: [set("team", "red", { members: ["m1"] }), set("team", "red", { label: "z" })] })).details, { ruleKey: "badge.team.onTargetDelete", subject: "bx", measure: 1, opIndex: 0, sentence: null });
+	assert.equal(at(t, [create("team", "blue", { members: ["m1", "m3"] }), set("team", "blue", { label: "z" })]), 0, "blue took m1 from red at item 0");
+});
+
+test("an identity the edit found held by one kind is not created as another in the same edit (D19)", () => {
+	const g = library();
+	const r = refused(g.plan({ items: [remove("tag", "t3"), create("shelf", "t3", { books: [] })] }));
+	assert.equal(r.code, "identity-taken");
+	assert.deepEqual(r.details, { ruleKey: "identity-taken", subject: "t3", measure: 1, opIndex: 1, sentence: null });
+	assert.deepEqual(net(accepted(g.plan({ items: [remove("tag", "t3"), create("tag", "t3", { label: "again" })] }))), ["put tag:t3"], "created again as its own kind: a replacement");
+	assert.deepEqual(net(accepted(g.plan({ items: [create("tag", "n1"), remove("tag", "n1"), create("shelf", "n1")] }))), ["put shelf:n1"], "an identity the view did not hold");
+});
+
+test("an entity the edit creates below a cascade-delete minimum is refused under the minimum, not deleted (D19)", () => {
+	const g = project();
+	const r = refused(g.plan({ items: [create("member", "m9"), create("team", "solo", { members: ["m9"] })] }));
+	assert.deepEqual([r.code, r.details], ["rule-broken", { ruleKey: "team.members.min", subject: "solo", measure: 1, opIndex: 1, sentence: null }]);
+	const later = refused(g.plan({ items: [create("member", "m8"), create("member", "m9"), create("team", "duo", { members: ["m8", "m9"] }), remove("member", "m8")] }));
+	assert.deepEqual([later.details.ruleKey, later.details.subject, later.details.opIndex], ["team.members.min", "duo", 3], "created at its minimum, then left below it by a removal");
+	assert.deepEqual(net(accepted(g.plan({ items: [set("team", "red", { members: ["m1"] })] }))), ["del team:red"], "an entity the edit found is still deleted");
+});
+
+test("the edit's refusals name its operations: create, change, set and remove", () => {
+	const g = library();
+	for (const r of [refused(g.plan({ items: [{ op: "move", kind: "tag", id: "t1" }] })), refused(g.plan({ items: [{ op: "create", kind: "tag", id: "" }] }))]) {
+		const text = `${r.what} ${r.why} ${r.fix}`;
+		for (const op of ["create", "change", "set", "remove"]) assert.match(text, new RegExp(`\\b${op}\\b`), `${r.code} names ${op}`);
+		assert.doesNotMatch(text, /\bput\b|\bdel\b/, `${r.code} names no write of the store's`);
+	}
+});
+
+test("records are compared whole, however deep and in whatever key order: a record 200,000 deep plans, a reordering writes nothing", () => {
+	let deep = {};
+	for (let i = 0; i < 200000; i++) deep = { d: deep };
+	const g = graph([{ kind: "box" }], [e("box", "x", { label: "a" }), e("box", "y", { a: 1, b: { c: 2, d: [1, { e: 3 }] } })]);
+	assert.equal(g.applyChange({ position: 2, items: [{ kind: "box", id: "x", record: { deep, label: "a" } }] }).ok, true);
+	const r = accepted(g.plan({ items: [set("box", "x", { label: "b" })] }));
+	assert.deepEqual(net(r), ["put box:x"]);
+	assert.deepEqual(net(accepted(g.plan({ items: [change("box", "x", { label: "a", deep })] }))), [], "the same record, given anew");
+	assert.deepEqual(net(accepted(g.plan({ items: [change("box", "y", { b: { d: [1, { e: 3 }], c: 2 }, a: 1 })] }))), [], "keys reordered alone");
+	assert.deepEqual(net(accepted(g.plan({ items: [change("box", "y", { a: 1, b: { c: 2, d: [{ e: 3 }, 1] } })] }))), ["put box:y"], "a list reordered is a change");
+});

@@ -67,6 +67,8 @@ export function planEdit(view: EntityView, d: CompiledDeclaration, input: unknow
 		const held = s.get(id);
 		if (op === "create") {
 			if (held !== undefined) return fault(held.kind === kind ? "entity-present" : "identity-taken");
+			// an identity the edit found held by another kind stays that kind's within the edit, so no net write names it twice (D19)
+			if (s.before(id) !== undefined && s.before(id)!.kind !== kind) return fault("identity-taken");
 		} else if (held === undefined || held.kind !== kind) return fault("entity-absent");
 		if (op === "remove") {
 			s.write({ op: "del", kind, id }, i);
@@ -79,11 +81,14 @@ export function planEdit(view: EntityView, d: CompiledDeclaration, input: unknow
 		s.write({ op: "put", kind, id, record }, i);
 	}
 
-	expandRules(s, d);
+	// the bound is judged before the rules' breaches, since an expansion stopped at it is not judged (D19)
+	s.endRequested();
+	const bound = (measure: number): GraphPlan => withFacts(refuse("too-many-writes", `bound ${PLAN_LIMITS.maxNetWrites}`), "net-writes", measure);
+	if (!expandRules(s, d, PLAN_LIMITS.maxNetWrites)) return bound(s.certainWrites());
+	const writes = s.netWrites();
+	if (writes.length > PLAN_LIMITS.maxNetWrites) return bound(writes.length);
 	const breach = newBreaches(s, d)[0];
 	if (breach !== undefined) return withFacts(refuse("rule-broken", breach.subject, breach.opIndex), breach.ruleKey, breach.measure);
-	const writes = s.netWrites();
-	if (writes.length > PLAN_LIMITS.maxNetWrites) return withFacts(refuse("too-many-writes", `bound ${PLAN_LIMITS.maxNetWrites}`), "net-writes", writes.length);
-	return { ok: true, position: view.position(), steps: [...s.steps], inverse: [...s.inverse], writes };
+	return { ok: true, position: view.position(), steps: [...s.steps], inverse: s.inverse(), writes };
 }
 

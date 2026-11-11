@@ -79,7 +79,7 @@ const TEXTS: Readonly<Record<GraphRefusalCode, { what: string; why: string; fix:
 	},
 	"invalid-edit": {
 		what: "The edit was refused: it is not an edit the component can read.",
-		why: "An edit is plain data holding a list of items, each an operation - put with a whole record, set with a patch of fields, or del - and an entity's kind and identity.",
+		why: "An edit is plain data holding a list of items, each an operation - create with a whole record, change to a whole record, set with named fields, or remove - and an entity's kind and identity.",
 		fix: "Send the edit in that form; details.subject names the part that is not.",
 	},
 	"empty-edit": {
@@ -89,7 +89,7 @@ const TEXTS: Readonly<Record<GraphRefusalCode, { what: string; why: string; fix:
 	},
 	"unknown-operation": {
 		what: "The edit was refused: an item names no known operation.",
-		why: "An item's operation is put, set or del.",
+		why: "An item's operation is create, change, set or remove.",
 		fix: "Name one of them in the item at details.opIndex.",
 	},
 	"rule-broken": {
@@ -100,7 +100,7 @@ const TEXTS: Readonly<Record<GraphRefusalCode, { what: string; why: string; fix:
 	"too-many-writes": {
 		what: "The edit was refused: what it would write, with everything the rules make of it, is more than one change may hold.",
 		why: "A plan's net writes, one per entity it changes, are at most 2,000 after the rules, the bound the store beneath places on one change.",
-		fix: "Split the edit into smaller edits; details.measure is how many writes it would make.",
+		fix: "Split the edit into smaller edits; details.measure is how many net writes it would make, or, where planning stopped at the bound, how many were already certain.",
 	},
 	"undeclared-kind": {
 		what: "Refused: an item names a kind the declaration does not.",

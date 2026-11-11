@@ -43,7 +43,7 @@ const MUTANTS = [
 	{ name: "an entity answered under another kind", file: "entity-graph.js", needle: "e !== undefined && e.kind === kind ? e : null", replacement: "e !== undefined ? e : null", check: getUnderOwnKind },
 	{ name: "a rule value ignored: cascade-delete read as refuse", file: "reference-rules.js", needle: "if (holder === undefined || ref === undefined || ref.onTargetDelete === \"refuse\")", replacement: "if (holder === undefined || ref === undefined || ref.onTargetDelete !== \"unlink\")", check: cascadeFollowed },
 	{ name: "a cascade cut short: the rules expanded once", file: "reference-rules.js", needle: "if (!changed)", replacement: "if (true)", check: chainFollowed },
-	{ name: "a worsening let through: only a new breach refuses", file: "reference-rules.js", needle: "if (b.measure > (before.get(b.key)?.measure ?? 0))", replacement: "if (!before.has(b.key))", check: worseningRefused },
+	{ name: "a worsening let through: only a new breach refuses", file: "reference-rules.js", needle: "if (b.measure > (was?.measure ?? 0))", replacement: "if (was === undefined)", check: worseningRefused },
 ];
 
 for (const mutant of MUTANTS) {

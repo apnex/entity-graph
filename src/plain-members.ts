@@ -42,3 +42,32 @@ export function itemsOf(value: unknown): unknown[] | null {
 		return null;
 	}
 }
+
+/**
+ * Whether two plain JSON values are equal, an object's members compared whatever their order and a list's items in order
+ * (docs/DECISIONS.md D19). It walks with a stack of its own rather than recursing, so a value of any depth plain JSON can hold
+ * is compared, and stops at the first part shared, as a record's untouched members are after a change of named fields.
+ */
+export function samePlain(a: unknown, b: unknown): boolean {
+	const pending: [unknown, unknown][] = [[a, b]];
+	while (pending.length > 0) {
+		const [x, y] = pending.pop()!;
+		if (x === y) continue;
+		if (typeof x !== "object" || typeof y !== "object" || x === null || y === null || Array.isArray(x) !== Array.isArray(y)) return false;
+		if (Array.isArray(x)) {
+			const list = y as unknown[];
+			if (x.length !== list.length) return false;
+			for (let i = 0; i < x.length; i++) pending.push([x[i], list[i]]);
+			continue;
+		}
+		const left = x as Record<string, unknown>;
+		const right = y as Record<string, unknown>;
+		const keys = Object.keys(left);
+		if (keys.length !== Object.keys(right).length) return false;
+		for (const key of keys) {
+			if (!Object.hasOwn(right, key)) return false;
+			pending.push([left[key], right[key]]);
+		}
+	}
+	return true;
+}

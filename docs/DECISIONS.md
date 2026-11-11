@@ -345,7 +345,8 @@ Leaving the field out of the record - a field the record once held vanishing rea
 ## D17 - Proposed reading: a plan answers its steps, their reversal and its net writes, the net writes bounded after the rules
 
 **Proposed by:** the builder of M2, 2026-11-11, for zorg's review, on the build plan's decision owed before M2 (`docs/BUILD-PLAN.md`, sections 2 and 4).\
-**Affects:** `src/planner.ts`, `src/scratch.ts`.
+**Affects:** `src/planner.ts`, `src/scratch.ts`.\
+**Refined by `D19` (2026-11-11):** a plan stops expanding as soon as more net writes than the bound are certain, and its refusal's `measure` is then the net writes certain at that point; the bound is judged before the rules' breaches.
 
 **Reading.**\
 An accepted plan answers `steps`, every write in the order applied, requested and the rules' alike, each an entity's whole state after it or its deletion; `inverse`, the reversal of each step read from the state just before it, in the order that undoes them; and `writes`, the net writes, one per entity whose state the edit as a whole changes, in the order each was first touched, which is what the store lands.\
@@ -362,7 +363,9 @@ Bounding the request alone - an edit of one item can cascade past the store's bo
 ## D18 - Proposed reading: how an edit is read and the reference rules apply where the contract is silent
 
 **Proposed by:** the builder of M2, 2026-11-11, for zorg's review, reading `CONTRACT.md`'s *Reference rules*, *Consequences and the stopping rule* and *Judging and refusals*; it takes the neutral corpus's readings `R14` and `R16` to `R24` (`corpus/README.md`), and settles five questions the corpus leaves uncovered, each named below.\
-**Affects:** `src/planner.ts`, `src/reference-rules.ts`, `src/refusal.ts`.
+**Affects:** `src/planner.ts`, `src/reference-rules.ts`, `src/refusal.ts`.\
+**Corrected by `D19` (2026-11-11), after the independent check of `d105140`:** its first settlement is reversed, an entity an edit creates below a `"cascade-delete"` minimum now refused rather than deleted, with `min` judged under either `onBelowMin`; and `opIndex` had named the item that last wrote the entity, not the item the breach follows from.\
+The text below is kept as it was proposed.
 
 **Reading.**\
 An edit's items are `create` (an entity absent at that point, with its whole record), `change` (one present, to a whole record), `set` (one present, its named fields merged over its record) and `remove` (one present), the operations of the reference store's `create`, `update` and `delete`.\
@@ -379,3 +382,39 @@ The contract judges an edit on the state it would leave and lets no edit leave a
 Expanding the rules after each item - a referrer repointed by a later item of the same edit would already be gone.\
 A `put` that creates or replaces - it cannot refuse a creation over an entity already present.\
 Letting the later of two new holders steal from the earlier - the contract's `steal` takes a target from the referrer that held it, which neither did.
+
+---
+
+## D19 - The independent check's findings on `d105140` fixed: what a breach follows from, an identity kept to its kind, the bound met early, a cost that follows the edit
+
+**Ruled by:** the builder of M2, 2026-11-11, on the independent check of pull request 5 at `d105140`, dispatched by draw's recorder; proposed for zorg's review where it settles what the contract leaves open, as `D16` to `D18` are.\
+**Affects:** `src/scratch.ts`, `src/reference-rules.ts`, `src/planner.ts`, `src/refusal.ts`, `src/plain-members.ts`, `src/view.ts`, `test/plan.test.js`, `test/plan-properties.test.js`, `test/plan-cost.test.js`, `test/mutation.test.js`.
+
+**Ruling.**\
+`opIndex` names the requested item a breach follows from, read from what the breach counts that it did not count before the edit (correcting `D18`).\
+For `min`, it is the item that last left the reference holding fewer targets than before that write, the entity's creation included.\
+For `exclusivity`, it is the latest of the items that made each new holder hold the target.\
+For `targets` and `onTargetDelete`, it is the latest over the targets newly counted, each by the item that made the reference hold it where the edit did, and otherwise by the item that created or deleted the target.\
+A write of the entity that changed none of these is no cause, and each consequence carries its cause by the same reading: a steal, the item that made its new holder hold the target; a minimum's cascade, the item that left the reference short; an `onTargetDelete` consequence, the item that deleted the target.\
+A `create` of an identity the edit found held by another kind is refused `identity-taken`, a `remove` of it earlier in the edit notwithstanding, so no plan's net writes name one identity under two kinds (`D14`); an identity the view did not hold may be created, removed and created as another kind in one edit, one net write.\
+`onBelowMin: "cascade-delete"` deletes only an entity the edit found, left below its minimum and below what it held (`R17`); one the edit creates is never so deleted, and `min` is judged under either `onBelowMin`, so an entity the edit creates below a minimum, or creates and then leaves below it, is refused under `<kind>.<field>.min` (correcting `D18`'s first settlement).\
+Under `"cascade-delete"` no other entity can hold a new or worse `min` breach, since the expansion has deleted it, so judging both values changes no other answer.\
+The expansion stops as soon as more net writes than the bound are certain, and the plan is refused `too-many-writes`, its `measure` the net writes then certain (refining `D17`).\
+Every entity the rules alone touched is a net write, since a rule only takes a reference or an entity away, so an entity no requested item wrote cannot return to the state the edit found it in; the edit's items touch at most 2,000, so a plan stops within about twice the bound's writes.\
+The bound is judged before the rules' breaches, since an expansion stopped at it is not judged.\
+Each round of the expansion runs its four rules in their order, each reading only what the writes since it last ran changed: the deletions, the holders of each steal reference's targets, the entities written, and the targets that lost a holder; and the reversal is built in order and turned once.\
+Judging reads the referrers only of an entity whose presence or kind the edit changed, since a referrer's breaches about an entity whose record alone changed cannot change, and the exclusive targets only of the entities the edit touched, since an exclusivity breach worsens only through a new holder, which the edit touched.\
+Measured with a Node timing, medians of 9 to 51 plans: a cascade-delete chain of 16,000 is refused at the bound in about 3 ms, where it took about 50 s; a cascade of 1,999 net writes is accepted in about 12 ms, where it took about 0.6 s; a field set on a tag 20,000 books hold is planned in about 0.02 ms, where it took about 25 ms; and a 12-write cascade still takes about 0.15 ms on views of 1,008 to 100,008 entities.\
+The net writes compare records as plain data, an object's members whatever their order and a list's items in order, walking with a stack of its own, so a change that reorders keys alone writes nothing, and a record of any depth `applyChange` takes is planned over rather than overflowing the call stack.\
+`applyChange` refuses the deletion of an entity absent at the change's position as `entity-absent`, replacing M1's `not-found` (`D10`), so one fault has one code across the component, the code a plan refuses a `change`, `set` or `remove` of an absent entity with (the corpus's `R22`); no release carried `not-found`.\
+The refusals of an edit's form name its operations, `create`, `change`, `set` and `remove`.
+
+**Why.**\
+A refusal is read for the item to change, so naming an item that only retexted the entity, or rewrote a reference unrelated to the target broken, sends the caller to the wrong item; and a plan whose net writes `applyChange` refuses, or which costs what a whole cascade costs before refusing it, is no plan a consumer can land.
+
+**Alternatives refuted.**\
+Attributing to the item that changed the breached field whenever the edit changed it - a reference changed by one item that still holds a target a later item deleted would name the earlier item, which did nothing to that target; so the reading is applied per target newly counted.\
+Answering the deletion of the old kind and the creation of the new for one identity - two writes to one identity in one change, which `applyChange` refuses as a duplicate and a store keyed by identity cannot take.\
+Refusing deep records at the boundary of both `applyChange` and `plan` - `applyChange` already takes them, and comparing without recursion costs nothing for records of ordinary depth.\
+Bounding on every entity touched - an edit whose items return entities to the state found would be refused below the bound.
+
