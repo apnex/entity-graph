@@ -20,7 +20,7 @@ test("a change holding a getter, or a Proxy whose trap throws, is refused and la
 	const g = open();
 	refusedWith(g.applyChange({ get position() { throw new Error("boom"); }, items: [{ kind: "tag", id: "t1", record: {} }] }), "invalid-change");
 	refusedWith(g.applyChange(throwing()), "invalid-change");
-	refusedWith(g.applyChange({ position: 1, items: [{ kind: "tag", id: "t1", get record() { return {}; } }] }), "invalid-change");
+	assert.equal(refusedWith(g.applyChange({ position: 1, items: [{ kind: "tag", id: "t1", get record() { return {}; } }] }), "not-plain").details.opIndex, 0);
 	assert.equal(g.position(), 0);
 	assert.deepEqual(g.all("tag").entities, []);
 });
@@ -48,7 +48,7 @@ test("an opening that is null, holds a getter, or is a Proxy whose trap throws, 
 	refusedWith(createEntityGraph(WORLD, null), "invalid-opening");
 	refusedWith(createEntityGraph(WORLD, { get entities() { throw new Error("boom"); } }), "invalid-opening");
 	refusedWith(createEntityGraph(WORLD, throwing()), "invalid-opening");
-	refusedWith(createEntityGraph(WORLD, { position: 1, entities: [{ kind: "tag", id: "t1", get record() { return {}; } }] }), "invalid-opening");
+	assert.deepEqual(refusedWith(createEntityGraph(WORLD, { position: 1, entities: [{ kind: "tag", id: "t1", get record() { return {}; } }] }), "invalid-opening").details, { ruleKey: "invalid-opening", subject: "opening.entities[0]", measure: 1, opIndex: 0, sentence: null });
 	assert.equal(createEntityGraph(WORLD, undefined).ok, true, "no opening at all opens an empty graph at 0");
 });
 
@@ -66,4 +66,40 @@ test("a filter holding a getter, or a Proxy whose trap throws, is refused as a q
 		refusedWith(g.referrersOf("t1", filter), "invalid-query");
 		refusedWith(g.reachable("a", filter), "invalid-query");
 	}
+});
+
+/*
+Where the plain-data reading failed is said: the input is read once, part by part -- a change's own members, its list of items,
+then each item as plain JSON -- so the first part that is not plain data is the one named, the item's index as `opIndex`, the
+reference's index in a declaration (the build plan's vision: a refusal says which part of the edit led there).
+*/
+test("a value that is not plain data in the fourth item of a change is refused at that item, as not-plain", () => {
+	const g = open();
+	const items = [0, 1, 2].map((i) => ({ kind: "tag", id: `t${i}`, record: {} }));
+	items.push({ kind: "tag", id: "t3", record: { get label() { return "x"; } } });
+	const refusal = refusedWith(g.applyChange({ position: 1, items }), "not-plain");
+	assert.deepEqual(refusal.details, { ruleKey: "not-plain", subject: "items[3]", measure: 1, opIndex: 3, sentence: null });
+	assert.deepEqual(g.all("tag").entities, [], "nothing landed");
+});
+
+test("a reference that is not plain data in a declaration is refused naming its kind and its index among the references", () => {
+	const references = [{ field: "first", targets: ["b"], holds: "one", onTargetDelete: "unlink" }, { field: "second", get targets() { return ["b"]; }, holds: "one", onTargetDelete: "unlink" }];
+	const made = createEntityGraph({ kinds: [{ kind: "a", references }, { kind: "b" }] });
+	assert.equal(refusedWith(made, "invalid-declaration").details.subject, "a.references[1]: invalid");
+});
+
+test("an opening's entity that is not plain data is refused at its index", () => {
+	const entities = [{ kind: "tag", id: "t0", record: {} }, { kind: "tag", id: "t1", record: {} }, { kind: "tag", id: "t2", record: { get label() { return "x"; } } }];
+	const refusal = refusedWith(createEntityGraph(WORLD, { position: 1, entities }), "invalid-opening");
+	assert.deepEqual([refusal.details.subject, refusal.details.opIndex], ["opening.entities[2]", 2]);
+});
+
+test("a change holding a member other than position and items -- an extra field, an own __proto__ -- is refused, as an opening is", () => {
+	const g = open();
+	const extra = refusedWith(g.applyChange({ position: 1, items: [{ kind: "tag", id: "t1", record: {} }], extra: true }), "invalid-change");
+	assert.equal(extra.details.subject, "change.extra");
+	const proto = JSON.parse('{"position": 1, "items": [{"kind": "tag", "id": "t1", "record": {}}], "__proto__": {"x": 1}}');
+	assert.equal(refusedWith(g.applyChange(proto), "invalid-change").details.subject, "change.__proto__");
+	assert.equal(refusedWith(createEntityGraph(WORLD, { position: 1, extra: true }), "invalid-opening").details.subject, "opening.extra", "the opening, as before");
+	assert.deepEqual(g.all("tag").entities, []);
 });

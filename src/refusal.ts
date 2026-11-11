@@ -92,9 +92,9 @@ const TEXTS: Readonly<Record<GraphRefusalCode, { what: string; why: string; fix:
 		fix: "Check the kind and identity of the deletion, and that no change before it was missed.",
 	},
 	"not-plain": {
-		what: "The change was refused: an item's record is not a plain JSON object.",
-		why: "Records are read as plain JSON, running none of their code, and an entity's record is an object of named fields.",
-		fix: "Send each record as a plain JSON object.",
+		what: "The change was refused: an item, or its record, is not plain JSON.",
+		why: "A change is read as plain JSON, running none of its code, and an entity's record is an object of named fields.",
+		fix: "Send each item, and each record, as plain JSON; details.opIndex names the first that is not.",
 	},
 	"invalid-reference": {
 		what: "The change was refused: an item holds a reference in a form its declaration does not allow.",

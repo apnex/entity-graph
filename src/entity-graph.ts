@@ -9,7 +9,8 @@ import { readPlainJson } from "@apnex/shape-check";
 import { type CompiledDeclaration, compileDeclaration, type GraphDeclaration } from "./declaration.js";
 import type { Referrer } from "./references.js";
 import { type GraphRefusal, refuse } from "./refusal.js";
-import { EntityView, type GraphChange, type GraphEntity } from "./view.js";
+import { itemsOf, membersOf } from "./plain-members.js";
+import { EntityView, type GraphChange, type GraphEntity, readEachPlain } from "./view.js";
 
 /** Where a graph starts: the position its first entities are stated at, and those entities (docs/DECISIONS.md D12). */
 export interface GraphOpening {
@@ -69,16 +70,20 @@ export function createEntityGraph(declaration: GraphDeclaration, opening?: Graph
 	const compiled = compileDeclaration(declaration);
 	if (!compiled.ok) return compiled;
 	const d = compiled.declaration;
-	// the opening read once as plain JSON (D12): none opens an empty graph at 0, and anything not plain data is refused
-	const read = opening === undefined ? { ok: true as const, value: {} } : readPlainJson(opening);
-	if (!read.ok || typeof read.value !== "object" || read.value === null || Array.isArray(read.value)) return { ok: false, refusal: refuse("invalid-opening", "opening") };
-	const { position: start = 0, entities = [], ...rest } = read.value as Record<string, unknown>;
-	const stray = Object.keys(rest)[0];
+	// the opening read once as plain data, part by part (D12): none opens an empty graph at 0; a member other than its
+	// position and entities, or anything not plain data, is refused, the first entity that is not named by its index
+	const members = opening === undefined ? Object.create(null) as Record<string, unknown> : membersOf(opening);
+	if (members === null) return { ok: false, refusal: refuse("invalid-opening", "opening") };
+	const stray = Object.keys(members).find((k) => k !== "position" && k !== "entities");
 	if (stray !== undefined) return { ok: false, refusal: refuse("invalid-opening", `opening.${stray}`) };
+	const start = members["position"] ?? 0;
 	if (typeof start !== "number" || !Number.isSafeInteger(start) || start < 0) return { ok: false, refusal: refuse("invalid-opening", "opening.position") };
-	if (!Array.isArray(entities)) return { ok: false, refusal: refuse("invalid-opening", "opening.entities") };
+	const listed = members["entities"] === undefined ? [] : itemsOf(members["entities"]);
+	if (listed === null) return { ok: false, refusal: refuse("invalid-opening", "opening.entities") };
+	const entities = readEachPlain(listed);
+	if (!entities.ok) return { ok: false, refusal: refuse("invalid-opening", `opening.entities[${entities.at}]`, entities.at) };
 	const view = new EntityView(d, start);
-	const filled = view.fill(entities);
+	const filled = view.fill(entities.items);
 	if (!filled.ok) return filled;
 
 	const query = (subject: string) => ({ ok: false as const, refusal: refuse("invalid-query", subject) });

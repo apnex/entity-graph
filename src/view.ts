@@ -6,6 +6,7 @@
  */
 import { readPlainJson } from "@apnex/shape-check";
 import type { CompiledDeclaration, CompiledReference } from "./declaration.js";
+import { itemsOf, membersOf } from "./plain-members.js";
 import { ReferenceIndex } from "./references.js";
 import { type GraphRefusal, refuse } from "./refusal.js";
 
@@ -62,6 +63,20 @@ function heldBy(record: GraphRecord, ref: CompiledReference): readonly string[] 
 	return value.every((t): t is string => typeof t === "string" && t !== "") ? value : undefined;
 }
 
+/**
+ * Each item of a list read as plain JSON, once, in order: the items read, or the index of the first that is not plain data, so
+ * a refusal can say which part led there (shape-check's `readPlainJson` answers whether a value is plain, not where it is not).
+ */
+export function readEachPlain(items: readonly unknown[]): { ok: true; items: unknown[] } | { ok: false; at: number } {
+	const out: unknown[] = [];
+	for (const [i, item] of items.entries()) {
+		const read = readPlainJson(item);
+		if (!read.ok) return { ok: false, at: i };
+		out.push(read.value);
+	}
+	return { ok: true, items: out };
+}
+
 export class EntityView {
 	private current: number;
 	private readonly entities = new Map<string, GraphEntity>();
@@ -89,20 +104,25 @@ export class EntityView {
 
 	/**
 	 * Takes in a change after the view's position, whole, or refuses it and changes nothing. The change is read once, as plain
-	 * JSON, before any of it is used, so a getter or a Proxy is refused rather than run, and a value read twice cannot differ.
+	 * data, part by part, before any of it is used -- its own members, its list of items, then each item as plain JSON -- so a
+	 * getter is refused rather than run, a value read twice cannot differ, and the first item that is not plain data is named.
+	 * A member other than `position` and `items` is refused, as an opening's is.
 	 */
 	take(input: unknown): { ok: true; position: number } | { ok: false; refusal: GraphRefusal } {
-		const read = readPlainJson(input);
-		if (!read.ok || !isObject(read.value)) return { ok: false, refusal: refuse("invalid-change", "change") };
-		const change = read.value;
+		const change = membersOf(input);
+		if (change === null) return { ok: false, refusal: refuse("invalid-change", "change") };
+		const stray = Object.keys(change).find((k) => k !== "position" && k !== "items");
+		if (stray !== undefined) return { ok: false, refusal: refuse("invalid-change", `change.${stray}`) };
 		if (!isPosition(change["position"])) return { ok: false, refusal: refuse("invalid-change", "position") };
 		const position = change["position"];
 		if (position <= this.current) return { ok: false, refusal: refuse("stale-position", String(position)) };
-		const items = change["items"];
-		if (!Array.isArray(items)) return { ok: false, refusal: refuse("invalid-change", "items") };
-		if (items.length === 0) return { ok: false, refusal: refuse("empty-change", "items") };
-		if (items.length > GRAPH_LIMITS.maxChangeItems) return { ok: false, refusal: refuse("too-many-items", String(items.length)) };
-		return this.land(position, items, false);
+		const listed = itemsOf(change["items"]);
+		if (listed === null) return { ok: false, refusal: refuse("invalid-change", "items") };
+		if (listed.length === 0) return { ok: false, refusal: refuse("empty-change", "items") };
+		if (listed.length > GRAPH_LIMITS.maxChangeItems) return { ok: false, refusal: refuse("too-many-items", String(listed.length)) };
+		const read = readEachPlain(listed);
+		if (!read.ok) return { ok: false, refusal: refuse("not-plain", `items[${read.at}]`, read.at) };
+		return this.land(position, read.items, false);
 	}
 
 	/**

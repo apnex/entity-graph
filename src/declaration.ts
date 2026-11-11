@@ -103,10 +103,17 @@ export function compileDeclaration(input: unknown): { ok: true; declaration: Com
 		const kind = declared["kind"] as string;
 		const unknown = firstUnknown(declared, KIND);
 		if (unknown !== undefined) return bad(`${kind}.${unknown}`, "unknown");
-		const read = declared["references"] === undefined ? { ok: true as const, value: [] } : readPlainJson(declared["references"]);
-		if (!read.ok || !Array.isArray(read.value)) return bad(`${kind}.references`, "invalid");
+		// the references read once, each as plain JSON, so the first that is not plain data is named by its index
+		const listed = declared["references"] === undefined ? [] : itemsOf(declared["references"]);
+		if (listed === null) return bad(`${kind}.references`, "invalid");
+		const references: unknown[] = [];
+		for (const [j, entry] of listed.entries()) {
+			const read = readPlainJson(entry);
+			if (!read.ok) return bad(`${kind}.references[${j}]`, "invalid");
+			references.push(read.value);
+		}
 		const list: CompiledReference[] = [];
-		for (const [j, ref] of read.value.entries()) {
+		for (const [j, ref] of references.entries()) {
 			if (!isRecord(ref) || !isName(ref["field"])) return bad(`${kind}.references[${j}]`, "invalid");
 			const field = ref["field"];
 			const at = `${kind}.${field}`;
