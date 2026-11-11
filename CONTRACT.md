@@ -14,7 +14,7 @@ related: [C0, C1, C3, C4, C5, C6, C11, C12, C13, C14, P4, E5, A1, A2, A3]
 The contract of record for entity-graph: what a consumer can depend on, scaffolded as a candidate component under zorg's `D35` and `BL33` (`zorg/docs/BACKLOG.md`) and registered as `C15` (`status: draft`) in `mission-kit/components/C15-entity-graph.md`; its vision is ratified (`D7`), and its contract is a draft whose design is owed.\
 It also carries the fields of its mission-kit registry entry (`C15`).\
 Each row states what a consumer will depend on at the level `VISION.md` commits to; how each is achieved is owed by the design effort, which is separate and has not started (`D2`), and is listed under *Design owed*.\
-The terms under *Terms of the rows* carry the requirements its first candidate consumer, `drawv2`, records under mission-kit's `0117`, drafted with zorg's agreement and awaiting the director's ruling (`D8`, `D9`); nothing in them is built.
+The terms under *Terms of the rows* carry the requirements its first candidate consumer, `drawv2`, records under mission-kit's `0117`, drafted with zorg's agreement and ruled by the director (`D8`, `D9`); nothing in them is built.
 
 ---
 
@@ -47,7 +47,7 @@ The trait column names any trait a system takes on by using the capability.
 ## Terms of the rows
 
 Each term below states what a row commits to in more detail.\
-It is a draft for the director's ruling, agreed in substance with zorg, and it binds the design effort as the rows do, never its mechanism beyond what is stated (`D2`).
+It is ruled by the director and co-signed with zorg (`D8`, `D9`), and it binds the design effort as the rows do, never its mechanism beyond what is stated (`D2`).
 
 **Reference rules (`graph-declaration`).**\
 A reference declares the kinds it may target and how many targets it holds.\

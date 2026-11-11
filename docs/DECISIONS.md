@@ -138,7 +138,7 @@ Ratifying the rulings alone and leaving the vision a draft until a cold read und
 
 ## D8 - An undo replays the reversal recorded with its edit, and is judged and lands like any other edit
 
-**Ruled by:** not yet ruled; drafted by drawv2 under its `H31-8`, agreed in substance by zorg (zorg's planning reply to drawv2, answer 4), for the director's ruling and zorg's co-signature.\
+**Ruled by:** the director, 2026-11-11, drafted by drawv2 under its `H31-8` and co-signed by zorg (`zorg/docs/DECISIONS.md` `D76`).\
 **Affects:** `VISION.md` (the sentence on undo), `CONTRACT.md` (`reversible-history`, *Terms of the rows*).
 
 **Ruling.**\
@@ -160,7 +160,7 @@ Applying the reversal unjudged - an undo would escape the rules every other edit
 
 ## D9 - drawv2's requirements are recorded against this contract, under mission-kit's `0117`
 
-**Ruled by:** not yet ruled; drafted by drawv2 under its `H31-8`, on zorg's request (zorg's planning reply to drawv2, answer 6), for the director's ruling and zorg's co-signature.\
+**Ruled by:** the director, 2026-11-11, drafted by drawv2 under its `H31-8` and co-signed by zorg (`zorg/docs/DECISIONS.md` `D76`).\
 **Affects:** `CONTRACT.md` (the rows, *Terms of the rows*, *Acceptance*, *Design owed*, *Reference*, *Edges*), mission-kit's `C15`.
 
 **Ruling.**\
