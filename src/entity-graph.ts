@@ -10,6 +10,7 @@ import { type CompiledDeclaration, compileDeclaration, type GraphDeclaration } f
 import type { Referrer } from "./references.js";
 import { type GraphRefusal, refuse } from "./refusal.js";
 import { itemsOf, membersOf } from "./plain-members.js";
+import { type GraphEdit, type GraphPlan, planEdit } from "./planner.js";
 import { EntityView, type GraphChange, type GraphEntity, readEachPlain } from "./view.js";
 
 /** Where a graph starts: the position its first entities are stated at, and those entities (docs/DECISIONS.md D12). */
@@ -44,6 +45,11 @@ export interface EntityGraph {
 	ownerOf(memberId: string, containerKind: string): Dated<{ owners: string[] }>;
 	reachable(fromId: string, filter?: ReferenceFilter): Dated<{ reached: { kind: string | null; id: string }[] }>;
 	applyChange(change: GraphChange): { ok: true; position: number } | { ok: false; refusal: GraphRefusal };
+	/**
+	 * Plans an edit with the declared reference rules (D15): the steps, their reversal and the net writes, or a refusal; changes
+	 * no answer. `options.context` is read as plain JSON and not yet used: consequences read it from M3.
+	 */
+	plan(edit: GraphEdit, options?: { context?: unknown }): GraphPlan;
 }
 
 const byId = (a: { id: string }, b: { id: string }): number => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
@@ -154,6 +160,16 @@ export function createEntityGraph(declaration: GraphDeclaration, opening?: Graph
 		},
 		applyChange(change) {
 			return view.take(change);
+		},
+		plan(edit, options) {
+			if (options !== undefined) {
+				const given = membersOf(options);
+				if (given === null) return { ok: false, refusal: refuse("invalid-edit", "options") };
+				const stray = Object.keys(given).find((k) => k !== "context");
+				if (stray !== undefined) return { ok: false, refusal: refuse("invalid-edit", `options.${stray}`) };
+				if (given["context"] !== undefined && !readPlainJson(given["context"]).ok) return { ok: false, refusal: refuse("not-plain", "options.context") };
+			}
+			return planEdit(view, d, edit);
 		},
 	};
 	return { ok: true, graph: Object.freeze(graph) };

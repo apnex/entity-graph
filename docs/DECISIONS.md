@@ -301,3 +301,82 @@ The contract's surface asks `referrersOf(targetId)`, `targetsOf(id)` and `reacha
 
 **Alternatives refuted.**\
 References holding a kind and a name - every question would then need both, where the contract's surface asks by identity.
+
+---
+
+## D15 - M2 is built: planning with the declared reference rules to a fixed point, `plan-graph-change` still deferred for the parts it owes
+
+**Ruled by:** the build plan, approved by the director as draw's `H31-10` (2026-11-11, draw's `dev/DECISIONS.md`), on the contract co-signed by zorg (`zorg/docs/DECISIONS.md` `D76`); the as-built choices are the builder's of M2, proposed for zorg's review where they settle something the contract leaves open, as `D16` to `D18` do.\
+**Affects:** `src/planner.ts`, `src/scratch.ts`, `src/reference-rules.ts`, `src/refusal.ts`, `src/entity-graph.ts`, `export-map.json`, `test/`.
+
+**Ruling.**\
+A graph plans an edit: `plan({ items }, { context }?)`, each item a `put` of a whole record, a `set` of named fields or a `del`, answers `{ ok: true, position, steps, inverse, writes }` or `{ ok: false, refusal }` (`D17`).\
+The edit is read once as plain data, part by part; each item is checked against the plan's scratch layer as the items before it left it, and a fault is refused at that item; the reference rules are then expanded until nothing more follows, and the result is judged by key and measure against the state the edit found, refused only for a breach the edit introduces or whose measure it raises (`D18`).\
+The scratch layer lays the entities the edit touches over the view, copy on write, and is the one place a step is applied, its reversal read from the state just before it; the view is only read, so planning changes no answer.\
+Measured with a Node timing of 50 plans on views of 1,008, 10,008 and 100,008 entities: a plan cascading to 12 net writes takes a median of about 0.15 ms at each size, a plan of one creation about 0.02 ms - the cost follows what an edit touches, not what the view holds.\
+`plan-graph-change` stays deferred under this ruling until M4 serves it whole: what it still owes is the application's phases, the fault of two consequences writing one entity and the holding of consequence writes to request rules (M3), and the intent resolver and the context, read as plain JSON from M2 but used by nothing until consequences read it (M4); `graph-declaration` stays deferred under `D10`.
+
+**Why.**\
+The plan's M2 lands planning a consumer can use for plain edits under every reference rule, needing nothing still being built; the row is served only when every term of it is.
+
+**Alternatives refuted.**\
+Serving `plan-graph-change` at M2 - its phases, consequences, resolver and context are terms of the row M2 does not build.\
+Copying the view for each plan, as draw's planner copies its document - the cost would follow the view, not the edit (the build plan's section 7).
+
+---
+
+## D16 - Proposed reading: unlinking the only target of a one-target reference leaves `null`
+
+**Proposed by:** the builder of M2, 2026-11-11, for zorg's review, on the build plan's decision owed before M2 (`docs/BUILD-PLAN.md`, section 4; `CONTRACT.md`, *Design owed*).\
+**Affects:** `src/reference-rules.ts`.
+
+**Reading.**\
+When a target is deleted and its referrer holds it through a one-target reference declaring `onTargetDelete: "unlink"`, the referrer's field is set to `null`, the form a one-target reference holding no target takes (`D14`); a list loses the target and keeps its other targets in order.\
+A minimum of 1 on such a reference then applies as to any reference left below its minimum: `onBelowMin` decides.
+
+**Why.**\
+`null` is the one form a one-target reference holding nothing has, so the referrer stays a well-formed entity, and a rule that needs a target still sees the loss.
+
+**Alternatives refuted.**\
+Leaving the field out of the record - a field the record once held vanishing reads as a different record, where `null` says what happened.
+
+---
+
+## D17 - Proposed reading: a plan answers its steps, their reversal and its net writes, the net writes bounded after the rules
+
+**Proposed by:** the builder of M2, 2026-11-11, for zorg's review, on the build plan's decision owed before M2 (`docs/BUILD-PLAN.md`, sections 2 and 4).\
+**Affects:** `src/planner.ts`, `src/scratch.ts`.
+
+**Reading.**\
+An accepted plan answers `steps`, every write in the order applied, requested and the rules' alike, each an entity's whole state after it or its deletion; `inverse`, the reversal of each step read from the state just before it, in the order that undoes them; and `writes`, the net writes, one per entity whose state the edit as a whole changes, in the order each was first touched, which is what the store lands.\
+An edit holds at most 2,000 items, refused beyond that (`too-many-items`), and its net writes after every rule are at most 2,000, the store's bound on one change, refused beyond that (`too-many-writes`, `details.ruleKey` `net-writes`, `subject` naming the bound, `measure` the writes the edit would make).
+
+**Why.**\
+Draw's tabs and its corpus compare the steps, and the store takes one write per entity in a change, so both are answered; the reversal stays step by step, as the contract records it; and a consequence-heavy edit is refused before it can land half-undoable (the build plan's section 7).
+
+**Alternatives refuted.**\
+Bounding the request alone - an edit of one item can cascade past the store's bound.
+
+---
+
+## D18 - Proposed reading: how the reference rules apply where the contract is silent
+
+**Proposed by:** the builder of M2, 2026-11-11, for zorg's review, reading `CONTRACT.md`'s *Reference rules*, *Consequences and the stopping rule* and *Judging and refusals*.\
+**Affects:** `src/planner.ts`, `src/reference-rules.ts`.
+
+**Reading.**\
+Every requested item is applied in order, each checked against the scratch layer as the items before it left it, and the rules are then expanded to a fixed point once, over the state all the items leave (the stopping rule's first step); so an edit that deletes a target and puts it back, or repoints a referrer before deleting its target, cascades nothing.\
+A `set` merges its fields over the record and a `put` replaces it; a change or a deletion of an entity absent at that point is refused at the item, `not-found`.\
+`onTargetDelete` applies to each target the edit deleted and did not put back; a reference to an absent identity the edit found standing is not repaired.\
+`exclusivity` holds among the referrers of one kind through one field; under `"steal"`, a referrer newly holding the target keeps it and every other holder loses it; two referrers newly holding it in one edit cannot take it from each other, and the edit is refused.\
+`onBelowMin: "cascade-delete"` deletes an entity the edit wrote and left further below the minimum than it found it, one the edit creates below it included.\
+`onUnreferenced: "delete"` deletes a target such a reference stopped holding within the edit once nothing holds it through any reference; a target never held within the edit is kept.\
+The result is judged by three rules, each breach keyed `<kind>.<field>.<rule>@<identity>`: `targets` (an absent identity or a kind the reference may not target; named `onTargetDelete` where the edit deleted that target under `"refuse"`), measured by how many; `exclusivity`, by how many holders beyond one; and `min`, by how many short; read over the entities the edit touched, their referrers and the targets their exclusive references hold, in both states.\
+A refusal names the first breach by requested item, then by key: `details.ruleKey` `<kind>.<field>.<rule>`, `subject` the entity concerned as `<kind>:<identity>` - the target, for exclusivity - even one the caller never named, `measure`, and `opIndex` the item that led there: the entity's last write, the newest holder for exclusivity, or the item that deleted or changed the target of an entity the edit did not write.
+
+**Why.**\
+The contract judges an edit on the state it would leave and lets no edit leave a rule more broken than it found it, so the rules act on that state, a standing breach is neither repaired nor held against an edit, and a partial repair passes.
+
+**Alternatives refuted.**\
+Expanding the rules after each item - a referrer repointed by a later item of the same edit would already be gone.\
+Letting the later of two new holders steal from the earlier - the contract's `steal` takes a target from the referrer that held it, which neither did.

@@ -39,10 +39,10 @@ interface Checked {
 	readonly fields: ReadonlyMap<string, readonly string[]>;
 }
 
-const isObject = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
+export const isObject = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
 const isPosition = (value: unknown): value is number => typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
 
-function deepFreeze<T>(value: T): T {
+export function deepFreeze<T>(value: T): T {
 	if (typeof value === "object" && value !== null && !Object.isFrozen(value)) {
 		for (const member of Object.values(value)) deepFreeze(member);
 		Object.freeze(value);
@@ -55,7 +55,7 @@ function deepFreeze<T>(value: T): T {
  * Read from the record's own members alone, so a field named as a member every object inherits -- `constructor`,
  * `__proto__` -- is absent from a record that does not hold it.
  */
-function heldBy(record: GraphRecord, ref: CompiledReference): readonly string[] | undefined {
+export function heldBy(record: GraphRecord, ref: CompiledReference): readonly string[] | undefined {
 	const value = Object.hasOwn(record, ref.field) ? record[ref.field] : undefined;
 	if (value === undefined || value === null) return [];
 	if (ref.holds === "one") return typeof value === "string" && value !== "" ? [value] : undefined;

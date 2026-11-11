@@ -41,11 +41,16 @@ export interface GraphDeclaration {
 	phases?: unknown;
 }
 
-/** One reference field as the view and the index read it. */
+/** One reference field as the view, the index and the rules read it: its options, `onUnreferenced` given its default. */
 export interface CompiledReference {
 	readonly field: string;
 	readonly targets: readonly string[];
 	readonly holds: ReferenceHolding;
+	readonly onTargetDelete: "refuse" | "cascade-delete" | "unlink";
+	readonly exclusivity: "refuse" | "steal" | null;
+	readonly min: number | null;
+	readonly onBelowMin: "refuse" | "cascade-delete" | null;
+	readonly onUnreferenced: "keep" | "delete";
 }
 
 /** The declaration checked: each kind's reference fields, in declaration order, and every reference field name. */
@@ -139,7 +144,14 @@ export function compileDeclaration(input: unknown): { ok: true; declaration: Com
 			if (min !== undefined && (typeof min !== "number" || !Number.isInteger(min) || min < 0 || (holds === "one" && min > 1))) return bad(`${at}.min`, "invalid");
 			if (min !== undefined && ref["onBelowMin"] === undefined) return bad(`${at}.min`, "unpaired");
 			if (min === undefined && ref["onBelowMin"] !== undefined) return bad(`${at}.onBelowMin`, "unpaired");
-			list.push(Object.freeze({ field, targets: Object.freeze([...targets]), holds }));
+			list.push(Object.freeze({
+				field, targets: Object.freeze([...targets]), holds,
+				onTargetDelete: ref["onTargetDelete"] as CompiledReference["onTargetDelete"],
+				exclusivity: (ref["exclusivity"] ?? null) as CompiledReference["exclusivity"],
+				min: (min ?? null) as number | null,
+				onBelowMin: (ref["onBelowMin"] ?? null) as CompiledReference["onBelowMin"],
+				onUnreferenced: (ref["onUnreferenced"] ?? "keep") as CompiledReference["onUnreferenced"],
+			}));
 			fields.add(field);
 		}
 		compiled.set(kind, list);

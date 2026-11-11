@@ -16,7 +16,8 @@ const pkg = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"))
 const map = JSON.parse(fs.readFileSync(path.join(root, "export-map.json"), "utf8"));
 const publicName = (p) => (p === "." ? pkg.name : `${pkg.name}/${p.slice(2)}`);
 const SERVED = ["dated-graph-view"];
-const DEFERRED = { "graph-declaration": "D10", "plan-graph-change": "D10", "reversible-history": "D10", "positioned-graph-sync": "D10" };
+// RESTATED at M2 (docs/DECISIONS.md D15): plan-graph-change stays deferred, under D15, for the parts M3 and M4 build
+const DEFERRED = { "graph-declaration": "D10", "plan-graph-change": "D15", "reversible-history": "D10", "positioned-graph-sync": "D10" };
 
 const contractRows = () => {
 	const lines = fs.readFileSync(path.join(root, "CONTRACT.md"), "utf8").split("\n");

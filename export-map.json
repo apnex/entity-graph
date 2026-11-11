@@ -10,7 +10,7 @@
   },
   "deferred": {
     "graph-declaration": "D10",
-    "plan-graph-change": "D10",
+    "plan-graph-change": "D15",
     "reversible-history": "D10",
     "positioned-graph-sync": "D10"
   }
