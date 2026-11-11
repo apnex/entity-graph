@@ -170,7 +170,7 @@ export class EntityView {
 		if (seen.has(id)) return fault("duplicate-item", subject);
 		const held = this.entities.get(id);
 		if (deleting) {
-			if (held === undefined || held.kind !== kind) return fault("not-found", subject);
+			if (held === undefined || held.kind !== kind) return fault("entity-absent", subject);
 			return { ok: true, checked: { kind, id, record: null, fields: new Map() } };
 		}
 		if (held !== undefined && held.kind !== kind) return fault("identity-taken", subject);

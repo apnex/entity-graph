@@ -21,7 +21,8 @@ export type GraphRefusalCode =
 	| "undeclared-kind"
 	| "duplicate-item"
 	| "identity-taken"
-	| "not-found"
+	| "entity-absent"
+	| "entity-present"
 	| "not-plain"
 	| "invalid-reference"
 	| "invalid-query";
@@ -116,10 +117,15 @@ const TEXTS: Readonly<Record<GraphRefusalCode, { what: string; why: string; fix:
 		why: "An identity names one entity across every kind of the graph, since references hold identities alone.",
 		fix: "Give the entity an identity no entity of another kind holds.",
 	},
-	"not-found": {
+	"entity-absent": {
 		what: "Refused: an item deletes or changes an entity absent at that point.",
-		why: "A deletion, or a change of fields, names an entity that exists at that point in the change or the edit.",
+		why: "A deletion, or a change, names an entity of that kind that exists at that point in the change or the edit.",
 		fix: "Check the kind and identity of the item at details.opIndex, and the items before it.",
+	},
+	"entity-present": {
+		what: "The edit was refused: an item creates an entity present at that point.",
+		why: "A creation names an entity absent at that point in the edit; a present one is changed, not created.",
+		fix: "Change the entity instead, or create one of another identity.",
 	},
 	"not-plain": {
 		what: "Refused: an item, or its record, is not plain JSON.",

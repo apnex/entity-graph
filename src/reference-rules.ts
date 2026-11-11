@@ -9,9 +9,10 @@
  * is deleted (`onBelowMin: "cascade-delete"`); and a target an `onUnreferenced: "delete"` reference stopped holding is
  * deleted once nothing holds it. Every rule only removes a reference or an entity, so expansion ends.
  *
- * Judging: a reference holding an identity no entity holds, or one of a kind it may not target, breaks its `targets` rule
- * (`onTargetDelete` where the edit deleted that target under `"refuse"`); a target held through an exclusive reference by
- * more than one referrer breaks `exclusivity`; an entity holding fewer targets than a minimum breaks `min`. The breaches are
+ * Judging (the corpus's R18): a reference holding an identity absent before and after the edit, or one of a kind it may not
+ * target, breaks `targets`; one holding a target the edit deleted, where the deletion is refused, breaks `onTargetDelete`; a
+ * target held through an exclusive reference by more than one referrer breaks `exclusivity`; an entity holding fewer targets
+ * than the minimum of a reference refusing it breaks `min`. The breaches are
  * read only where the edit can have changed them -- the entities it touched, their targets and their referrers -- in both
  * states, and the edit is refused for a breach it introduces or whose measure it raises; a partial repair is allowed.
  */
@@ -98,19 +99,23 @@ export function expandRules(s: Scratch, d: CompiledDeclaration): void {
 	}
 }
 
-/** The breaches an entity's references hold in one state: `get` reads that state's entities, `targets` its references. */
-function entityBreaches(d: CompiledDeclaration, entity: GraphEntity, targets: ReadonlyMap<string, readonly string[]>, get: (id: string) => GraphEntity | undefined, deletedRefuse: (target: string) => boolean): Omit<Breach, "opIndex">[] {
+/**
+ * The breaches an entity's references hold in one state (the corpus's R18; D18): `get` reads that state's entities and
+ * `wasPresent` whether an identity was present when the edit found it -- never, for the state before.
+ */
+function entityBreaches(d: CompiledDeclaration, entity: GraphEntity, targets: ReadonlyMap<string, readonly string[]>, get: (id: string) => GraphEntity | undefined, wasPresent: (id: string) => boolean): Omit<Breach, "opIndex">[] {
 	const out: Omit<Breach, "opIndex">[] = [];
+	const breach = (ref: CompiledReference, rule: string, measure: number) => out.push({ key: `${entity.kind}.${ref.field}.${rule}@${entity.id}`, ruleKey: `${entity.kind}.${ref.field}.${rule}`, subject: entity.id, measure });
 	for (const ref of d.kinds.get(entity.kind) ?? []) {
 		const held = targets.get(ref.field) ?? [];
-		const bad = held.filter((t) => { const k = get(t)?.kind; return k === undefined || !ref.targets.includes(k); });
-		if (bad.length > 0) {
-			const rule = bad.some(deletedRefuse) && ref.onTargetDelete === "refuse" ? "onTargetDelete" : "targets";
-			out.push({ key: `${entity.kind}.${ref.field}.targets@${entity.id}`, ruleKey: `${entity.kind}.${ref.field}.${rule}`, subject: `${entity.kind}:${entity.id}`, measure: bad.length });
-		}
-		if (ref.min !== null && held.length < ref.min) {
-			out.push({ key: `${entity.kind}.${ref.field}.min@${entity.id}`, ruleKey: `${entity.kind}.${ref.field}.min`, subject: `${entity.kind}:${entity.id}`, measure: ref.min - held.length });
-		}
+		// targets: absent as the edit found it and absent after it, or present and of a kind the reference may not target
+		const bad = held.filter((t) => { const now = get(t); return now === undefined ? !wasPresent(t) : !ref.targets.includes(now.kind); });
+		if (bad.length > 0) breach(ref, "targets", bad.length);
+		// onTargetDelete: targets the edit deleted, held through a reference whose deletion is refused
+		const deleted = ref.onTargetDelete === "refuse" ? held.filter((t) => get(t) === undefined && wasPresent(t)) : [];
+		if (deleted.length > 0) breach(ref, "onTargetDelete", deleted.length);
+		// min: fewer targets than the minimum of a reference whose falling below it is refused
+		if (ref.min !== null && ref.onBelowMin === "refuse" && held.length < ref.min) breach(ref, "min", ref.min - held.length);
 	}
 	return out;
 }
@@ -139,19 +144,18 @@ export function newBreaches(s: Scratch, d: CompiledDeclaration): Breach[] {
 	const read = (after: boolean): Map<string, Omit<Breach, "opIndex">> => {
 		const get = (id: string) => (after ? s.get(id) : s.before(id));
 		const out = new Map<string, Omit<Breach, "opIndex">>();
-		const deletedRefuse = (t: string) => after && s.deleted.has(t) && s.before(t) !== undefined;
+		const wasPresent = (t: string) => after && s.before(t) !== undefined;
 		for (const id of entities) {
 			const entity = get(id);
 			if (entity === undefined) continue;
-			for (const b of entityBreaches(d, entity, after ? s.targetsOf(id) : s.targetsBefore(id), get, deletedRefuse)) out.set(b.key, b);
+			for (const b of entityBreaches(d, entity, after ? s.targetsOf(id) : s.targetsBefore(id), get, wasPresent)) out.set(b.key, b);
 		}
 		for (const [target, refs] of exclusive) {
 			const referrers = after ? s.referrersOf(target) : s.referrersBefore(target);
 			for (const kf of refs) {
 				const holders = referrers.filter((r) => `${r.kind}.${r.field}` === kf);
 				if (holders.length < 2) continue;
-				const kind = get(target)?.kind ?? "?";
-				out.set(`${kf}.exclusivity@${target}`, { key: `${kf}.exclusivity@${target}`, ruleKey: `${kf}.exclusivity`, subject: `${kind}:${target}`, measure: holders.length - 1 });
+				out.set(`${kf}.exclusivity@${target}`, { key: `${kf}.exclusivity@${target}`, ruleKey: `${kf}.exclusivity`, subject: target, measure: holders.length - 1 });
 			}
 		}
 		return out;

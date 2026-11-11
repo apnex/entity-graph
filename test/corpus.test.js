@@ -13,8 +13,9 @@ import { fileURLToPath } from "node:url";
 import { createEntityGraph } from "../dist/index.js";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const dir = path.join(root, "corpus", "batch-1");
-const CASES = fs.readdirSync(dir).filter((f) => f.endsWith(".json")).sort().map((f) => JSON.parse(fs.readFileSync(path.join(dir, f), "utf8")));
+const BATCHES = ["batch-1", "batch-2"];
+const filesOf = (batch) => fs.readdirSync(path.join(root, "corpus", batch)).filter((f) => f.endsWith(".json")).sort().map((f) => path.join(root, "corpus", batch, f));
+const CASES = BATCHES.flatMap(filesOf).map((f) => JSON.parse(fs.readFileSync(f, "utf8")));
 
 /**
  * The corpus's refusal labels (corpus/README.md, R9), each mapped to what distinguishes it in this implementation's refusal:
@@ -40,7 +41,18 @@ const LABELS = {
 /** The refusal code every declaration label maps to. */
 const DECLARATION_CODE = "invalid-declaration";
 
+/**
+ * Batch 2's plan refusal codes (corpus/README.md, R24), each mapped to this implementation's code, one code per label; the
+ * rule key, subject, measure and item are compared exactly, as the case states them.
+ */
+const PLAN_CODES = {
+	"reference-rule": "rule-broken", "invalid-reference": "invalid-reference", "unknown-operation": "unknown-operation",
+	"entity-absent": "entity-absent", "entity-present": "entity-present", "identity-taken": "identity-taken", "undeclared-kind": "undeclared-kind",
+};
+
 const sorted = (list) => [...list].map((x) => JSON.stringify(x)).sort();
+// everything the view holds, to show a plan changed none of it (corpus/README.md, *Planning changes no answer*)
+const held = (graph, kinds) => JSON.stringify([graph.position(), ...kinds.map((k) => graph.all(k))]);
 const item = (w) => (w.op === "put" ? { kind: w.kind, id: w.id, record: w.record } : w.op === "del" ? { kind: w.kind, id: w.id, deleted: true } : assert.fail(`no write op ${w.op}`));
 
 /** The implementation's answer to one question, read into the corpus's form, with the position it states. */
@@ -86,6 +98,25 @@ function runAccepted(c, mode) {
 		if (step.take) {
 			const r = graph.applyChange({ position: step.take.position, items: step.take.writes.map(item) });
 			assert.equal(r.ok, true, `step ${i + 1}: the change at ${step.take.position} was refused: ${JSON.stringify(r.refusal)}`);
+		} else if (step.plan) {
+			// the edit's items are the implementation's own operations, create, change and remove, so they pass as they stand
+			const kinds = c.declare.kinds.map((k) => k.kind);
+			const before = held(graph, kinds);
+			assert.equal(graph.position(), step.plan.position, `step ${i + 1}: the position planned from`);
+			const r = graph.plan({ items: step.plan.edit });
+			assert.equal(held(graph, kinds), before, `step ${i + 1}: the plan changed what the view holds`);
+			if (step.plan.outcome === "accepted") {
+				assert.equal(r.ok, true, `step ${i + 1}: refused: ${JSON.stringify(r.refusal)}`);
+				assert.equal(r.position, step.plan.position, `step ${i + 1}: the position the plan states`);
+				assert.deepEqual(sorted(r.writes), sorted(step.plan.writes), `step ${i + 1}: the net writes`);
+			} else {
+				assert.equal(step.plan.outcome, "refused");
+				assert.equal(r.ok, false, `step ${i + 1}: accepted: ${JSON.stringify(r.writes)}`);
+				const want = step.plan.refusal;
+				assert.ok(Object.hasOwn(PLAN_CODES, want.code), `no code mapped for the label ${want.code}`);
+				const got = { part: r.refusal.part, code: r.refusal.code, ruleKey: r.refusal.details.ruleKey, subject: r.refusal.details.subject, measure: r.refusal.details.measure, opIndex: r.refusal.details.opIndex };
+				assert.deepEqual(got, { ...want, code: PLAN_CODES[want.code] }, `step ${i + 1}: the refusal`);
+			}
 		} else if (step.ask) {
 			assert.equal(graph.position(), step.ask.position, `step ${i + 1}: position()`);
 			for (const q of step.ask.questions) {
@@ -95,7 +126,7 @@ function runAccepted(c, mode) {
 				if (got.list) assert.deepEqual(sorted(got.value), sorted(q.answer), where);
 				else assert.deepEqual(got.value, q.answer, where);
 			}
-		} else assert.fail(`step ${i + 1} is neither take nor ask`);
+		} else assert.fail(`step ${i + 1} is neither take, plan nor ask`);
 	}
 }
 
@@ -127,7 +158,9 @@ for (const c of CASES) {
 	});
 }
 
-test("the corpus is read whole: batch 1's 38 cases, each named for its file", () => {
-	assert.equal(CASES.length, 38);
-	for (const f of fs.readdirSync(dir).filter((x) => x.endsWith(".json"))) assert.equal(JSON.parse(fs.readFileSync(path.join(dir, f), "utf8")).case, f.replace(/\.json$/, ""));
+test("the corpus is read whole: batch 1's 38 cases and batch 2's 32, each named for its file", () => {
+	assert.deepEqual(BATCHES.map((b) => filesOf(b).length), [38, 32]);
+	for (const f of BATCHES.flatMap(filesOf)) assert.equal(JSON.parse(fs.readFileSync(f, "utf8")).case, path.basename(f, ".json"));
+	const plans = CASES.flatMap((c) => (c.steps ?? []).filter((st) => st.plan)).map((st) => st.plan.outcome);
+	assert.deepEqual([plans.filter((o) => o === "accepted").length, plans.filter((o) => o === "refused").length], [62, 26], "88 plans: 62 accepted, 26 refused");
 });

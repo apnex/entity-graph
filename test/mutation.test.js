@@ -24,12 +24,12 @@ const rule = (field, targets, holds, options = {}) => ({ field, targets, holds, 
 const planned = (createEntityGraph, kinds, entities, items) => createEntityGraph({ kinds }, { position: 1, entities }).graph.plan({ items });
 const cascadeFollowed = (createEntityGraph) => {
 	const r = planned(createEntityGraph, [{ kind: "shelf" }, { kind: "book", references: [rule("shelf", ["shelf"], "one", { onTargetDelete: "cascade-delete" })] }],
-		[{ kind: "shelf", id: "s", record: {} }, { kind: "book", id: "b", record: { shelf: "s" } }], [{ op: "del", kind: "shelf", id: "s" }]);
+		[{ kind: "shelf", id: "s", record: {} }, { kind: "book", id: "b", record: { shelf: "s" } }], [{ op: "remove", kind: "shelf", id: "s" }]);
 	return r.ok && r.writes.some((w) => w.op === "del" && w.id === "b") ? null : { what: "cascade-delete was not followed", got: r };
 };
 const chainFollowed = (createEntityGraph) => {
 	const kinds = [{ kind: "ring", references: [rule("next", ["ring"], "one", { onTargetDelete: "cascade-delete" })] }];
-	const r = planned(createEntityGraph, kinds, ["a", "b", "c", "d"].map((id, i, all) => ({ kind: "ring", id, record: { next: i === 0 ? null : all[i - 1] } })), [{ op: "del", kind: "ring", id: "a" }]);
+	const r = planned(createEntityGraph, kinds, ["a", "b", "c", "d"].map((id, i, all) => ({ kind: "ring", id, record: { next: i === 0 ? null : all[i - 1] } })), [{ op: "remove", kind: "ring", id: "a" }]);
 	return r.ok && r.writes.length === 4 ? null : { what: "the cascade stopped short of its end", got: r };
 };
 const worseningRefused = (createEntityGraph) => {

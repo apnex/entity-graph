@@ -16,8 +16,15 @@ import { type EntityView, type GraphRecord, heldBy, isObject, readEachPlain } fr
 /** The bounds of a plan (D17): at most this many requested items, and this many net writes after the rules. */
 export const PLAN_LIMITS = Object.freeze({ maxEditItems: 2000, maxNetWrites: 2000 });
 
-/** One requested item: a creation or replacement with its whole record, a change of named fields, or a removal. */
-export type GraphEditItem = { op: "put"; kind: string; id: string; record: GraphRecord } | { op: "set"; kind: string; id: string; patch: GraphRecord } | { op: "del"; kind: string; id: string };
+/**
+ * One requested item (D18): a `create` of an entity absent at that point, with its whole record; a `change` of one present,
+ * to a whole record; a `set` of named fields of one present, merged over its record; or a `remove` of one present.
+ */
+export type GraphEditItem =
+	| { op: "create"; kind: string; id: string; record: GraphRecord }
+	| { op: "change"; kind: string; id: string; record: GraphRecord }
+	| { op: "set"; kind: string; id: string; patch: GraphRecord }
+	| { op: "remove"; kind: string; id: string };
 
 /** An edit: the items asked for together. */
 export interface GraphEdit {
@@ -27,8 +34,10 @@ export interface GraphEdit {
 /** A plan: the steps in the order applied, their reversal in the order that undoes them, and the net writes per entity. */
 export type GraphPlan = { ok: true; position: number; steps: GraphStep[]; inverse: GraphStep[]; writes: GraphStep[] } | { ok: false; refusal: GraphRefusal };
 
-const OPS = new Set(["put", "set", "del"]);
-const MEMBERS: Readonly<Record<string, readonly string[]>> = { put: ["record"], set: ["patch"], del: [] };
+const MEMBERS: Readonly<Record<string, readonly string[]>> = { create: ["record"], change: ["record"], set: ["patch"], remove: [] };
+
+/** A refusal carrying the rule key and measure its facts name. */
+const withFacts = (r: GraphRefusal, ruleKey: string, measure: number): GraphPlan => ({ ok: false, refusal: { ...r, details: { ...r.details, ruleKey, measure } } });
 
 /** Plans an edit over the view; reads the view and changes nothing of it. */
 export function planEdit(view: EntityView, d: CompiledDeclaration, input: unknown): GraphPlan {
@@ -48,38 +57,33 @@ export function planEdit(view: EntityView, d: CompiledDeclaration, input: unknow
 	for (const [i, item] of read.items.entries()) {
 		if (!isObject(item)) return no("invalid-edit", `items[${i}]`, i);
 		const { op, kind, id } = item;
-		if (typeof op !== "string" || !OPS.has(op)) return no("unknown-operation", `items[${i}].op`, i);
+		// a fault in the request names the item's identity as its subject (the corpus's R22; D18)
+		const fault = (code: GraphRefusalCode, ruleKey: string = code): GraphPlan => withFacts(refuse(code, typeof id === "string" && id !== "" ? id : `items[${i}]`, i), ruleKey, 1);
+		if (typeof op !== "string" || !Object.hasOwn(MEMBERS, op)) return fault("unknown-operation");
 		const members = Object.keys(item).filter((k) => k !== "op" && k !== "kind" && k !== "id");
 		if (typeof kind !== "string" || typeof id !== "string" || id === "" || members.join() !== MEMBERS[op]!.join()) return no("invalid-edit", `items[${i}]`, i);
-		const subject = `${kind}:${id}`;
 		const refs = d.kinds.get(kind);
-		if (refs === undefined) return no("undeclared-kind", subject, i);
+		if (refs === undefined) return fault("undeclared-kind");
 		const held = s.get(id);
-		if (op === "del") {
-			if (held === undefined || held.kind !== kind) return no("not-found", subject, i);
+		if (op === "create") {
+			if (held !== undefined) return fault(held.kind === kind ? "entity-present" : "identity-taken");
+		} else if (held === undefined || held.kind !== kind) return fault("entity-absent");
+		if (op === "remove") {
 			s.write({ op: "del", kind, id }, i);
 			continue;
 		}
-		if (held !== undefined && held.kind !== kind) return no("identity-taken", subject, i);
-		if (op === "set" && held === undefined) return no("not-found", subject, i);
-		const given = op === "put" ? item["record"] : item["patch"];
-		if (!isObject(given)) return no("not-plain", subject, i);
-		const record: GraphRecord = op === "put" ? given : { ...held!.record, ...given };
-		for (const ref of refs) if (heldBy(record, ref) === undefined) return no("invalid-reference", `${subject}.${ref.field}`, i);
+		const given = op === "set" ? item["patch"] : item["record"];
+		if (!isObject(given)) return no("not-plain", id, i);
+		const record: GraphRecord = op === "set" ? { ...held!.record, ...given } : given;
+		for (const ref of refs) if (heldBy(record, ref) === undefined) return fault("invalid-reference", `${kind}.${ref.field}.holds`);
 		s.write({ op: "put", kind, id, record }, i);
 	}
 
 	expandRules(s, d);
 	const breach = newBreaches(s, d)[0];
-	if (breach !== undefined) {
-		const r = refuse("rule-broken", breach.subject, breach.opIndex);
-		return { ok: false, refusal: { ...r, details: { ...r.details, ruleKey: breach.ruleKey, measure: breach.measure } } };
-	}
+	if (breach !== undefined) return withFacts(refuse("rule-broken", breach.subject, breach.opIndex), breach.ruleKey, breach.measure);
 	const writes = s.netWrites();
-	if (writes.length > PLAN_LIMITS.maxNetWrites) {
-		const r = refuse("too-many-writes", `bound ${PLAN_LIMITS.maxNetWrites}`);
-		return { ok: false, refusal: { ...r, details: { ...r.details, ruleKey: "net-writes", measure: writes.length } } };
-	}
+	if (writes.length > PLAN_LIMITS.maxNetWrites) return withFacts(refuse("too-many-writes", `bound ${PLAN_LIMITS.maxNetWrites}`), "net-writes", writes.length);
 	return { ok: true, position: view.position(), steps: [...s.steps], inverse: [...s.inverse], writes };
 }
 

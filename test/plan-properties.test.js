@@ -42,9 +42,10 @@ function randomEdit(rand, entities) {
 		const id = `${kind}${Math.floor(rand() * POOL)}`;
 		const held = entities.get(id);
 		const r = rand();
-		if (held && r < 0.35) items.push({ op: "del", kind, id });
-		else if (held && r < 0.6) items.push({ op: "set", kind, id, patch: randomRecord(rand, kind, pick) });
-		else items.push({ op: "put", kind, id, record: randomRecord(rand, kind, pick) });
+		if (held && r < 0.3) items.push({ op: "remove", kind, id });
+		else if (held && r < 0.55) items.push({ op: "set", kind, id, patch: randomRecord(rand, kind, pick) });
+		else if (held) items.push({ op: "change", kind, id, record: randomRecord(rand, kind, pick) });
+		else items.push({ op: "create", kind, id, record: randomRecord(rand, kind, pick) });
 	}
 	return { items };
 }

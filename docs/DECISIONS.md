@@ -310,7 +310,7 @@ References holding a kind and a name - every question would then need both, wher
 **Affects:** `src/planner.ts`, `src/scratch.ts`, `src/reference-rules.ts`, `src/refusal.ts`, `src/entity-graph.ts`, `export-map.json`, `test/`.
 
 **Ruling.**\
-A graph plans an edit: `plan({ items }, { context }?)`, each item a `put` of a whole record, a `set` of named fields or a `del`, answers `{ ok: true, position, steps, inverse, writes }` or `{ ok: false, refusal }` (`D17`).\
+A graph plans an edit: `plan({ items }, { context }?)`, each item a `create`, a `change` to a whole record, a `set` of named fields or a `remove` (`D18`), answers `{ ok: true, position, steps, inverse, writes }` or `{ ok: false, refusal }` (`D17`).\
 The edit is read once as plain data, part by part; each item is checked against the plan's scratch layer as the items before it left it, and a fault is refused at that item; the reference rules are then expanded until nothing more follows, and the result is judged by key and measure against the state the edit found, refused only for a breach the edit introduces or whose measure it raises (`D18`).\
 The scratch layer lays the entities the edit touches over the view, copy on write, and is the one place a step is applied, its reversal read from the state just before it; the view is only read, so planning changes no answer.\
 Measured with a Node timing of 50 plans on views of 1,008, 10,008 and 100,008 entities: a plan cascading to 12 net writes takes a median of about 0.15 ms at each size, a plan of one creation about 0.02 ms - the cost follows what an edit touches, not what the view holds.\
@@ -359,24 +359,23 @@ Bounding the request alone - an edit of one item can cascade past the store's bo
 
 ---
 
-## D18 - Proposed reading: how the reference rules apply where the contract is silent
+## D18 - Proposed reading: how an edit is read and the reference rules apply where the contract is silent
 
-**Proposed by:** the builder of M2, 2026-11-11, for zorg's review, reading `CONTRACT.md`'s *Reference rules*, *Consequences and the stopping rule* and *Judging and refusals*.\
-**Affects:** `src/planner.ts`, `src/reference-rules.ts`.
+**Proposed by:** the builder of M2, 2026-11-11, for zorg's review, reading `CONTRACT.md`'s *Reference rules*, *Consequences and the stopping rule* and *Judging and refusals*; it takes the neutral corpus's readings `R14` and `R16` to `R24` (`corpus/README.md`), and settles five questions the corpus leaves uncovered, each named below.\
+**Affects:** `src/planner.ts`, `src/reference-rules.ts`, `src/refusal.ts`.
 
 **Reading.**\
-Every requested item is applied in order, each checked against the scratch layer as the items before it left it, and the rules are then expanded to a fixed point once, over the state all the items leave (the stopping rule's first step); so an edit that deletes a target and puts it back, or repoints a referrer before deleting its target, cascades nothing.\
-A `set` merges its fields over the record and a `put` replaces it; a change or a deletion of an entity absent at that point is refused at the item, `not-found`.\
-`onTargetDelete` applies to each target the edit deleted and did not put back; a reference to an absent identity the edit found standing is not repaired.\
-`exclusivity` holds among the referrers of one kind through one field; under `"steal"`, a referrer newly holding the target keeps it and every other holder loses it; two referrers newly holding it in one edit cannot take it from each other, and the edit is refused.\
-`onBelowMin: "cascade-delete"` deletes an entity the edit wrote and left further below the minimum than it found it, one the edit creates below it included.\
-`onUnreferenced: "delete"` deletes a target such a reference stopped holding within the edit once nothing holds it through any reference; a target never held within the edit is kept.\
-The result is judged by three rules, each breach keyed `<kind>.<field>.<rule>@<identity>`: `targets` (an absent identity or a kind the reference may not target; named `onTargetDelete` where the edit deleted that target under `"refuse"`), measured by how many; `exclusivity`, by how many holders beyond one; and `min`, by how many short; read over the entities the edit touched, their referrers and the targets their exclusive references hold, in both states.\
-A refusal names the first breach by requested item, then by key: `details.ruleKey` `<kind>.<field>.<rule>`, `subject` the entity concerned as `<kind>:<identity>` - the target, for exclusivity - even one the caller never named, `measure`, and `opIndex` the item that led there: the entity's last write, the newest holder for exclusivity, or the item that deleted or changed the target of an entity the edit did not write.
+An edit's items are `create` (an entity absent at that point, with its whole record), `change` (one present, to a whole record), `set` (one present, its named fields merged over its record) and `remove` (one present), the operations of the reference store's `create`, `update` and `delete`.\
+Every item is applied in order, each checked against the scratch layer as the items before it left it; a fault is refused at the first item that faults, before any rule is judged, keyed by its code with the item's identity as its subject and a measure of 1 - `entity-present` for a `create` of an entity present, `identity-taken` where it is of another kind, `entity-absent` for a `change`, `set` or `remove` of one absent, `undeclared-kind`, `unknown-operation`, and `invalid-reference`, keyed `<kind>.<field>.holds` (`R14`, `R22`).\
+The rules are then expanded once, to a fixed point, over the state all the items leave, so no item sees another item's consequences (`R14`): `onTargetDelete` acts on each referrer holding a target the edit deleted; `exclusivity: "steal"` takes the target from every referrer that held it before the edit, the referrer the edit made a holder keeping it (`R16`, `R17`); `onBelowMin: "cascade-delete"` deletes a referrer the edit left below its minimum and below what it held; and `onUnreferenced: "delete"` deletes a target such a reference held before or during the edit once no reference of any field holds it (`R17`).\
+The result is judged by four rules, each breach keyed by its rule key and subject and refused when new or worse (`R18`): `targets`, a referrer holding targets absent before and after the edit, or of a kind the reference may not target, measured by how many; `onTargetDelete`, a referrer holding through a reference refusing it targets the edit deleted, by how many; `exclusivity`, a target held through an exclusive reference by more than one referrer, by how many beyond one; and `min`, a referrer holding fewer targets than the minimum of a reference refusing it, by how many fewer.\
+A refusal's `subject` is the identity of the entity concerned, the target for `exclusivity` and the referrer otherwise, even one the caller never named (`R19`); `opIndex` is the requested item the breach follows from, through every consequence between (`R21`).
+**Settled here, uncovered by the corpus:** an entity an edit creates below a minimum whose `onBelowMin` is `"cascade-delete"` is deleted, as one it left below; one target newly given to two holders through `"steal"` in one edit is taken from neither, and the edit is refused for `exclusivity`; on a kind with two references declaring different `onUnreferenced`, a target the `"delete"` reference stopped holding is deleted only once no reference of any field, the `"keep"` one included, holds it; a target the edit created and then deleted while held is acted on by `onTargetDelete` as any target the edit deleted, and under `"refuse"` its referrer's breach is `targets`, since the target was absent when the edit found it; and of several breaches an edit causes, the one reported is the first by requested item, then by rule key and subject.
 
 **Why.**\
-The contract judges an edit on the state it would leave and lets no edit leave a rule more broken than it found it, so the rules act on that state, a standing breach is neither repaired nor held against an edit, and a partial repair passes.
+The contract judges an edit on the state it would leave and lets no edit leave a rule more broken than it found it, so the rules act on that state, a standing breach is neither repaired nor held against an edit, and a partial repair passes; and two implementations reading the corpus alike answer alike.
 
 **Alternatives refuted.**\
 Expanding the rules after each item - a referrer repointed by a later item of the same edit would already be gone.\
+A `put` that creates or replaces - it cannot refuse a creation over an entity already present.\
 Letting the later of two new holders steal from the earlier - the contract's `steal` takes a target from the referrer that held it, which neither did.
