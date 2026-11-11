@@ -1,0 +1,48 @@
+{
+  "case": "b1-17-reachable-after-removal",
+  "batch": 1,
+  "summary": "Removing an entity and the one reference to it in one change cuts reachable at that point, and its own references leave with it.",
+  "covers": ["dated-graph-view", "positioned-graph-sync"],
+  "readings": ["R1", "R2", "R4", "R5", "R7"],
+  "declare": {
+    "kinds": [
+      { "kind": "task", "references": [
+        { "field": "waitsOn", "targets": ["task"], "holds": "many", "onTargetDelete": "unlink" }
+      ] }
+    ]
+  },
+  "verdict": "accepted",
+  "steps": [
+    { "start": { "position": 0, "entities": [
+      { "kind": "task", "id": "a", "record": { "title": "Bake", "waitsOn": ["b"] } },
+      { "kind": "task", "id": "b", "record": { "title": "Mix", "waitsOn": ["c"] } },
+      { "kind": "task", "id": "c", "record": { "title": "Buy", "waitsOn": ["d"] } },
+      { "kind": "task", "id": "d", "record": { "title": "List", "waitsOn": [] } }
+    ] } },
+    { "ask": { "position": 0, "questions": [
+      { "q": "reachable", "from": "a", "answer": ["b", "c", "d"] },
+      { "q": "referrersOf", "id": "d", "answer": [ { "kind": "task", "id": "c", "field": "waitsOn" } ] }
+    ] } },
+    { "take": { "position": 1, "writes": [
+      { "op": "put", "kind": "task", "id": "b", "record": { "title": "Mix", "waitsOn": [] } },
+      { "op": "del", "kind": "task", "id": "c" }
+    ] } },
+    { "ask": { "position": 1, "questions": [
+      { "q": "reachable", "from": "a", "answer": ["b"] },
+      { "q": "reachable", "from": "b", "answer": [] },
+      { "q": "reachable", "from": "c", "answer": [] },
+      { "q": "referrersOf", "id": "c", "answer": [] },
+      { "q": "referrersOf", "id": "d", "answer": [] },
+      { "q": "reachable", "from": "d", "answer": [] },
+      { "q": "all", "kind": "task", "answer": ["a", "b", "d"] }
+    ] } },
+    { "take": { "position": 2, "writes": [
+      { "op": "put", "kind": "task", "id": "d", "record": { "title": "List", "waitsOn": ["a"] } }
+    ] } },
+    { "ask": { "position": 2, "questions": [
+      { "q": "reachable", "from": "d", "answer": ["a", "b"] },
+      { "q": "reachable", "from": "a", "answer": ["b"] },
+      { "q": "referrersOf", "id": "a", "answer": [ { "kind": "task", "id": "d", "field": "waitsOn" } ] }
+    ] } }
+  ]
+}

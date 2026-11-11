@@ -1,0 +1,62 @@
+{
+  "case": "b1-18-rename-as-delete-and-create",
+  "batch": 1,
+  "summary": "A rename is a delete and a create in one change: referrers rewritten in the same change follow it, and a referrer not rewritten keeps the old id until a later change.",
+  "covers": ["dated-graph-view", "positioned-graph-sync"],
+  "readings": ["R1", "R2", "R3", "R4", "R6", "R7", "R8"],
+  "declare": {
+    "kinds": [
+      { "kind": "folder", "references": [
+        { "field": "notes", "targets": ["note"], "holds": "many", "onTargetDelete": "unlink", "exclusivity": "refuse" }
+      ] },
+      { "kind": "note", "references": [
+        { "field": "tags", "targets": ["tag"], "holds": "many", "onTargetDelete": "unlink", "onUnreferenced": "delete" },
+        { "field": "author", "targets": ["owner"], "holds": "one", "onTargetDelete": "refuse" }
+      ] },
+      { "kind": "tag", "references": [] },
+      { "kind": "owner", "references": [
+        { "field": "folders", "targets": ["folder"], "holds": "many", "onTargetDelete": "unlink", "exclusivity": "steal" }
+      ] }
+    ]
+  },
+  "verdict": "accepted",
+  "steps": [
+    { "start": { "position": 0, "entities": [
+      { "kind": "folder", "id": "f1", "record": { "title": "Inbox", "notes": ["n1"] } },
+      { "kind": "note", "id": "n1", "record": { "title": "Minutes", "tags": ["t1"], "author": null } },
+      { "kind": "tag", "id": "t1", "record": { "title": "urgent" } }
+    ] } },
+    { "take": { "position": 1, "writes": [
+      { "op": "del", "kind": "tag", "id": "t1" },
+      { "op": "put", "kind": "tag", "id": "t1b", "record": { "title": "urgent" } },
+      { "op": "put", "kind": "note", "id": "n1", "record": { "title": "Minutes", "tags": ["t1b"], "author": null } }
+    ] } },
+    { "ask": { "position": 1, "questions": [
+      { "q": "get", "kind": "tag", "id": "t1", "answer": null },
+      { "q": "get", "kind": "tag", "id": "t1b", "answer": { "title": "urgent" } },
+      { "q": "referrersOf", "id": "t1", "answer": [] },
+      { "q": "referrersOf", "id": "t1b", "answer": [ { "kind": "note", "id": "n1", "field": "tags" } ] },
+      { "q": "all", "kind": "tag", "answer": ["t1b"] }
+    ] } },
+    { "take": { "position": 2, "writes": [
+      { "op": "del", "kind": "note", "id": "n1" },
+      { "op": "put", "kind": "note", "id": "n1b", "record": { "title": "Minutes", "tags": ["t1b"], "author": null } }
+    ] } },
+    { "ask": { "position": 2, "questions": [
+      { "q": "referrersOf", "id": "n1", "answer": [ { "kind": "folder", "id": "f1", "field": "notes" } ] },
+      { "q": "referrersOf", "id": "n1b", "answer": [] },
+      { "q": "ownerOf", "member": "n1b", "containerKind": "folder", "answer": null },
+      { "q": "ownerOf", "member": "n1", "containerKind": "folder", "answer": "f1" },
+      { "q": "referrersOf", "id": "t1b", "answer": [ { "kind": "note", "id": "n1b", "field": "tags" } ] },
+      { "q": "all", "kind": "note", "answer": ["n1b"] }
+    ] } },
+    { "take": { "position": 3, "writes": [
+      { "op": "put", "kind": "folder", "id": "f1", "record": { "title": "Inbox", "notes": ["n1b"] } }
+    ] } },
+    { "ask": { "position": 3, "questions": [
+      { "q": "referrersOf", "id": "n1", "answer": [] },
+      { "q": "ownerOf", "member": "n1b", "containerKind": "folder", "answer": "f1" },
+      { "q": "targetsOf", "id": "f1", "answer": [ { "field": "notes", "id": "n1b" } ] }
+    ] } }
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "case": "b1-25-refused-targets-missing",
+  "batch": 1,
+  "summary": "A reference that declares no target kinds at all is refused, since a reference declares the kinds it may target.",
+  "covers": ["graph-declaration", "Reference rules"],
+  "readings": ["R9", "R10"],
+  "declare": {
+    "kinds": [
+      { "kind": "folder", "references": [
+        { "field": "notes", "targets": ["note"], "holds": "many", "onTargetDelete": "unlink" }
+      ] },
+      { "kind": "note", "references": [
+        { "field": "tags", "holds": "many", "onTargetDelete": "unlink" }
+      ] },
+      { "kind": "tag", "references": [] }
+    ]
+  },
+  "verdict": "refused",
+  "refusal": { "reason": "no-target-kind", "part": "entity-graph", "names": ["note", "tags"] }
+}

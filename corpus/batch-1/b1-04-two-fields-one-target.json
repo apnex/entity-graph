@@ -1,0 +1,42 @@
+{
+  "case": "b1-04-two-fields-one-target",
+  "batch": 1,
+  "summary": "An entity holding one target through two fields is answered once per field, and clearing one field leaves the other.",
+  "covers": ["dated-graph-view", "positioned-graph-sync"],
+  "readings": ["R1", "R2", "R7"],
+  "declare": {
+    "kinds": [
+      { "kind": "note", "references": [
+        { "field": "tags", "targets": ["tag"], "holds": "many", "onTargetDelete": "unlink" },
+        { "field": "author", "targets": ["owner"], "holds": "one", "onTargetDelete": "refuse" },
+        { "field": "reviewer", "targets": ["owner"], "holds": "one", "onTargetDelete": "unlink" }
+      ] },
+      { "kind": "tag", "references": [] },
+      { "kind": "owner", "references": [] }
+    ]
+  },
+  "verdict": "accepted",
+  "steps": [
+    { "start": { "position": 0, "entities": [
+      { "kind": "owner", "id": "o1", "record": { "title": "Ada" } },
+      { "kind": "owner", "id": "o2", "record": { "title": "Grace" } },
+      { "kind": "note", "id": "n1", "record": { "title": "One", "tags": [], "author": "o1", "reviewer": "o1" } },
+      { "kind": "note", "id": "n2", "record": { "title": "Two", "tags": [], "author": "o2", "reviewer": "o1" } }
+    ] } },
+    { "ask": { "position": 0, "questions": [
+      { "q": "referrersOf", "id": "o1", "answer": [ { "kind": "note", "id": "n1", "field": "author" }, { "kind": "note", "id": "n1", "field": "reviewer" }, { "kind": "note", "id": "n2", "field": "reviewer" } ] },
+      { "q": "referrersOf", "id": "o2", "answer": [ { "kind": "note", "id": "n2", "field": "author" } ] },
+      { "q": "targetsOf", "id": "n1", "answer": [ { "field": "author", "id": "o1" }, { "field": "reviewer", "id": "o1" } ] },
+      { "q": "targetsOf", "id": "n1", "field": "reviewer", "answer": ["o1"] },
+      { "q": "targetsOf", "id": "n2", "answer": [ { "field": "author", "id": "o2" }, { "field": "reviewer", "id": "o1" } ] }
+    ] } },
+    { "take": { "position": 1, "writes": [
+      { "op": "put", "kind": "note", "id": "n1", "record": { "title": "One", "tags": [], "author": "o1", "reviewer": null } }
+    ] } },
+    { "ask": { "position": 1, "questions": [
+      { "q": "referrersOf", "id": "o1", "answer": [ { "kind": "note", "id": "n1", "field": "author" }, { "kind": "note", "id": "n2", "field": "reviewer" } ] },
+      { "q": "targetsOf", "id": "n1", "answer": [ { "field": "author", "id": "o1" } ] },
+      { "q": "targetsOf", "id": "n1", "field": "reviewer", "answer": [] }
+    ] } }
+  ]
+}

@@ -13,8 +13,8 @@ related: [C0, C1, C3, C4, C5, C6, C11, C12, C13, C14, P4, E5, A1, A2, A3]
 
 The contract of record for entity-graph: what a consumer can depend on, scaffolded as a candidate component under zorg's `D35` and `BL33` (`zorg/docs/BACKLOG.md`) and registered as `C15` (`status: draft`) in `mission-kit/components/C15-entity-graph.md`; its vision is ratified (`D7`), and its contract is a draft whose design is owed.\
 It also carries the fields of its mission-kit registry entry (`C15`).\
-Each row states what a consumer will depend on at the level `VISION.md` commits to; how each is achieved is owed by the design effort, which is separate and has not started (`D2`), and is listed under *Design owed*.\
-The terms under *Terms of the rows* carry the requirements its first candidate consumer, `drawv2`, records under mission-kit's `0117`, drafted with zorg's agreement and ruled by the director (`D8`, `D9`); nothing in them is built.
+Each row states what a consumer will depend on at the level `VISION.md` commits to; how each is achieved is owed by the design effort (`D2`), which began with the build plan (`docs/BUILD-PLAN.md`) and has built its first milestone, the dated view (`D10`); what it still owes is listed under *Design owed*.\
+The terms under *Terms of the rows* carry the requirements its first candidate consumer, `drawv2`, records under mission-kit's `0117`, drafted with zorg's agreement and ruled by the director (`D8`, `D9`); none of them is built yet, the first milestone checking only the values a reference's options are declared with (`D10`).
 
 ---
 
@@ -172,7 +172,7 @@ Each is a question, and any answer keeps every commitment in `VISION.md` and in 
 ## Reference
 
 This repository, `apnex/entity-graph`.\
-Currently a scaffold with `VISION.md` and `CONTRACT.md` drafted under zorg's `BL33`, and no code.\
+Its first milestone is built, serving `dated-graph-view` in memory, the other rows deferred (`D10`); the rest is built milestone by milestone under `docs/BUILD-PLAN.md`.\
 `positioned-graph-sync` takes a store port shaped by the `entity-store` capabilities it requires, with `entity-store` as the reference provider (*The store port*), and `reversible-history` keeps its undo records in the note `entity-store:change-provenance` carries.\
 Those `entity-store` capabilities are designed under `entity-store`'s own `D4` and not yet served: its multi-item `change`, the expected position on a change, and the note.
 

@@ -1,0 +1,62 @@
+{
+  "case": "b1-21-delete-and-recreate-same-id",
+  "batch": 1,
+  "summary": "An entity deleted and later created again under the same id is readable again with its new record, and the references answered are those of its newest record.",
+  "covers": ["dated-graph-view", "positioned-graph-sync"],
+  "readings": ["R1", "R2", "R3", "R4", "R7"],
+  "declare": {
+    "kinds": [
+      { "kind": "folder", "references": [
+        { "field": "notes", "targets": ["note"], "holds": "many", "onTargetDelete": "unlink", "exclusivity": "refuse" }
+      ] },
+      { "kind": "note", "references": [
+        { "field": "tags", "targets": ["tag"], "holds": "many", "onTargetDelete": "unlink", "onUnreferenced": "delete" },
+        { "field": "author", "targets": ["owner"], "holds": "one", "onTargetDelete": "refuse" }
+      ] },
+      { "kind": "tag", "references": [] },
+      { "kind": "owner", "references": [
+        { "field": "folders", "targets": ["folder"], "holds": "many", "onTargetDelete": "unlink", "exclusivity": "steal" }
+      ] }
+    ]
+  },
+  "verdict": "accepted",
+  "steps": [
+    { "start": { "position": 0, "entities": [
+      { "kind": "tag", "id": "t1", "record": { "title": "urgent" } },
+      { "kind": "note", "id": "n1", "record": { "title": "One", "tags": ["t1"], "author": null } },
+      { "kind": "note", "id": "n2", "record": { "title": "Two", "tags": [], "author": null } }
+    ] } },
+    { "take": { "position": 1, "writes": [
+      { "op": "del", "kind": "tag", "id": "t1" }
+    ] } },
+    { "ask": { "position": 1, "questions": [
+      { "q": "get", "kind": "tag", "id": "t1", "answer": null },
+      { "q": "referrersOf", "id": "t1", "answer": [ { "kind": "note", "id": "n1", "field": "tags" } ] }
+    ] } },
+    { "take": { "position": 2, "writes": [
+      { "op": "put", "kind": "tag", "id": "t1", "record": { "title": "urgent again" } }
+    ] } },
+    { "ask": { "position": 2, "questions": [
+      { "q": "get", "kind": "tag", "id": "t1", "answer": { "title": "urgent again" } },
+      { "q": "referrersOf", "id": "t1", "answer": [ { "kind": "note", "id": "n1", "field": "tags" } ] },
+      { "q": "all", "kind": "tag", "answer": ["t1"] }
+    ] } },
+    { "take": { "position": 3, "writes": [
+      { "op": "del", "kind": "note", "id": "n1" }
+    ] } },
+    { "ask": { "position": 3, "questions": [
+      { "q": "referrersOf", "id": "t1", "answer": [] },
+      { "q": "all", "kind": "note", "answer": ["n2"] }
+    ] } },
+    { "take": { "position": 4, "writes": [
+      { "op": "put", "kind": "note", "id": "n1", "record": { "title": "One again", "tags": [], "author": null } },
+      { "op": "put", "kind": "note", "id": "n2", "record": { "title": "Two", "tags": ["t1"], "author": null } }
+    ] } },
+    { "ask": { "position": 4, "questions": [
+      { "q": "referrersOf", "id": "t1", "answer": [ { "kind": "note", "id": "n2", "field": "tags" } ] },
+      { "q": "targetsOf", "id": "n1", "answer": [] },
+      { "q": "get", "kind": "note", "id": "n1", "answer": { "title": "One again", "tags": [], "author": null } },
+      { "q": "all", "kind": "note", "answer": ["n1", "n2"] }
+    ] } }
+  ]
+}

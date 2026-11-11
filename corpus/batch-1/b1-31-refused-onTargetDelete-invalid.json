@@ -1,0 +1,20 @@
+{
+  "case": "b1-31-refused-onTargetDelete-invalid",
+  "batch": 1,
+  "summary": "An onTargetDelete value outside refuse, cascade-delete and unlink is refused.",
+  "covers": ["graph-declaration", "Reference rules"],
+  "readings": ["R9"],
+  "declare": {
+    "kinds": [
+      { "kind": "folder", "references": [
+        { "field": "notes", "targets": ["note"], "holds": "many", "onTargetDelete": "unlink" }
+      ] },
+      { "kind": "note", "references": [
+        { "field": "tags", "targets": ["tag"], "holds": "many", "onTargetDelete": "ignore" }
+      ] },
+      { "kind": "tag", "references": [] }
+    ]
+  },
+  "verdict": "refused",
+  "refusal": { "reason": "onTargetDelete-invalid", "part": "entity-graph", "names": ["note", "tags"] }
+}

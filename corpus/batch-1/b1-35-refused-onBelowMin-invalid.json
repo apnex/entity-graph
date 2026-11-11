@@ -1,0 +1,20 @@
+{
+  "case": "b1-35-refused-onBelowMin-invalid",
+  "batch": 1,
+  "summary": "An onBelowMin value outside refuse and cascade-delete is refused, even one that is valid for onTargetDelete.",
+  "covers": ["graph-declaration", "Reference rules"],
+  "readings": ["R9"],
+  "declare": {
+    "kinds": [
+      { "kind": "folder", "references": [
+        { "field": "notes", "targets": ["note"], "holds": "many", "onTargetDelete": "unlink", "min": 1, "onBelowMin": "unlink" }
+      ] },
+      { "kind": "note", "references": [
+        { "field": "tags", "targets": ["tag"], "holds": "many", "onTargetDelete": "unlink" }
+      ] },
+      { "kind": "tag", "references": [] }
+    ]
+  },
+  "verdict": "refused",
+  "refusal": { "reason": "onBelowMin-invalid", "part": "entity-graph", "names": ["folder", "notes"] }
+}

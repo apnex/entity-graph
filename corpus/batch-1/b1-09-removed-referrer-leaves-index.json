@@ -1,0 +1,62 @@
+{
+  "case": "b1-09-removed-referrer-leaves-index",
+  "batch": 1,
+  "summary": "A removed entity's own references leave the index, while references held to it by entities that remain stay as the store placed them.",
+  "covers": ["dated-graph-view", "positioned-graph-sync"],
+  "readings": ["R1", "R2", "R3", "R4", "R5", "R6", "R7"],
+  "declare": {
+    "kinds": [
+      { "kind": "folder", "references": [
+        { "field": "notes", "targets": ["note"], "holds": "many", "onTargetDelete": "unlink", "exclusivity": "refuse" }
+      ] },
+      { "kind": "note", "references": [
+        { "field": "tags", "targets": ["tag"], "holds": "many", "onTargetDelete": "unlink", "onUnreferenced": "delete" },
+        { "field": "author", "targets": ["owner"], "holds": "one", "onTargetDelete": "refuse" }
+      ] },
+      { "kind": "tag", "references": [] },
+      { "kind": "owner", "references": [
+        { "field": "folders", "targets": ["folder"], "holds": "many", "onTargetDelete": "unlink", "exclusivity": "steal" }
+      ] }
+    ]
+  },
+  "verdict": "accepted",
+  "steps": [
+    { "start": { "position": 0, "entities": [
+      { "kind": "owner", "id": "o1", "record": { "title": "Ada", "folders": ["f1"] } },
+      { "kind": "folder", "id": "f1", "record": { "title": "Inbox", "notes": ["n1", "n2"] } },
+      { "kind": "tag", "id": "t1", "record": { "title": "urgent" } },
+      { "kind": "note", "id": "n1", "record": { "title": "One", "tags": ["t1"], "author": "o1" } },
+      { "kind": "note", "id": "n2", "record": { "title": "Two", "tags": ["t1"], "author": null } }
+    ] } },
+    { "ask": { "position": 0, "questions": [
+      { "q": "referrersOf", "id": "t1", "answer": [ { "kind": "note", "id": "n1", "field": "tags" }, { "kind": "note", "id": "n2", "field": "tags" } ] },
+      { "q": "referrersOf", "id": "o1", "answer": [ { "kind": "note", "id": "n1", "field": "author" } ] },
+      { "q": "targetsOf", "id": "n1", "answer": [ { "field": "tags", "id": "t1" }, { "field": "author", "id": "o1" } ] }
+    ] } },
+    { "take": { "position": 1, "writes": [
+      { "op": "del", "kind": "note", "id": "n1" }
+    ] } },
+    { "ask": { "position": 1, "questions": [
+      { "q": "get", "kind": "note", "id": "n1", "answer": null },
+      { "q": "all", "kind": "note", "answer": ["n2"] },
+      { "q": "referrersOf", "id": "t1", "answer": [ { "kind": "note", "id": "n2", "field": "tags" } ] },
+      { "q": "referrersOf", "id": "o1", "answer": [] },
+      { "q": "targetsOf", "id": "n1", "answer": [] },
+      { "q": "reachable", "from": "n1", "answer": [] },
+      { "q": "referrersOf", "id": "n1", "answer": [ { "kind": "folder", "id": "f1", "field": "notes" } ] },
+      { "q": "ownerOf", "member": "n1", "containerKind": "folder", "answer": "f1" }
+    ] } },
+    { "take": { "position": 2, "writes": [
+      { "op": "del", "kind": "folder", "id": "f1" }
+    ] } },
+    { "ask": { "position": 2, "questions": [
+      { "q": "referrersOf", "id": "n1", "answer": [] },
+      { "q": "referrersOf", "id": "n2", "answer": [] },
+      { "q": "ownerOf", "member": "n2", "containerKind": "folder", "answer": null },
+      { "q": "targetsOf", "id": "f1", "answer": [] },
+      { "q": "targetsOf", "id": "o1", "answer": [ { "field": "folders", "id": "f1" } ] },
+      { "q": "referrersOf", "id": "f1", "answer": [ { "kind": "owner", "id": "o1", "field": "folders" } ] },
+      { "q": "all", "kind": "folder", "answer": [] }
+    ] } }
+  ]
+}

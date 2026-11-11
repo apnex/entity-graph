@@ -1,0 +1,21 @@
+{
+  "case": "b1-27-refused-duplicate-kind",
+  "batch": 1,
+  "summary": "A kind declared twice is refused, since each kind states its references in one place.",
+  "covers": ["graph-declaration"],
+  "readings": ["R9"],
+  "declare": {
+    "kinds": [
+      { "kind": "folder", "references": [
+        { "field": "notes", "targets": ["note"], "holds": "many", "onTargetDelete": "unlink" }
+      ] },
+      { "kind": "note", "references": [
+        { "field": "tags", "targets": ["tag"], "holds": "many", "onTargetDelete": "unlink" }
+      ] },
+      { "kind": "tag", "references": [] },
+      { "kind": "folder", "references": [] }
+    ]
+  },
+  "verdict": "refused",
+  "refusal": { "reason": "duplicate-kind", "part": "entity-graph", "names": ["folder"] }
+}

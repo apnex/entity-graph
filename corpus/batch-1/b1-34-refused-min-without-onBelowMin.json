@@ -1,0 +1,20 @@
+{
+  "case": "b1-34-refused-min-without-onBelowMin",
+  "batch": 1,
+  "summary": "A minimum number of targets declared without onBelowMin is refused, since a minimum is declared with onBelowMin.",
+  "covers": ["graph-declaration", "Reference rules"],
+  "readings": ["R9", "R11"],
+  "declare": {
+    "kinds": [
+      { "kind": "folder", "references": [
+        { "field": "notes", "targets": ["note"], "holds": "many", "onTargetDelete": "unlink", "min": 1 }
+      ] },
+      { "kind": "note", "references": [
+        { "field": "tags", "targets": ["tag"], "holds": "many", "onTargetDelete": "unlink" }
+      ] },
+      { "kind": "tag", "references": [] }
+    ]
+  },
+  "verdict": "refused",
+  "refusal": { "reason": "min-without-onBelowMin", "part": "entity-graph", "names": ["folder", "notes"] }
+}

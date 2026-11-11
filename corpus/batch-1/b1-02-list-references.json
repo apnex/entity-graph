@@ -1,0 +1,54 @@
+{
+  "case": "b1-02-list-references",
+  "batch": 1,
+  "summary": "A reference holding a list of targets is answered from both ends, an empty list holds nothing, and the view starts at a non-zero position.",
+  "covers": ["dated-graph-view", "positioned-graph-sync"],
+  "readings": ["R1", "R2", "R7"],
+  "declare": {
+    "kinds": [
+      { "kind": "folder", "references": [
+        { "field": "notes", "targets": ["note"], "holds": "many", "onTargetDelete": "unlink", "exclusivity": "refuse" }
+      ] },
+      { "kind": "note", "references": [
+        { "field": "tags", "targets": ["tag"], "holds": "many", "onTargetDelete": "unlink", "onUnreferenced": "delete" },
+        { "field": "author", "targets": ["owner"], "holds": "one", "onTargetDelete": "refuse" }
+      ] },
+      { "kind": "tag", "references": [] },
+      { "kind": "owner", "references": [
+        { "field": "folders", "targets": ["folder"], "holds": "many", "onTargetDelete": "unlink", "exclusivity": "steal" }
+      ] }
+    ]
+  },
+  "verdict": "accepted",
+  "steps": [
+    { "start": { "position": 3, "entities": [
+      { "kind": "folder", "id": "f1", "record": { "title": "Inbox", "notes": ["n1", "n2", "n3"] } },
+      { "kind": "folder", "id": "f2", "record": { "title": "Archive", "notes": [] } },
+      { "kind": "note", "id": "n1", "record": { "title": "One", "tags": [], "author": null } },
+      { "kind": "note", "id": "n2", "record": { "title": "Two", "tags": [], "author": null } },
+      { "kind": "note", "id": "n3", "record": { "title": "Three", "tags": [], "author": null } }
+    ] } },
+    { "ask": { "position": 3, "questions": [
+      { "q": "all", "kind": "folder", "answer": ["f1", "f2"] },
+      { "q": "all", "kind": "note", "answer": ["n1", "n2", "n3"] },
+      { "q": "all", "kind": "tag", "answer": [] },
+      { "q": "targetsOf", "id": "f1", "answer": [ { "field": "notes", "id": "n1" }, { "field": "notes", "id": "n2" }, { "field": "notes", "id": "n3" } ] },
+      { "q": "targetsOf", "id": "f1", "field": "notes", "answer": ["n1", "n2", "n3"] },
+      { "q": "targetsOf", "id": "f2", "answer": [] },
+      { "q": "targetsOf", "id": "f2", "field": "notes", "answer": [] },
+      { "q": "referrersOf", "id": "n2", "answer": [ { "kind": "folder", "id": "f1", "field": "notes" } ] },
+      { "q": "referrersOf", "id": "f1", "answer": [] }
+    ] } },
+    { "take": { "position": 4, "writes": [
+      { "op": "put", "kind": "folder", "id": "f1", "record": { "title": "Inbox", "notes": ["n3", "n1"] } },
+      { "op": "put", "kind": "folder", "id": "f2", "record": { "title": "Archive", "notes": ["n2"] } }
+    ] } },
+    { "ask": { "position": 4, "questions": [
+      { "q": "targetsOf", "id": "f1", "field": "notes", "answer": ["n1", "n3"] },
+      { "q": "targetsOf", "id": "f2", "answer": [ { "field": "notes", "id": "n2" } ] },
+      { "q": "referrersOf", "id": "n2", "answer": [ { "kind": "folder", "id": "f2", "field": "notes" } ] },
+      { "q": "referrersOf", "id": "n1", "answer": [ { "kind": "folder", "id": "f1", "field": "notes" } ] },
+      { "q": "referrersOf", "id": "n3", "answer": [ { "kind": "folder", "id": "f1", "field": "notes" } ] }
+    ] } }
+  ]
+}

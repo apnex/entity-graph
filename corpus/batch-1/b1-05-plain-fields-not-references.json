@@ -1,0 +1,41 @@
+{
+  "case": "b1-05-plain-fields-not-references",
+  "batch": 1,
+  "summary": "Only declared reference fields are references: a plain or undeclared field whose value equals an id is never indexed.",
+  "covers": ["graph-declaration", "dated-graph-view"],
+  "readings": ["R1", "R2", "R5"],
+  "declare": {
+    "kinds": [
+      { "kind": "folder", "references": [
+        { "field": "notes", "targets": ["note"], "holds": "many", "onTargetDelete": "unlink", "exclusivity": "refuse" }
+      ] },
+      { "kind": "note", "references": [
+        { "field": "tags", "targets": ["tag"], "holds": "many", "onTargetDelete": "unlink", "onUnreferenced": "delete" },
+        { "field": "author", "targets": ["owner"], "holds": "one", "onTargetDelete": "refuse" }
+      ] },
+      { "kind": "tag", "references": [] },
+      { "kind": "owner", "references": [
+        { "field": "folders", "targets": ["folder"], "holds": "many", "onTargetDelete": "unlink", "exclusivity": "steal" }
+      ] }
+    ]
+  },
+  "verdict": "accepted",
+  "steps": [
+    { "start": { "position": 0, "entities": [
+      { "kind": "tag", "id": "t1", "record": { "title": "urgent" } },
+      { "kind": "tag", "id": "t2", "record": { "title": "t1" } },
+      { "kind": "note", "id": "n1", "record": { "title": "t1", "tags": ["t2"], "author": null, "seeAlso": "n2", "aliases": ["t1", "n2"] } },
+      { "kind": "note", "id": "n2", "record": { "title": "n1", "tags": [], "author": null } }
+    ] } },
+    { "ask": { "position": 0, "questions": [
+      { "q": "referrersOf", "id": "t1", "answer": [] },
+      { "q": "referrersOf", "id": "n2", "answer": [] },
+      { "q": "referrersOf", "id": "n1", "answer": [] },
+      { "q": "referrersOf", "id": "t2", "answer": [ { "kind": "note", "id": "n1", "field": "tags" } ] },
+      { "q": "targetsOf", "id": "n1", "answer": [ { "field": "tags", "id": "t2" } ] },
+      { "q": "targetsOf", "id": "n2", "answer": [] },
+      { "q": "reachable", "from": "n1", "answer": ["t2"] },
+      { "q": "get", "kind": "note", "id": "n1", "answer": { "title": "t1", "tags": ["t2"], "author": null, "seeAlso": "n2", "aliases": ["t1", "n2"] } }
+    ] } }
+  ]
+}

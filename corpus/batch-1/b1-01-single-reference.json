@@ -1,0 +1,51 @@
+{
+  "case": "b1-01-single-reference",
+  "batch": 1,
+  "summary": "A reference holding one target is answered from both ends, a null one holds nothing, and re-pointing it moves the answers at the next position.",
+  "covers": ["dated-graph-view", "positioned-graph-sync"],
+  "readings": ["R1", "R2", "R7"],
+  "declare": {
+    "kinds": [
+      { "kind": "folder", "references": [
+        { "field": "notes", "targets": ["note"], "holds": "many", "onTargetDelete": "unlink", "exclusivity": "refuse" }
+      ] },
+      { "kind": "note", "references": [
+        { "field": "tags", "targets": ["tag"], "holds": "many", "onTargetDelete": "unlink", "onUnreferenced": "delete" },
+        { "field": "author", "targets": ["owner"], "holds": "one", "onTargetDelete": "refuse" }
+      ] },
+      { "kind": "tag", "references": [] },
+      { "kind": "owner", "references": [
+        { "field": "folders", "targets": ["folder"], "holds": "many", "onTargetDelete": "unlink", "exclusivity": "steal" }
+      ] }
+    ]
+  },
+  "verdict": "accepted",
+  "steps": [
+    { "start": { "position": 0, "entities": [
+      { "kind": "owner", "id": "o1", "record": { "title": "Ada", "folders": [] } },
+      { "kind": "owner", "id": "o2", "record": { "title": "Grace", "folders": [] } },
+      { "kind": "note", "id": "n1", "record": { "title": "Minutes", "tags": [], "author": "o1" } },
+      { "kind": "note", "id": "n2", "record": { "title": "Draft", "tags": [], "author": null } }
+    ] } },
+    { "ask": { "position": 0, "questions": [
+      { "q": "targetsOf", "id": "n1", "answer": [ { "field": "author", "id": "o1" } ] },
+      { "q": "targetsOf", "id": "n1", "field": "author", "answer": ["o1"] },
+      { "q": "targetsOf", "id": "n2", "answer": [] },
+      { "q": "targetsOf", "id": "n2", "field": "author", "answer": [] },
+      { "q": "targetsOf", "id": "o1", "answer": [] },
+      { "q": "referrersOf", "id": "o1", "answer": [ { "kind": "note", "id": "n1", "field": "author" } ] },
+      { "q": "referrersOf", "id": "o2", "answer": [] },
+      { "q": "referrersOf", "id": "n1", "answer": [] }
+    ] } },
+    { "take": { "position": 1, "writes": [
+      { "op": "put", "kind": "note", "id": "n1", "record": { "title": "Minutes", "tags": [], "author": "o2" } },
+      { "op": "put", "kind": "note", "id": "n2", "record": { "title": "Draft", "tags": [], "author": "o1" } }
+    ] } },
+    { "ask": { "position": 1, "questions": [
+      { "q": "referrersOf", "id": "o1", "answer": [ { "kind": "note", "id": "n2", "field": "author" } ] },
+      { "q": "referrersOf", "id": "o2", "answer": [ { "kind": "note", "id": "n1", "field": "author" } ] },
+      { "q": "targetsOf", "id": "n1", "field": "author", "answer": ["o2"] },
+      { "q": "targetsOf", "id": "n2", "answer": [ { "field": "author", "id": "o1" } ] }
+    ] } }
+  ]
+}

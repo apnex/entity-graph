@@ -17,6 +17,13 @@ Each tool owns exactly one rule; `check-docs.sh` only sequences them.
 | `format-markdown.sh` | applies every available fix mode | n/a |
 | `lib/style-common.sh` | shared exemption handling and finding format | n/a |
 
+Two checks of the package itself sit beside them (`docs/DECISIONS.md` `D10`).
+
+| Tool | What it holds |
+|---|---|
+| `check-vocabulary.mjs` | no word of a consumer's vocabulary in `src/`, against `consumer-vocabulary.json`, taken from snap-grid's |
+| `consumer-test.mjs` | the package packed, installed with `--omit=dev` into an empty project, and every export imported by name, taken from entity-store's |
+
 ---
 
 ## Usage

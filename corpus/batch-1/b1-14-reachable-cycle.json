@@ -1,0 +1,57 @@
+{
+  "case": "b1-14-reachable-cycle",
+  "batch": 1,
+  "summary": "reachable ends over a cycle and a self-reference, includes the start only when a cycle returns to it, and follows the cycle as it is broken and re-formed longer.",
+  "covers": ["dated-graph-view", "positioned-graph-sync"],
+  "readings": ["R1", "R2", "R5", "R5a", "R7"],
+  "declare": {
+    "kinds": [
+      { "kind": "task", "references": [
+        { "field": "waitsOn", "targets": ["task"], "holds": "many", "onTargetDelete": "unlink" }
+      ] }
+    ]
+  },
+  "verdict": "accepted",
+  "steps": [
+    { "start": { "position": 0, "entities": [
+      { "kind": "task", "id": "a", "record": { "title": "Plan", "waitsOn": ["b"] } },
+      { "kind": "task", "id": "b", "record": { "title": "Budget", "waitsOn": ["c"] } },
+      { "kind": "task", "id": "c", "record": { "title": "Approve", "waitsOn": ["a"] } },
+      { "kind": "task", "id": "s", "record": { "title": "Retry", "waitsOn": ["s"] } },
+      { "kind": "task", "id": "t", "record": { "title": "Launch", "waitsOn": ["a"] } },
+      { "kind": "task", "id": "u", "record": { "title": "Tidy", "waitsOn": [] } }
+    ] } },
+    { "ask": { "position": 0, "questions": [
+      { "q": "reachable", "from": "a", "answer": ["a", "b", "c"] },
+      { "q": "reachable", "from": "b", "answer": ["a", "b", "c"] },
+      { "q": "reachable", "from": "c", "answer": ["a", "b", "c"] },
+      { "q": "reachable", "from": "s", "answer": ["s"] },
+      { "q": "reachable", "from": "t", "answer": ["a", "b", "c"] },
+      { "q": "reachable", "from": "u", "answer": [] },
+      { "q": "referrersOf", "id": "a", "answer": [ { "kind": "task", "id": "c", "field": "waitsOn" }, { "kind": "task", "id": "t", "field": "waitsOn" } ] },
+      { "q": "referrersOf", "id": "s", "answer": [ { "kind": "task", "id": "s", "field": "waitsOn" } ] },
+      { "q": "targetsOf", "id": "s", "answer": [ { "field": "waitsOn", "id": "s" } ] }
+    ] } },
+    { "take": { "position": 1, "writes": [
+      { "op": "put", "kind": "task", "id": "c", "record": { "title": "Approve", "waitsOn": [] } }
+    ] } },
+    { "ask": { "position": 1, "questions": [
+      { "q": "reachable", "from": "a", "answer": ["b", "c"] },
+      { "q": "reachable", "from": "b", "answer": ["c"] },
+      { "q": "reachable", "from": "c", "answer": [] },
+      { "q": "reachable", "from": "t", "answer": ["a", "b", "c"] },
+      { "q": "referrersOf", "id": "a", "answer": [ { "kind": "task", "id": "t", "field": "waitsOn" } ] }
+    ] } },
+    { "take": { "position": 2, "writes": [
+      { "op": "put", "kind": "task", "id": "u", "record": { "title": "Tidy", "waitsOn": ["t"] } },
+      { "op": "put", "kind": "task", "id": "c", "record": { "title": "Approve", "waitsOn": ["u"] } }
+    ] } },
+    { "ask": { "position": 2, "questions": [
+      { "q": "reachable", "from": "a", "answer": ["a", "b", "c", "t", "u"] },
+      { "q": "reachable", "from": "u", "answer": ["a", "b", "c", "t", "u"] },
+      { "q": "reachable", "from": "t", "answer": ["a", "b", "c", "t", "u"] },
+      { "q": "reachable", "from": "s", "answer": ["s"] },
+      { "q": "referrersOf", "id": "t", "answer": [ { "kind": "task", "id": "u", "field": "waitsOn" } ] }
+    ] } }
+  ]
+}
