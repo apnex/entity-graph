@@ -1,0 +1,41 @@
+{
+  "case": "b2-02-create-change-remove-in-one-edit",
+  "batch": 2,
+  "summary": "Items see the items before them: an entity created then changed has one write with its last record, one created then removed has none, and a tag never referenced in the edit is kept.",
+  "covers": ["plan-graph-change", "Reference rules"],
+  "readings": ["R1", "R2", "R14", "R15", "R17", "R23"],
+  "declare": {
+    "kinds": [
+      { "kind": "shelf", "references": [
+        { "field": "featured", "targets": ["book"], "holds": "one", "onTargetDelete": "unlink" }
+      ] },
+      { "kind": "book", "references": [
+        { "field": "shelf", "targets": ["shelf"], "holds": "one", "onTargetDelete": "refuse" },
+        { "field": "tags", "targets": ["tag"], "holds": "many", "onTargetDelete": "unlink", "onUnreferenced": "delete" }
+      ] },
+      { "kind": "tag", "references": [] }
+    ]
+  },
+  "verdict": "accepted",
+  "steps": [
+    { "start": { "position": 0, "entities": [
+      { "kind": "shelf", "id": "s1", "record": { "title": "Poetry", "featured": null } },
+      { "kind": "tag", "id": "g1", "record": { "title": "verse" } }
+    ] } },
+    { "plan": { "position": 0, "edit": [
+      { "op": "create", "kind": "tag", "id": "g3", "record": { "title": "draft" } },
+      { "op": "change", "kind": "tag", "id": "g3", "record": { "title": "sonnet" } },
+      { "op": "create", "kind": "book", "id": "b3", "record": { "title": "Odes", "shelf": "s1", "tags": ["g3"] } },
+      { "op": "create", "kind": "tag", "id": "g4", "record": { "title": "spare" } },
+      { "op": "remove", "kind": "tag", "id": "g4" }
+    ], "outcome": "accepted", "writes": [
+      { "op": "put", "kind": "tag", "id": "g3", "record": { "title": "sonnet" } },
+      { "op": "put", "kind": "book", "id": "b3", "record": { "title": "Odes", "shelf": "s1", "tags": ["g3"] } }
+    ] } },
+    { "ask": { "position": 0, "questions": [
+      { "q": "all", "kind": "tag", "answer": ["g1"] },
+      { "q": "get", "kind": "tag", "id": "g3", "answer": null },
+      { "q": "all", "kind": "book", "answer": [] }
+    ] } }
+  ]
+}

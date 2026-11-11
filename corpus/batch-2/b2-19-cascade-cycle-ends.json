@@ -1,0 +1,60 @@
+{
+  "case": "b2-19-cascade-cycle-ends",
+  "batch": 2,
+  "summary": "Removing one section of three that are each other's parents in a cycle deletes all three and what hangs from them, and planning ends.",
+  "covers": ["plan-graph-change", "Reference rules", "Consequences and the stopping rule"],
+  "readings": ["R1", "R2", "R5", "R5a", "R14", "R15", "R17", "R23"],
+  "declare": {
+    "kinds": [
+      { "kind": "section", "references": [
+        { "field": "parent", "targets": ["section"], "holds": "one", "onTargetDelete": "cascade-delete" },
+        { "field": "cites", "targets": ["figure"], "holds": "many", "onTargetDelete": "refuse" }
+      ] },
+      { "kind": "figure", "references": [
+        { "field": "section", "targets": ["section"], "holds": "one", "onTargetDelete": "cascade-delete" }
+      ] },
+      { "kind": "caption", "references": [
+        { "field": "figure", "targets": ["figure"], "holds": "one", "onTargetDelete": "cascade-delete", "exclusivity": "refuse" }
+      ] }
+    ]
+  },
+  "verdict": "accepted",
+  "steps": [
+    { "start": { "position": 0, "entities": [
+      { "kind": "section", "id": "s1", "record": { "heading": "One", "parent": "s3", "cites": [] } },
+      { "kind": "section", "id": "s2", "record": { "heading": "Two", "parent": "s1", "cites": [] } },
+      { "kind": "section", "id": "s3", "record": { "heading": "Three", "parent": "s2", "cites": [] } },
+      { "kind": "section", "id": "s4", "record": { "heading": "Four", "parent": null, "cites": [] } },
+      { "kind": "figure", "id": "f3", "record": { "title": "Loop", "section": "s3" } },
+      { "kind": "caption", "id": "c3", "record": { "body": "A loop", "figure": "f3" } }
+    ] } },
+    { "plan": { "position": 0, "edit": [
+      { "op": "remove", "kind": "section", "id": "s1" }
+    ], "outcome": "accepted", "writes": [
+      { "op": "del", "kind": "section", "id": "s1" },
+      { "op": "del", "kind": "section", "id": "s2" },
+      { "op": "del", "kind": "section", "id": "s3" },
+      { "op": "del", "kind": "figure", "id": "f3" },
+      { "op": "del", "kind": "caption", "id": "c3" }
+    ] } },
+    { "plan": { "position": 0, "edit": [
+      { "op": "remove", "kind": "section", "id": "s4" }
+    ], "outcome": "accepted", "writes": [
+      { "op": "del", "kind": "section", "id": "s4" }
+    ] } },
+    { "plan": { "position": 0, "edit": [
+      { "op": "remove", "kind": "caption", "id": "c3" },
+      { "op": "remove", "kind": "section", "id": "s3" }
+    ], "outcome": "accepted", "writes": [
+      { "op": "del", "kind": "section", "id": "s1" },
+      { "op": "del", "kind": "section", "id": "s2" },
+      { "op": "del", "kind": "section", "id": "s3" },
+      { "op": "del", "kind": "figure", "id": "f3" },
+      { "op": "del", "kind": "caption", "id": "c3" }
+    ] } },
+    { "ask": { "position": 0, "questions": [
+      { "q": "all", "kind": "section", "answer": ["s1", "s2", "s3", "s4"] },
+      { "q": "reachable", "from": "s1", "answer": ["s1", "s2", "s3"] }
+    ] } }
+  ]
+}

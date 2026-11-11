@@ -1,0 +1,62 @@
+{
+  "case": "b2-21-exclusivity-passing-through",
+  "batch": 2,
+  "summary": "Replacing a figure's caption, or swapping it onto another figure, passes through a figure held twice and is accepted in either order, since the edit is judged by the state it leaves.",
+  "covers": ["plan-graph-change", "Reference rules", "Judging and refusals"],
+  "readings": ["R1", "R2", "R14", "R15", "R17", "R18", "R23"],
+  "declare": {
+    "kinds": [
+      { "kind": "section", "references": [
+        { "field": "parent", "targets": ["section"], "holds": "one", "onTargetDelete": "cascade-delete" },
+        { "field": "cites", "targets": ["figure"], "holds": "many", "onTargetDelete": "refuse" }
+      ] },
+      { "kind": "figure", "references": [
+        { "field": "section", "targets": ["section"], "holds": "one", "onTargetDelete": "cascade-delete" }
+      ] },
+      { "kind": "caption", "references": [
+        { "field": "figure", "targets": ["figure"], "holds": "one", "onTargetDelete": "cascade-delete", "exclusivity": "refuse" }
+      ] }
+    ]
+  },
+  "verdict": "accepted",
+  "steps": [
+    { "start": { "position": 0, "entities": [
+      { "kind": "section", "id": "s1", "record": { "heading": "Intro", "parent": null, "cites": [] } },
+      { "kind": "figure", "id": "f1", "record": { "title": "Map", "section": "s1" } },
+      { "kind": "figure", "id": "f2", "record": { "title": "Chart", "section": "s1" } },
+      { "kind": "caption", "id": "c1", "record": { "body": "A map", "figure": "f1" } }
+    ] } },
+    { "plan": { "position": 0, "edit": [
+      { "op": "create", "kind": "caption", "id": "c2", "record": { "body": "The map", "figure": "f1" } },
+      { "op": "remove", "kind": "caption", "id": "c1" }
+    ], "outcome": "accepted", "writes": [
+      { "op": "put", "kind": "caption", "id": "c2", "record": { "body": "The map", "figure": "f1" } },
+      { "op": "del", "kind": "caption", "id": "c1" }
+    ] } },
+    { "plan": { "position": 0, "edit": [
+      { "op": "remove", "kind": "caption", "id": "c1" },
+      { "op": "create", "kind": "caption", "id": "c2", "record": { "body": "The map", "figure": "f1" } }
+    ], "outcome": "accepted", "writes": [
+      { "op": "put", "kind": "caption", "id": "c2", "record": { "body": "The map", "figure": "f1" } },
+      { "op": "del", "kind": "caption", "id": "c1" }
+    ] } },
+    { "plan": { "position": 0, "edit": [
+      { "op": "create", "kind": "caption", "id": "c2", "record": { "body": "The map", "figure": "f1" } },
+      { "op": "change", "kind": "caption", "id": "c1", "record": { "body": "A map", "figure": "f2" } }
+    ], "outcome": "accepted", "writes": [
+      { "op": "put", "kind": "caption", "id": "c2", "record": { "body": "The map", "figure": "f1" } },
+      { "op": "put", "kind": "caption", "id": "c1", "record": { "body": "A map", "figure": "f2" } }
+    ] } },
+    { "plan": { "position": 0, "edit": [
+      { "op": "change", "kind": "caption", "id": "c1", "record": { "body": "A map", "figure": "f2" } },
+      { "op": "create", "kind": "caption", "id": "c2", "record": { "body": "The map", "figure": "f1" } }
+    ], "outcome": "accepted", "writes": [
+      { "op": "put", "kind": "caption", "id": "c2", "record": { "body": "The map", "figure": "f1" } },
+      { "op": "put", "kind": "caption", "id": "c1", "record": { "body": "A map", "figure": "f2" } }
+    ] } },
+    { "ask": { "position": 0, "questions": [
+      { "q": "referrersOf", "id": "f1", "answer": [ { "kind": "caption", "id": "c1", "field": "figure" } ] },
+      { "q": "referrersOf", "id": "f2", "answer": [] }
+    ] } }
+  ]
+}

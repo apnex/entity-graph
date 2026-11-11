@@ -1,0 +1,46 @@
+{
+  "case": "b2-30-fault-unknown-operation",
+  "batch": 2,
+  "summary": "In a four-item edit, the item at index 2 names an operation the edit does not know, so the edit is refused at index 2; the same edit without that item is accepted.",
+  "covers": ["plan-graph-change", "Judging and refusals"],
+  "readings": ["R1", "R2", "R14", "R15", "R22", "R23", "R24"],
+  "declare": {
+    "kinds": [
+      { "kind": "shelf", "references": [
+        { "field": "featured", "targets": ["book"], "holds": "one", "onTargetDelete": "unlink" }
+      ] },
+      { "kind": "book", "references": [
+        { "field": "shelf", "targets": ["shelf"], "holds": "one", "onTargetDelete": "refuse" },
+        { "field": "tags", "targets": ["tag"], "holds": "many", "onTargetDelete": "unlink", "onUnreferenced": "delete" }
+      ] },
+      { "kind": "tag", "references": [] }
+    ]
+  },
+  "verdict": "accepted",
+  "steps": [
+    { "start": { "position": 0, "entities": [
+      { "kind": "shelf", "id": "s1", "record": { "title": "Fiction", "featured": null } },
+      { "kind": "book", "id": "b1", "record": { "title": "Dune", "shelf": "s1", "tags": [] } },
+      { "kind": "book", "id": "b2", "record": { "title": "Emma", "shelf": "s1", "tags": [] } }
+    ] } },
+    { "plan": { "position": 0, "edit": [
+      { "op": "create", "kind": "tag", "id": "g5", "record": { "title": "new" } },
+      { "op": "change", "kind": "book", "id": "b1", "record": { "title": "Dune", "shelf": "s1", "tags": ["g5"] } },
+      { "op": "move", "kind": "book", "id": "b2" },
+      { "op": "create", "kind": "tag", "id": "g6", "record": { "title": "other" } }
+    ], "outcome": "refused", "refusal": { "part": "entity-graph", "code": "unknown-operation", "ruleKey": "unknown-operation", "subject": "b2", "measure": 1, "opIndex": 2 } } },
+    { "plan": { "position": 0, "edit": [
+      { "op": "create", "kind": "tag", "id": "g5", "record": { "title": "new" } },
+      { "op": "change", "kind": "book", "id": "b1", "record": { "title": "Dune", "shelf": "s1", "tags": ["g5"] } },
+      { "op": "create", "kind": "tag", "id": "g6", "record": { "title": "other" } }
+    ], "outcome": "accepted", "writes": [
+      { "op": "put", "kind": "tag", "id": "g5", "record": { "title": "new" } },
+      { "op": "put", "kind": "book", "id": "b1", "record": { "title": "Dune", "shelf": "s1", "tags": ["g5"] } },
+      { "op": "put", "kind": "tag", "id": "g6", "record": { "title": "other" } }
+    ] } },
+    { "ask": { "position": 0, "questions": [
+      { "q": "all", "kind": "tag", "answer": [] },
+      { "q": "get", "kind": "book", "id": "b1", "answer": { "title": "Dune", "shelf": "s1", "tags": [] } }
+    ] } }
+  ]
+}

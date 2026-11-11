@@ -1,0 +1,47 @@
+{
+  "case": "b2-20-exclusivity-refuse",
+  "batch": 2,
+  "summary": "A second caption for a figure is refused, naming the figure held twice, while a caption for a figure that has none, and moving a caption to such a figure, are accepted.",
+  "covers": ["plan-graph-change", "Reference rules", "Judging and refusals"],
+  "readings": ["R1", "R2", "R14", "R15", "R17", "R18", "R19", "R21", "R23", "R24"],
+  "declare": {
+    "kinds": [
+      { "kind": "section", "references": [
+        { "field": "parent", "targets": ["section"], "holds": "one", "onTargetDelete": "cascade-delete" },
+        { "field": "cites", "targets": ["figure"], "holds": "many", "onTargetDelete": "refuse" }
+      ] },
+      { "kind": "figure", "references": [
+        { "field": "section", "targets": ["section"], "holds": "one", "onTargetDelete": "cascade-delete" }
+      ] },
+      { "kind": "caption", "references": [
+        { "field": "figure", "targets": ["figure"], "holds": "one", "onTargetDelete": "cascade-delete", "exclusivity": "refuse" }
+      ] }
+    ]
+  },
+  "verdict": "accepted",
+  "steps": [
+    { "start": { "position": 0, "entities": [
+      { "kind": "section", "id": "s1", "record": { "heading": "Intro", "parent": null, "cites": [] } },
+      { "kind": "figure", "id": "f1", "record": { "title": "Map", "section": "s1" } },
+      { "kind": "figure", "id": "f2", "record": { "title": "Chart", "section": "s1" } },
+      { "kind": "caption", "id": "c1", "record": { "body": "A map", "figure": "f1" } }
+    ] } },
+    { "plan": { "position": 0, "edit": [
+      { "op": "create", "kind": "caption", "id": "c2", "record": { "body": "Another map", "figure": "f1" } }
+    ], "outcome": "refused", "refusal": { "part": "entity-graph", "code": "reference-rule", "ruleKey": "caption.figure.exclusivity", "subject": "f1", "measure": 1, "opIndex": 0 } } },
+    { "plan": { "position": 0, "edit": [
+      { "op": "create", "kind": "caption", "id": "c2", "record": { "body": "A chart", "figure": "f2" } }
+    ], "outcome": "accepted", "writes": [
+      { "op": "put", "kind": "caption", "id": "c2", "record": { "body": "A chart", "figure": "f2" } }
+    ] } },
+    { "plan": { "position": 0, "edit": [
+      { "op": "change", "kind": "caption", "id": "c1", "record": { "body": "A map", "figure": "f2" } }
+    ], "outcome": "accepted", "writes": [
+      { "op": "put", "kind": "caption", "id": "c1", "record": { "body": "A map", "figure": "f2" } }
+    ] } },
+    { "ask": { "position": 0, "questions": [
+      { "q": "referrersOf", "id": "f1", "answer": [ { "kind": "caption", "id": "c1", "field": "figure" } ] },
+      { "q": "all", "kind": "caption", "answer": ["c1"] }
+    ] } }
+  ]
+}

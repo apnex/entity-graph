@@ -1,0 +1,43 @@
+{
+  "case": "b2-24-targets-wrong-kind",
+  "batch": 2,
+  "summary": "A requested reference to an entity of a kind the reference may not target is refused, through a one-target and through a list reference, and one to an allowed kind is accepted.",
+  "covers": ["plan-graph-change", "Reference rules", "Judging and refusals"],
+  "readings": ["R1", "R2", "R14", "R15", "R18", "R19", "R21", "R23", "R24"],
+  "declare": {
+    "kinds": [
+      { "kind": "section", "references": [
+        { "field": "parent", "targets": ["section"], "holds": "one", "onTargetDelete": "cascade-delete" },
+        { "field": "cites", "targets": ["figure"], "holds": "many", "onTargetDelete": "refuse" }
+      ] },
+      { "kind": "figure", "references": [
+        { "field": "section", "targets": ["section"], "holds": "one", "onTargetDelete": "cascade-delete" }
+      ] },
+      { "kind": "caption", "references": [
+        { "field": "figure", "targets": ["figure"], "holds": "one", "onTargetDelete": "cascade-delete", "exclusivity": "refuse" }
+      ] }
+    ]
+  },
+  "verdict": "accepted",
+  "steps": [
+    { "start": { "position": 0, "entities": [
+      { "kind": "section", "id": "s1", "record": { "heading": "Intro", "parent": null, "cites": [] } },
+      { "kind": "figure", "id": "f1", "record": { "title": "Map", "section": "s1" } }
+    ] } },
+    { "plan": { "position": 0, "edit": [
+      { "op": "create", "kind": "caption", "id": "c1", "record": { "body": "Wrong", "figure": "s1" } }
+    ], "outcome": "refused", "refusal": { "part": "entity-graph", "code": "reference-rule", "ruleKey": "caption.figure.targets", "subject": "c1", "measure": 1, "opIndex": 0 } } },
+    { "plan": { "position": 0, "edit": [
+      { "op": "create", "kind": "section", "id": "s2", "record": { "heading": "Notes", "parent": null, "cites": ["f1", "s1"] } }
+    ], "outcome": "refused", "refusal": { "part": "entity-graph", "code": "reference-rule", "ruleKey": "section.cites.targets", "subject": "s2", "measure": 1, "opIndex": 0 } } },
+    { "plan": { "position": 0, "edit": [
+      { "op": "create", "kind": "caption", "id": "c1", "record": { "body": "Right", "figure": "f1" } }
+    ], "outcome": "accepted", "writes": [
+      { "op": "put", "kind": "caption", "id": "c1", "record": { "body": "Right", "figure": "f1" } }
+    ] } },
+    { "ask": { "position": 0, "questions": [
+      { "q": "all", "kind": "caption", "answer": [] },
+      { "q": "referrersOf", "id": "s1", "answer": [ { "kind": "figure", "id": "f1", "field": "section" } ] }
+    ] } }
+  ]
+}

@@ -1,0 +1,51 @@
+{
+  "case": "b2-25-targets-absent",
+  "batch": 2,
+  "summary": "A requested reference to an id no entity holds is refused, through a list or a one-target reference, unless the same edit creates the target, in either order.",
+  "covers": ["plan-graph-change", "Reference rules", "Judging and refusals"],
+  "readings": ["R1", "R2", "R14", "R15", "R18", "R19", "R20", "R21", "R23", "R24"],
+  "declare": {
+    "kinds": [
+      { "kind": "shelf", "references": [
+        { "field": "featured", "targets": ["book"], "holds": "one", "onTargetDelete": "unlink" }
+      ] },
+      { "kind": "book", "references": [
+        { "field": "shelf", "targets": ["shelf"], "holds": "one", "onTargetDelete": "refuse" },
+        { "field": "tags", "targets": ["tag"], "holds": "many", "onTargetDelete": "unlink", "onUnreferenced": "delete" }
+      ] },
+      { "kind": "tag", "references": [] }
+    ]
+  },
+  "verdict": "accepted",
+  "steps": [
+    { "start": { "position": 0, "entities": [
+      { "kind": "shelf", "id": "s1", "record": { "title": "Fiction", "featured": null } },
+      { "kind": "book", "id": "b1", "record": { "title": "Dune", "shelf": "s1", "tags": ["g1"] } },
+      { "kind": "tag", "id": "g1", "record": { "title": "scifi" } }
+    ] } },
+    { "plan": { "position": 0, "edit": [
+      { "op": "create", "kind": "book", "id": "b3", "record": { "title": "Emma", "shelf": "s1", "tags": ["g1", "g9"] } }
+    ], "outcome": "refused", "refusal": { "part": "entity-graph", "code": "reference-rule", "ruleKey": "book.tags.targets", "subject": "b3", "measure": 1, "opIndex": 0 } } },
+    { "plan": { "position": 0, "edit": [
+      { "op": "create", "kind": "tag", "id": "g9", "record": { "title": "romance" } },
+      { "op": "create", "kind": "book", "id": "b3", "record": { "title": "Emma", "shelf": "s1", "tags": ["g1", "g9"] } }
+    ], "outcome": "accepted", "writes": [
+      { "op": "put", "kind": "tag", "id": "g9", "record": { "title": "romance" } },
+      { "op": "put", "kind": "book", "id": "b3", "record": { "title": "Emma", "shelf": "s1", "tags": ["g1", "g9"] } }
+    ] } },
+    { "plan": { "position": 0, "edit": [
+      { "op": "create", "kind": "book", "id": "b3", "record": { "title": "Emma", "shelf": "s1", "tags": ["g1", "g9"] } },
+      { "op": "create", "kind": "tag", "id": "g9", "record": { "title": "romance" } }
+    ], "outcome": "accepted", "writes": [
+      { "op": "put", "kind": "tag", "id": "g9", "record": { "title": "romance" } },
+      { "op": "put", "kind": "book", "id": "b3", "record": { "title": "Emma", "shelf": "s1", "tags": ["g1", "g9"] } }
+    ] } },
+    { "plan": { "position": 0, "edit": [
+      { "op": "change", "kind": "book", "id": "b1", "record": { "title": "Dune", "shelf": "s7", "tags": ["g1"] } }
+    ], "outcome": "refused", "refusal": { "part": "entity-graph", "code": "reference-rule", "ruleKey": "book.shelf.targets", "subject": "b1", "measure": 1, "opIndex": 0 } } },
+    { "ask": { "position": 0, "questions": [
+      { "q": "all", "kind": "tag", "answer": ["g1"] },
+      { "q": "all", "kind": "book", "answer": ["b1"] }
+    ] } }
+  ]
+}

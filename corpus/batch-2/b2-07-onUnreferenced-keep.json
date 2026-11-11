@@ -1,0 +1,52 @@
+{
+  "case": "b2-07-onUnreferenced-keep",
+  "batch": 2,
+  "summary": "A team the edit leaves with no task assigned to it is kept, since the reference declares onUnreferenced keep, and so are persons left in no team, whose reference declares none.",
+  "covers": ["plan-graph-change", "Reference rules"],
+  "readings": ["R1", "R2", "R10", "R14", "R15", "R17", "R23"],
+  "declare": {
+    "kinds": [
+      { "kind": "person", "references": [] },
+      { "kind": "team", "references": [
+        { "field": "members", "targets": ["person"], "holds": "many", "onTargetDelete": "unlink", "exclusivity": "steal", "min": 2, "onBelowMin": "cascade-delete" }
+      ] },
+      { "kind": "committee", "references": [
+        { "field": "members", "targets": ["person"], "holds": "many", "onTargetDelete": "unlink", "exclusivity": "steal", "min": 2, "onBelowMin": "refuse" }
+      ] },
+      { "kind": "task", "references": [
+        { "field": "waitsOn", "targets": ["task"], "holds": "many", "onTargetDelete": "unlink" },
+        { "field": "assignee", "targets": ["team"], "holds": "one", "onTargetDelete": "unlink", "onUnreferenced": "keep" },
+        { "field": "owner", "targets": ["person"], "holds": "one", "onTargetDelete": "unlink", "exclusivity": "steal" }
+      ] }
+    ]
+  },
+  "verdict": "accepted",
+  "steps": [
+    { "start": { "position": 0, "entities": [
+      { "kind": "person", "id": "p1", "record": { "name": "Ada" } },
+      { "kind": "person", "id": "p2", "record": { "name": "Lin" } },
+      { "kind": "team", "id": "tm1", "record": { "name": "Core", "members": ["p1", "p2"] } },
+      { "kind": "task", "id": "t1", "record": { "title": "Ship", "waitsOn": [], "assignee": "tm1", "owner": null } }
+    ] } },
+    { "plan": { "position": 0, "edit": [
+      { "op": "remove", "kind": "task", "id": "t1" }
+    ], "outcome": "accepted", "writes": [
+      { "op": "del", "kind": "task", "id": "t1" }
+    ] } },
+    { "plan": { "position": 0, "edit": [
+      { "op": "change", "kind": "task", "id": "t1", "record": { "title": "Ship", "waitsOn": [], "assignee": null, "owner": null } }
+    ], "outcome": "accepted", "writes": [
+      { "op": "put", "kind": "task", "id": "t1", "record": { "title": "Ship", "waitsOn": [], "assignee": null, "owner": null } }
+    ] } },
+    { "plan": { "position": 0, "edit": [
+      { "op": "remove", "kind": "team", "id": "tm1" }
+    ], "outcome": "accepted", "writes": [
+      { "op": "del", "kind": "team", "id": "tm1" },
+      { "op": "put", "kind": "task", "id": "t1", "record": { "title": "Ship", "waitsOn": [], "assignee": null, "owner": null } }
+    ] } },
+    { "ask": { "position": 0, "questions": [
+      { "q": "get", "kind": "team", "id": "tm1", "answer": { "name": "Core", "members": ["p1", "p2"] } },
+      { "q": "referrersOf", "id": "tm1", "answer": [ { "kind": "task", "id": "t1", "field": "assignee" } ] }
+    ] } }
+  ]
+}

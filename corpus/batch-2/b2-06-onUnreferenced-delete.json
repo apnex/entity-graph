@@ -1,0 +1,60 @@
+{
+  "case": "b2-06-onUnreferenced-delete",
+  "batch": 2,
+  "summary": "A tag the edit leaves carried by no book is deleted, through a removal or through changes, while a tag still carried, a tag already unreferenced before the edit, and a tag never referenced within it are kept.",
+  "covers": ["plan-graph-change", "Reference rules"],
+  "readings": ["R1", "R2", "R14", "R15", "R16", "R17", "R23"],
+  "declare": {
+    "kinds": [
+      { "kind": "shelf", "references": [
+        { "field": "featured", "targets": ["book"], "holds": "one", "onTargetDelete": "unlink" }
+      ] },
+      { "kind": "book", "references": [
+        { "field": "shelf", "targets": ["shelf"], "holds": "one", "onTargetDelete": "refuse" },
+        { "field": "tags", "targets": ["tag"], "holds": "many", "onTargetDelete": "unlink", "onUnreferenced": "delete" }
+      ] },
+      { "kind": "tag", "references": [] }
+    ]
+  },
+  "verdict": "accepted",
+  "steps": [
+    { "start": { "position": 0, "entities": [
+      { "kind": "shelf", "id": "s1", "record": { "title": "Fiction", "featured": "b1" } },
+      { "kind": "book", "id": "b1", "record": { "title": "Dune", "shelf": "s1", "tags": ["g1", "g2"] } },
+      { "kind": "book", "id": "b2", "record": { "title": "Emma", "shelf": "s1", "tags": ["g2"] } },
+      { "kind": "tag", "id": "g1", "record": { "title": "scifi" } },
+      { "kind": "tag", "id": "g2", "record": { "title": "classic" } },
+      { "kind": "tag", "id": "g3", "record": { "title": "unused" } }
+    ] } },
+    { "plan": { "position": 0, "edit": [
+      { "op": "remove", "kind": "book", "id": "b1" }
+    ], "outcome": "accepted", "writes": [
+      { "op": "del", "kind": "book", "id": "b1" },
+      { "op": "put", "kind": "shelf", "id": "s1", "record": { "title": "Fiction", "featured": null } },
+      { "op": "del", "kind": "tag", "id": "g1" }
+    ] } },
+    { "plan": { "position": 0, "edit": [
+      { "op": "change", "kind": "book", "id": "b2", "record": { "title": "Emma", "shelf": "s1", "tags": [] } }
+    ], "outcome": "accepted", "writes": [
+      { "op": "put", "kind": "book", "id": "b2", "record": { "title": "Emma", "shelf": "s1", "tags": [] } }
+    ] } },
+    { "plan": { "position": 0, "edit": [
+      { "op": "change", "kind": "book", "id": "b1", "record": { "title": "Dune", "shelf": "s1", "tags": [] } },
+      { "op": "change", "kind": "book", "id": "b2", "record": { "title": "Emma", "shelf": "s1", "tags": [] } }
+    ], "outcome": "accepted", "writes": [
+      { "op": "put", "kind": "book", "id": "b1", "record": { "title": "Dune", "shelf": "s1", "tags": [] } },
+      { "op": "put", "kind": "book", "id": "b2", "record": { "title": "Emma", "shelf": "s1", "tags": [] } },
+      { "op": "del", "kind": "tag", "id": "g1" },
+      { "op": "del", "kind": "tag", "id": "g2" }
+    ] } },
+    { "plan": { "position": 0, "edit": [
+      { "op": "create", "kind": "tag", "id": "g4", "record": { "title": "fresh" } }
+    ], "outcome": "accepted", "writes": [
+      { "op": "put", "kind": "tag", "id": "g4", "record": { "title": "fresh" } }
+    ] } },
+    { "ask": { "position": 0, "questions": [
+      { "q": "all", "kind": "tag", "answer": ["g1", "g2", "g3"] },
+      { "q": "referrersOf", "id": "g2", "answer": [ { "kind": "book", "id": "b1", "field": "tags" }, { "kind": "book", "id": "b2", "field": "tags" } ] }
+    ] } }
+  ]
+}
