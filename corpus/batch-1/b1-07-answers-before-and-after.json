@@ -1,0 +1,64 @@
+{
+  "case": "b1-07-answers-before-and-after",
+  "batch": 1,
+  "summary": "From an empty store, each change taken in moves the answers to its own position, and answers asked before a change do not show it.",
+  "covers": ["dated-graph-view", "positioned-graph-sync"],
+  "readings": ["R1", "R2", "R6", "R7"],
+  "declare": {
+    "kinds": [
+      { "kind": "folder", "references": [
+        { "field": "notes", "targets": ["note"], "holds": "many", "onTargetDelete": "unlink", "exclusivity": "refuse" }
+      ] },
+      { "kind": "note", "references": [
+        { "field": "tags", "targets": ["tag"], "holds": "many", "onTargetDelete": "unlink", "onUnreferenced": "delete" },
+        { "field": "author", "targets": ["owner"], "holds": "one", "onTargetDelete": "refuse" }
+      ] },
+      { "kind": "tag", "references": [] },
+      { "kind": "owner", "references": [
+        { "field": "folders", "targets": ["folder"], "holds": "many", "onTargetDelete": "unlink", "exclusivity": "steal" }
+      ] }
+    ]
+  },
+  "verdict": "accepted",
+  "steps": [
+    { "start": { "position": 0, "entities": [] } },
+    { "ask": { "position": 0, "questions": [
+      { "q": "all", "kind": "folder", "answer": [] },
+      { "q": "all", "kind": "note", "answer": [] },
+      { "q": "referrersOf", "id": "n1", "answer": [] },
+      { "q": "targetsOf", "id": "f1", "answer": [] },
+      { "q": "get", "kind": "note", "id": "n1", "answer": null },
+      { "q": "ownerOf", "member": "n1", "containerKind": "folder", "answer": null }
+    ] } },
+    { "take": { "position": 1, "writes": [
+      { "op": "put", "kind": "folder", "id": "f1", "record": { "title": "Inbox", "notes": [] } },
+      { "op": "put", "kind": "note", "id": "n1", "record": { "title": "Minutes", "tags": [], "author": null } }
+    ] } },
+    { "ask": { "position": 1, "questions": [
+      { "q": "all", "kind": "folder", "answer": ["f1"] },
+      { "q": "all", "kind": "note", "answer": ["n1"] },
+      { "q": "referrersOf", "id": "n1", "answer": [] },
+      { "q": "targetsOf", "id": "f1", "answer": [] },
+      { "q": "get", "kind": "note", "id": "n1", "answer": { "title": "Minutes", "tags": [], "author": null } },
+      { "q": "ownerOf", "member": "n1", "containerKind": "folder", "answer": null }
+    ] } },
+    { "take": { "position": 2, "writes": [
+      { "op": "put", "kind": "folder", "id": "f1", "record": { "title": "Inbox", "notes": ["n1"] } }
+    ] } },
+    { "ask": { "position": 2, "questions": [
+      { "q": "referrersOf", "id": "n1", "answer": [ { "kind": "folder", "id": "f1", "field": "notes" } ] },
+      { "q": "targetsOf", "id": "f1", "answer": [ { "field": "notes", "id": "n1" } ] },
+      { "q": "ownerOf", "member": "n1", "containerKind": "folder", "answer": "f1" }
+    ] } },
+    { "take": { "position": 3, "writes": [
+      { "op": "put", "kind": "note", "id": "n2", "record": { "title": "Agenda", "tags": [], "author": null } },
+      { "op": "put", "kind": "folder", "id": "f1", "record": { "title": "Inbox", "notes": ["n1", "n2"] } }
+    ] } },
+    { "ask": { "position": 3, "questions": [
+      { "q": "referrersOf", "id": "n2", "answer": [ { "kind": "folder", "id": "f1", "field": "notes" } ] },
+      { "q": "targetsOf", "id": "f1", "field": "notes", "answer": ["n1", "n2"] },
+      { "q": "all", "kind": "note", "answer": ["n1", "n2"] },
+      { "q": "ownerOf", "member": "n2", "containerKind": "folder", "answer": "f1" }
+    ] } }
+  ]
+}

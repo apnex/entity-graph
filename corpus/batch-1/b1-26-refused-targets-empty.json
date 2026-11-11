@@ -1,0 +1,20 @@
+{
+  "case": "b1-26-refused-targets-empty",
+  "batch": 1,
+  "summary": "A reference whose list of target kinds is empty is refused, since it could target nothing.",
+  "covers": ["graph-declaration", "Reference rules"],
+  "readings": ["R9", "R10"],
+  "declare": {
+    "kinds": [
+      { "kind": "folder", "references": [
+        { "field": "notes", "targets": ["note"], "holds": "many", "onTargetDelete": "unlink" }
+      ] },
+      { "kind": "note", "references": [
+        { "field": "tags", "targets": [], "holds": "many", "onTargetDelete": "unlink" }
+      ] },
+      { "kind": "tag", "references": [] }
+    ]
+  },
+  "verdict": "refused",
+  "refusal": { "reason": "no-target-kind", "part": "entity-graph", "names": ["note", "tags"] }
+}

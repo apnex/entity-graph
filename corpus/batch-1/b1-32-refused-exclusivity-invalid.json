@@ -1,0 +1,20 @@
+{
+  "case": "b1-32-refused-exclusivity-invalid",
+  "batch": 1,
+  "summary": "An exclusivity value outside refuse and steal is refused.",
+  "covers": ["graph-declaration", "Reference rules"],
+  "readings": ["R9"],
+  "declare": {
+    "kinds": [
+      { "kind": "folder", "references": [
+        { "field": "notes", "targets": ["note"], "holds": "many", "onTargetDelete": "unlink", "exclusivity": "share" }
+      ] },
+      { "kind": "note", "references": [
+        { "field": "tags", "targets": ["tag"], "holds": "many", "onTargetDelete": "unlink" }
+      ] },
+      { "kind": "tag", "references": [] }
+    ]
+  },
+  "verdict": "refused",
+  "refusal": { "reason": "exclusivity-invalid", "part": "entity-graph", "names": ["folder", "notes"] }
+}

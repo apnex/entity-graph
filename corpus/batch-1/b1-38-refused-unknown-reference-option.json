@@ -1,0 +1,20 @@
+{
+  "case": "b1-38-refused-unknown-reference-option",
+  "batch": 1,
+  "summary": "A reference carrying an option the contract does not name is refused rather than ignored.",
+  "covers": ["graph-declaration", "Reference rules"],
+  "readings": ["R9", "R12"],
+  "declare": {
+    "kinds": [
+      { "kind": "folder", "references": [
+        { "field": "notes", "targets": ["note"], "holds": "many", "onTargetDelete": "unlink" }
+      ] },
+      { "kind": "note", "references": [
+        { "field": "tags", "targets": ["tag"], "holds": "many", "onTargetDelete": "unlink", "onDelete": "cascade-delete" }
+      ] },
+      { "kind": "tag", "references": [] }
+    ]
+  },
+  "verdict": "refused",
+  "refusal": { "reason": "unknown-reference-option", "part": "entity-graph", "names": ["note", "tags", "onDelete"] }
+}

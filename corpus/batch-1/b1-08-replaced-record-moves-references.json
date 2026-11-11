@@ -1,0 +1,49 @@
+{
+  "case": "b1-08-replaced-record-moves-references",
+  "batch": 1,
+  "summary": "Replacing a record drops the references it no longer holds and adds the ones it now holds, in both directions.",
+  "covers": ["dated-graph-view", "positioned-graph-sync"],
+  "readings": ["R1", "R2", "R7"],
+  "declare": {
+    "kinds": [
+      { "kind": "folder", "references": [
+        { "field": "notes", "targets": ["note"], "holds": "many", "onTargetDelete": "unlink", "exclusivity": "refuse" }
+      ] },
+      { "kind": "note", "references": [
+        { "field": "tags", "targets": ["tag"], "holds": "many", "onTargetDelete": "unlink", "onUnreferenced": "delete" },
+        { "field": "author", "targets": ["owner"], "holds": "one", "onTargetDelete": "refuse" }
+      ] },
+      { "kind": "tag", "references": [] },
+      { "kind": "owner", "references": [
+        { "field": "folders", "targets": ["folder"], "holds": "many", "onTargetDelete": "unlink", "exclusivity": "steal" }
+      ] }
+    ]
+  },
+  "verdict": "accepted",
+  "steps": [
+    { "start": { "position": 0, "entities": [
+      { "kind": "tag", "id": "t1", "record": { "title": "urgent" } },
+      { "kind": "tag", "id": "t2", "record": { "title": "later" } },
+      { "kind": "tag", "id": "t3", "record": { "title": "someday" } },
+      { "kind": "owner", "id": "o1", "record": { "title": "Ada", "folders": [] } },
+      { "kind": "note", "id": "n1", "record": { "title": "Minutes", "tags": ["t1", "t2"], "author": "o1" } }
+    ] } },
+    { "ask": { "position": 0, "questions": [
+      { "q": "referrersOf", "id": "t1", "answer": [ { "kind": "note", "id": "n1", "field": "tags" } ] },
+      { "q": "referrersOf", "id": "t3", "answer": [] },
+      { "q": "referrersOf", "id": "o1", "answer": [ { "kind": "note", "id": "n1", "field": "author" } ] }
+    ] } },
+    { "take": { "position": 1, "writes": [
+      { "op": "put", "kind": "note", "id": "n1", "record": { "title": "Minutes v2", "tags": ["t2", "t3"], "author": null } }
+    ] } },
+    { "ask": { "position": 1, "questions": [
+      { "q": "referrersOf", "id": "t1", "answer": [] },
+      { "q": "referrersOf", "id": "t2", "answer": [ { "kind": "note", "id": "n1", "field": "tags" } ] },
+      { "q": "referrersOf", "id": "t3", "answer": [ { "kind": "note", "id": "n1", "field": "tags" } ] },
+      { "q": "referrersOf", "id": "o1", "answer": [] },
+      { "q": "targetsOf", "id": "n1", "answer": [ { "field": "tags", "id": "t2" }, { "field": "tags", "id": "t3" } ] },
+      { "q": "targetsOf", "id": "n1", "field": "author", "answer": [] },
+      { "q": "get", "kind": "note", "id": "n1", "answer": { "title": "Minutes v2", "tags": ["t2", "t3"], "author": null } }
+    ] } }
+  ]
+}

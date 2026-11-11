@@ -1,0 +1,45 @@
+{
+  "case": "b1-16-reachable-through-absent-target",
+  "batch": 1,
+  "summary": "reachable reaches a held target that is absent and goes no further, goes on through it once it is created, and still reaches a target deleted by a change taken in.",
+  "covers": ["dated-graph-view", "positioned-graph-sync"],
+  "readings": ["R1", "R2", "R3", "R4", "R5", "R5b", "R7"],
+  "declare": {
+    "kinds": [
+      { "kind": "task", "references": [
+        { "field": "waitsOn", "targets": ["task"], "holds": "many", "onTargetDelete": "unlink" }
+      ] }
+    ]
+  },
+  "verdict": "accepted",
+  "steps": [
+    { "start": { "position": 0, "entities": [
+      { "kind": "task", "id": "a", "record": { "title": "Ship", "waitsOn": ["x"] } },
+      { "kind": "task", "id": "b", "record": { "title": "Pack", "waitsOn": [] } }
+    ] } },
+    { "ask": { "position": 0, "questions": [
+      { "q": "reachable", "from": "a", "answer": ["x"] },
+      { "q": "reachable", "from": "x", "answer": [] },
+      { "q": "referrersOf", "id": "x", "answer": [ { "kind": "task", "id": "a", "field": "waitsOn" } ] },
+      { "q": "get", "kind": "task", "id": "x", "answer": null }
+    ] } },
+    { "take": { "position": 1, "writes": [
+      { "op": "put", "kind": "task", "id": "x", "record": { "title": "Label", "waitsOn": ["b"] } }
+    ] } },
+    { "ask": { "position": 1, "questions": [
+      { "q": "reachable", "from": "a", "answer": ["x", "b"] },
+      { "q": "reachable", "from": "x", "answer": ["b"] },
+      { "q": "get", "kind": "task", "id": "x", "answer": { "title": "Label", "waitsOn": ["b"] } }
+    ] } },
+    { "take": { "position": 2, "writes": [
+      { "op": "del", "kind": "task", "id": "b" }
+    ] } },
+    { "ask": { "position": 2, "questions": [
+      { "q": "reachable", "from": "a", "answer": ["x", "b"] },
+      { "q": "reachable", "from": "x", "answer": ["b"] },
+      { "q": "reachable", "from": "b", "answer": [] },
+      { "q": "get", "kind": "task", "id": "b", "answer": null },
+      { "q": "all", "kind": "task", "answer": ["a", "x"] }
+    ] } }
+  ]
+}

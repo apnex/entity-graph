@@ -1,0 +1,20 @@
+{
+  "case": "b1-37-refused-min-negative",
+  "batch": 1,
+  "summary": "A negative minimum is refused, since a minimum is a number of targets.",
+  "covers": ["graph-declaration", "Reference rules"],
+  "readings": ["R9", "R11"],
+  "declare": {
+    "kinds": [
+      { "kind": "folder", "references": [
+        { "field": "notes", "targets": ["note"], "holds": "many", "onTargetDelete": "unlink", "min": -1, "onBelowMin": "refuse" }
+      ] },
+      { "kind": "note", "references": [
+        { "field": "tags", "targets": ["tag"], "holds": "many", "onTargetDelete": "unlink" }
+      ] },
+      { "kind": "tag", "references": [] }
+    ]
+  },
+  "verdict": "refused",
+  "refusal": { "reason": "min-invalid", "part": "entity-graph", "names": ["folder", "notes"] }
+}
