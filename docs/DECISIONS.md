@@ -133,3 +133,56 @@ Three blinded cold reads under mission-kit's `M2` found readers of each revision
 
 **Alternatives refuted.**\
 Ratifying the rulings alone and leaving the vision a draft until a cold read under zorg's `D52` - that holds a tested statement of purpose in draft for a procedure no reader here can see.
+
+---
+
+## D8 - An undo replays the reversal recorded with its edit, and is judged and lands like any other edit
+
+**Ruled by:** the director, 2026-11-11, drafted by drawv2 under its `H31-8` and co-signed by zorg (`zorg/docs/DECISIONS.md` `D76`).\
+**Affects:** `VISION.md` (the sentence on undo), `CONTRACT.md` (`reversible-history`, *Terms of the rows*).
+
+**Ruling.**\
+When an edit is planned, the reversal of every write it makes, requested or consequence, is recorded from the state just before that write.\
+An undo applies that recorded reversal, and a redo the recorded writes, without working their consequences out again.\
+Each is still judged as any edit is - shapes, reference rules, conditions over the whole set, and the expected position - and lands as one positioned change, with its own reversal recorded.\
+`VISION.md`'s "An undo is an edit like any other" stands, and its sentence is tightened to say that an undo's consequences are those of the edit it reverses, restored as recorded.
+
+**Why.**\
+The recorded reversal already holds every consequence of the edit; working the consequences out again during an undo would fire them a second time against a state that already holds their reversal.\
+Judging and landing the undo as an edit keeps every commitment the vision makes of an edit: whole or not at all, legible when refused, and dated.\
+An undo planned from a position the store has since left is refused by the expected position, so a reversal is never applied to a state it was not recorded against.
+
+**Alternatives refuted.**\
+Planning an undo afresh, consequences included - it double-fires consequences, and its result is not the exact reversal the vision promises.\
+Applying the reversal unjudged - an undo would escape the rules every other edit meets, and could land over a change it never saw.
+
+---
+
+## D9 - drawv2's requirements are recorded against this contract, under mission-kit's `0117`
+
+**Ruled by:** the director, 2026-11-11, drafted by drawv2 under its `H31-8` and co-signed by zorg (`zorg/docs/DECISIONS.md` `D76`).\
+**Affects:** `CONTRACT.md` (the rows, *Terms of the rows*, *Acceptance*, *Design owed*, *Reference*, *Edges*), mission-kit's `C15`.
+
+**Ruling.**\
+`drawv2` keeps its own planner while this component is unusable, on mission-kit's `0117` terms: it records its requirements against this contract, does not grow its planner into a variant of this component, and moves onto it once it is usable.\
+Its requirements are recorded in `CONTRACT.md` as follows, each stated without any kind of `drawv2`'s:
+
+1. Reference rules expanded to a fixed point, and an application's own consequences run once each in phases it declares, under one stopping rule; two consequences writing one entity in one phase is a fault.
+2. A reference option, `onUnreferenced: "keep" | "delete"`, deleting a target once the edit leaves nothing referring to it.
+3. Every entity a consequence writes held to the rules a requested write of it meets.
+4. An optional per-kind `intentResolver`, rewriting a requested item against the scratch view as the items before it left it.
+5. An optional plain-JSON `context` on `plan(intent, { context })`, readable by consequences.
+6. Undo and redo replaying recorded reversals, judged (`D8`), with a history bounded by count, bytes and a pinning predicate, its records kept in the store's note on a change.
+7. A structural `GraphStorePort`, `entity-store` its reference provider, the `entity-store` capabilities kept in the rows' Requires and in *Edges* so a census reads them.
+8. `GraphRefusal` in the shared refusal form, carrying `{ ruleKey, subject, measure, opIndex, sentence }` in `details`.
+
+Acceptance is a neutral corpus in this repository, written by an agent other than the implementer, and `drawv2`'s planner corpus in `drawv2`'s own gate, with "passes" defined in `CONTRACT.md`'s *Acceptance*.\
+On `D5`, both consumers propose one component; the ruling stays the director's.
+
+**Why.**\
+`0117`'s first term asks a project keeping its own implementation to record its requirement against this contract, and zorg asked `drawv2` to write the draft itself (answer 6).\
+Each requirement is a mechanism `drawv2`'s planner runs today and `D1` cites as this component's proof, stated so that an application with kinds of its own gains it.
+
+**Alternatives refuted.**\
+Recording the requirements in `drawv2` only - `0117` asks for them where both sides can see them.\
+Writing them as mechanism in `VISION.md` - `D2` keeps mechanism out of the vision.
