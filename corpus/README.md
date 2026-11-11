@@ -1,8 +1,8 @@
 # entity-graph neutral corpus
 
-This is the neutral corpus that `CONTRACT.md` *Acceptance* asks for.
-It was written from `CONTRACT.md`, `VISION.md` and `docs/DECISIONS.md` alone, by an agent other than the implementer, over kinds of no application.
-The implementer never edits a case.
+This is the neutral corpus that `CONTRACT.md` *Acceptance* asks for.\
+It was written from `CONTRACT.md`, `VISION.md` and `docs/DECISIONS.md` alone, by an agent other than the implementer, over kinds of no application.\
+The implementer never edits a case.\
 A case the implementer believes wrong goes back to its author, and any change to a case, or to a reading below, is recorded as an entity-graph decision.
 
 ---
@@ -19,8 +19,8 @@ Planning, reference rules applied by planning, consequences, phases, resolvers, 
 
 ## The case format
 
-The contract defines no corpus format, so this one is the corpus's own.
-Each case is one JSON file, self-contained, holding its own declaration.
+The contract defines no corpus format, so this one is the corpus's own.\
+Each case is one JSON file, self-contained, holding its own declaration.\
 Every key below is required unless marked optional.
 
 ```json
@@ -59,20 +59,20 @@ A reference is an object with these keys:
 - `onBelowMin` (optional): `"refuse"` or `"cascade-delete"`, given together with `min`.
 - `onUnreferenced` (optional): `"keep"` or `"delete"`, `"keep"` when absent.
 
-Batch 1 declares no shapes, conditions, consequences, phases or intent resolvers.
-A harness whose API requires a shape for each kind supplies one that admits every record in the case.
+Batch 1 declares no shapes, conditions, consequences, phases or intent resolvers.\
+A harness whose API requires a shape for each kind supplies one that admits every record in the case.\
 A harness maps this declaration onto the implementation's declaration form; the mapping may rename keys but may not add, drop or default a rule.
 
 ### Entities and records
 
-An entity is `{ "kind": <kind>, "id": <id>, "record": <plain JSON object> }`.
-A `"one"` reference field holds a target id as a string, or `null` for no target.
-A `"many"` reference field holds a list of target ids, empty for no target.
+An entity is `{ "kind": <kind>, "id": <id>, "record": <plain JSON object> }`.\
+A `"one"` reference field holds a target id as a string, or `null` for no target.\
+A `"many"` reference field holds a list of target ids, empty for no target.\
 Every other field of a record is plain data and is never a reference, whatever its value looks like.
 
 ### Steps
 
-Steps run in order.
+Steps run in order.\
 The first step is a `start` step, and there is exactly one.
 
 - `{ "start": { "position": <integer>, "entities": [ <entity>, ... ] } }`: the store holds exactly these entities at this position.
@@ -88,7 +88,7 @@ A write is one of:
 - `{ "op": "put", "kind": <kind>, "id": <id>, "record": <record> }`: the entity exists after the change with exactly this record, created or replaced.
 - `{ "op": "del", "kind": <kind>, "id": <id> }`: the entity does not exist after the change.
 
-A harness maps each write onto the change record the implementation takes in.
+A harness maps each write onto the change record the implementation takes in.\
 No case uses a partial update, so no case depends on what a `set` merges.
 
 ### Questions
@@ -105,9 +105,9 @@ Each question carries its expected `answer`.
 | `ownerOf` | `member`, `containerKind` | the id of the entity of `containerKind` that holds `member`, or `null` |
 | `reachable` | `from` | the ids reachable from `from` by following references |
 
-Every list in an answer is compared without regard to order (*Acceptance*, "compared without regard to the order of a collection").
-No answer holds the same element twice.
-If the implementation's `referrersOf` or `targetsOf` answers ids only, the harness compares the distinct ids of the expected answer and reports the case as passing equivalently rather than exactly.
+Every list in an answer is compared without regard to order (*Acceptance*, "compared without regard to the order of a collection").\
+No answer holds the same element twice.\
+If the implementation's `referrersOf` or `targetsOf` answers ids only, the harness compares the distinct ids of the expected answer and reports the case as passing equivalently rather than exactly.\
 Filters (`referrersOf(targetId, filter?)`, `reachable(fromId, filter?)`) are not used, since what a filter is stays owed.
 
 ### A refused declaration
@@ -128,7 +128,7 @@ The labels used in batch 1 are `target-kind-undeclared`, `no-target-kind`, `dupl
 
 ## Readings
 
-Where the contract leaves a question open, the corpus takes one reading and says so here.
+Where the contract leaves a question open, the corpus takes one reading and says so here.\
 Each is a reading, not a ruling, and is open to an entity-graph decision.
 
 - **R1. Identity.** Every id in a case is unique across all kinds, and a reference holds its target's id as a string.
@@ -163,8 +163,8 @@ Each is a reading, not a ruling, and is open to an entity-graph decision.
 
 ## Checking the files
 
-The corpus author ran one check of form over the files, and no other code.
-It checks that each case parses as JSON, carries the keys above, is named for its file, and keeps ids unique across kinds.
-It checks that an accepted case starts with one `start` step, keeps positions strictly increasing, asks at the position of the last step before it, and writes each entity at most once per change.
-It checks that no answer repeats an element, every reading and label a case names is listed here, every file is plain ASCII under 16 KiB, and no case uses a drawing's words.
+The corpus author ran one check of form over the files, and no other code.\
+It checks that each case parses as JSON, carries the keys above, is named for its file, and keeps ids unique across kinds.\
+It checks that an accepted case starts with one `start` step, keeps positions strictly increasing, asks at the position of the last step before it, and writes each entity at most once per change.\
+It checks that no answer repeats an element, every reading and label a case names is listed here, every file is plain ASCII under 16 KiB, and no case uses a drawing's words.\
 Every expected answer was worked out by hand from the contract text.
