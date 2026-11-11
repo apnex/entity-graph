@@ -1,0 +1,60 @@
+{
+  "case": "b2-18-cascade-reaches-refuse",
+  "batch": 2,
+  "summary": "In a three-item edit, the removal at index 2 cascades to a figure another section cites, so the edit is refused at index 2, naming the citing section the edit never named; dropping the citation in the same edit is accepted.",
+  "covers": ["plan-graph-change", "Reference rules", "Judging and refusals", "Consequences and the stopping rule"],
+  "readings": ["R1", "R2", "R14", "R15", "R17", "R18", "R19", "R21", "R23", "R24"],
+  "declare": {
+    "kinds": [
+      { "kind": "section", "references": [
+        { "field": "parent", "targets": ["section"], "holds": "one", "onTargetDelete": "cascade-delete" },
+        { "field": "cites", "targets": ["figure"], "holds": "many", "onTargetDelete": "refuse" }
+      ] },
+      { "kind": "figure", "references": [
+        { "field": "section", "targets": ["section"], "holds": "one", "onTargetDelete": "cascade-delete" }
+      ] },
+      { "kind": "caption", "references": [
+        { "field": "figure", "targets": ["figure"], "holds": "one", "onTargetDelete": "cascade-delete", "exclusivity": "refuse" }
+      ] }
+    ]
+  },
+  "verdict": "accepted",
+  "steps": [
+    { "start": { "position": 0, "entities": [
+      { "kind": "section", "id": "s1", "record": { "heading": "Intro", "parent": null, "cites": [] } },
+      { "kind": "section", "id": "s2", "record": { "heading": "Background", "parent": "s1", "cites": [] } },
+      { "kind": "section", "id": "s3", "record": { "heading": "Method", "parent": null, "cites": ["f2"] } },
+      { "kind": "figure", "id": "f1", "record": { "title": "Map", "section": "s1" } },
+      { "kind": "figure", "id": "f2", "record": { "title": "Chart", "section": "s2" } },
+      { "kind": "figure", "id": "f3", "record": { "title": "Plot", "section": "s3" } },
+      { "kind": "caption", "id": "c1", "record": { "body": "A map", "figure": "f1" } },
+      { "kind": "caption", "id": "c2", "record": { "body": "A chart", "figure": "f2" } }
+    ] } },
+    { "plan": { "position": 0, "edit": [
+      { "op": "create", "kind": "section", "id": "s4", "record": { "heading": "Results", "parent": null, "cites": [] } },
+      { "op": "change", "kind": "figure", "id": "f1", "record": { "title": "Map v2", "section": "s1" } },
+      { "op": "remove", "kind": "section", "id": "s1" }
+    ], "outcome": "refused", "refusal": { "part": "entity-graph", "code": "reference-rule", "ruleKey": "section.cites.onTargetDelete", "subject": "s3", "measure": 1, "opIndex": 2 } } },
+    { "plan": { "position": 0, "edit": [
+      { "op": "remove", "kind": "section", "id": "s1" },
+      { "op": "change", "kind": "section", "id": "s3", "record": { "heading": "Method", "parent": null, "cites": [] } }
+    ], "outcome": "accepted", "writes": [
+      { "op": "del", "kind": "section", "id": "s1" },
+      { "op": "del", "kind": "section", "id": "s2" },
+      { "op": "del", "kind": "figure", "id": "f1" },
+      { "op": "del", "kind": "figure", "id": "f2" },
+      { "op": "del", "kind": "caption", "id": "c1" },
+      { "op": "del", "kind": "caption", "id": "c2" },
+      { "op": "put", "kind": "section", "id": "s3", "record": { "heading": "Method", "parent": null, "cites": [] } }
+    ] } },
+    { "plan": { "position": 0, "edit": [
+      { "op": "change", "kind": "section", "id": "s3", "record": { "heading": "Method", "parent": null, "cites": ["f1", "f2", "f3"] } }
+    ], "outcome": "accepted", "writes": [
+      { "op": "put", "kind": "section", "id": "s3", "record": { "heading": "Method", "parent": null, "cites": ["f1", "f2", "f3"] } }
+    ] } },
+    { "ask": { "position": 0, "questions": [
+      { "q": "referrersOf", "id": "f2", "answer": [ { "kind": "section", "id": "s3", "field": "cites" }, { "kind": "caption", "id": "c2", "field": "figure" } ] },
+      { "q": "all", "kind": "section", "answer": ["s1", "s2", "s3"] }
+    ] } }
+  ]
+}

@@ -1,0 +1,49 @@
+{
+  "case": "b2-13-one-removal-many-rules-one-write-each",
+  "batch": 2,
+  "summary": "Removing one person sets off four rules at once, and an entity two of them write gets one net write holding both consequences.",
+  "covers": ["plan-graph-change", "Reference rules", "Consequences and the stopping rule"],
+  "readings": ["R1", "R2", "R14", "R15", "R16", "R17", "R23"],
+  "declare": {
+    "kinds": [
+      { "kind": "person", "references": [] },
+      { "kind": "team", "references": [
+        { "field": "members", "targets": ["person"], "holds": "many", "onTargetDelete": "unlink", "exclusivity": "steal", "min": 2, "onBelowMin": "cascade-delete" }
+      ] },
+      { "kind": "committee", "references": [
+        { "field": "members", "targets": ["person"], "holds": "many", "onTargetDelete": "unlink", "exclusivity": "steal", "min": 2, "onBelowMin": "refuse" }
+      ] },
+      { "kind": "task", "references": [
+        { "field": "waitsOn", "targets": ["task"], "holds": "many", "onTargetDelete": "unlink" },
+        { "field": "assignee", "targets": ["team"], "holds": "one", "onTargetDelete": "unlink", "onUnreferenced": "keep" },
+        { "field": "owner", "targets": ["person"], "holds": "one", "onTargetDelete": "unlink", "exclusivity": "steal" }
+      ] }
+    ]
+  },
+  "verdict": "accepted",
+  "steps": [
+    { "start": { "position": 0, "entities": [
+      { "kind": "person", "id": "p1", "record": { "name": "Ada" } },
+      { "kind": "person", "id": "p2", "record": { "name": "Lin" } },
+      { "kind": "person", "id": "p3", "record": { "name": "Kim" } },
+      { "kind": "person", "id": "p4", "record": { "name": "Max" } },
+      { "kind": "person", "id": "p5", "record": { "name": "Sol" } },
+      { "kind": "team", "id": "tm1", "record": { "name": "Core", "members": ["p1", "p2"] } },
+      { "kind": "committee", "id": "k1", "record": { "name": "Audit", "members": ["p1", "p3", "p4"] } },
+      { "kind": "task", "id": "t1", "record": { "title": "Build", "waitsOn": [], "assignee": "tm1", "owner": "p1" } },
+      { "kind": "task", "id": "t2", "record": { "title": "Test", "waitsOn": ["t1"], "assignee": null, "owner": "p5" } }
+    ] } },
+    { "plan": { "position": 0, "edit": [
+      { "op": "remove", "kind": "person", "id": "p1" }
+    ], "outcome": "accepted", "writes": [
+      { "op": "del", "kind": "person", "id": "p1" },
+      { "op": "del", "kind": "team", "id": "tm1" },
+      { "op": "put", "kind": "committee", "id": "k1", "record": { "name": "Audit", "members": ["p3", "p4"] } },
+      { "op": "put", "kind": "task", "id": "t1", "record": { "title": "Build", "waitsOn": [], "assignee": null, "owner": null } }
+    ] } },
+    { "ask": { "position": 0, "questions": [
+      { "q": "referrersOf", "id": "p1", "answer": [ { "kind": "team", "id": "tm1", "field": "members" }, { "kind": "committee", "id": "k1", "field": "members" }, { "kind": "task", "id": "t1", "field": "owner" } ] },
+      { "q": "get", "kind": "task", "id": "t1", "answer": { "title": "Build", "waitsOn": [], "assignee": "tm1", "owner": "p1" } }
+    ] } }
+  ]
+}

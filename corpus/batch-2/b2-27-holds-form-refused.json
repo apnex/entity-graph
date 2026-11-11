@@ -1,0 +1,42 @@
+{
+  "case": "b2-27-holds-form-refused",
+  "batch": 2,
+  "summary": "A requested record holding a reference in a form its declaration cannot hold is refused at its item: a list in a one-target reference, a single id in a list reference, and a list repeating an id.",
+  "covers": ["plan-graph-change", "Reference rules", "Judging and refusals"],
+  "readings": ["R1", "R2", "R14", "R19", "R22", "R23", "R24"],
+  "declare": {
+    "kinds": [
+      { "kind": "shelf", "references": [
+        { "field": "featured", "targets": ["book"], "holds": "one", "onTargetDelete": "unlink" }
+      ] },
+      { "kind": "book", "references": [
+        { "field": "shelf", "targets": ["shelf"], "holds": "one", "onTargetDelete": "refuse" },
+        { "field": "tags", "targets": ["tag"], "holds": "many", "onTargetDelete": "unlink", "onUnreferenced": "delete" }
+      ] },
+      { "kind": "tag", "references": [] }
+    ]
+  },
+  "verdict": "accepted",
+  "steps": [
+    { "start": { "position": 0, "entities": [
+      { "kind": "shelf", "id": "s1", "record": { "title": "Fiction", "featured": null } },
+      { "kind": "shelf", "id": "s2", "record": { "title": "Classics", "featured": null } },
+      { "kind": "book", "id": "b1", "record": { "title": "Dune", "shelf": "s1", "tags": ["g1"] } },
+      { "kind": "tag", "id": "g1", "record": { "title": "scifi" } }
+    ] } },
+    { "plan": { "position": 0, "edit": [
+      { "op": "change", "kind": "book", "id": "b1", "record": { "title": "Dune", "shelf": ["s1", "s2"], "tags": ["g1"] } }
+    ], "outcome": "refused", "refusal": { "part": "entity-graph", "code": "invalid-reference", "ruleKey": "book.shelf.holds", "subject": "b1", "measure": 1, "opIndex": 0 } } },
+    { "plan": { "position": 0, "edit": [
+      { "op": "create", "kind": "tag", "id": "g2", "record": { "title": "classic" } },
+      { "op": "create", "kind": "book", "id": "b3", "record": { "title": "Emma", "shelf": "s2", "tags": "g1" } }
+    ], "outcome": "refused", "refusal": { "part": "entity-graph", "code": "invalid-reference", "ruleKey": "book.tags.holds", "subject": "b3", "measure": 1, "opIndex": 1 } } },
+    { "plan": { "position": 0, "edit": [
+      { "op": "change", "kind": "book", "id": "b1", "record": { "title": "Dune", "shelf": "s1", "tags": ["g1", "g1"] } }
+    ], "outcome": "refused", "refusal": { "part": "entity-graph", "code": "invalid-reference", "ruleKey": "book.tags.holds", "subject": "b1", "measure": 1, "opIndex": 0 } } },
+    { "ask": { "position": 0, "questions": [
+      { "q": "get", "kind": "book", "id": "b1", "answer": { "title": "Dune", "shelf": "s1", "tags": ["g1"] } },
+      { "q": "all", "kind": "book", "answer": ["b1"] }
+    ] } }
+  ]
+}

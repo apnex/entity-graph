@@ -1,0 +1,47 @@
+{
+  "case": "b2-29-fault-create-present-identity-kind",
+  "batch": 2,
+  "summary": "Creating an entity that is present, creating one under an id another kind holds, and creating one of an undeclared kind are each refused at that item, while removing and recreating an entity in one edit is accepted as one write.",
+  "covers": ["plan-graph-change", "Judging and refusals"],
+  "readings": ["R1", "R2", "R14", "R15", "R22", "R23", "R24"],
+  "declare": {
+    "kinds": [
+      { "kind": "shelf", "references": [
+        { "field": "featured", "targets": ["book"], "holds": "one", "onTargetDelete": "unlink" }
+      ] },
+      { "kind": "book", "references": [
+        { "field": "shelf", "targets": ["shelf"], "holds": "one", "onTargetDelete": "refuse" },
+        { "field": "tags", "targets": ["tag"], "holds": "many", "onTargetDelete": "unlink", "onUnreferenced": "delete" }
+      ] },
+      { "kind": "tag", "references": [] }
+    ]
+  },
+  "verdict": "accepted",
+  "steps": [
+    { "start": { "position": 0, "entities": [
+      { "kind": "shelf", "id": "s1", "record": { "title": "Fiction", "featured": null } },
+      { "kind": "book", "id": "b1", "record": { "title": "Dune", "shelf": "s1", "tags": [] } },
+      { "kind": "tag", "id": "g1", "record": { "title": "scifi" } }
+    ] } },
+    { "plan": { "position": 0, "edit": [
+      { "op": "create", "kind": "book", "id": "b1", "record": { "title": "Dune again", "shelf": "s1", "tags": [] } }
+    ], "outcome": "refused", "refusal": { "part": "entity-graph", "code": "entity-present", "ruleKey": "entity-present", "subject": "b1", "measure": 1, "opIndex": 0 } } },
+    { "plan": { "position": 0, "edit": [
+      { "op": "create", "kind": "tag", "id": "g2", "record": { "title": "classic" } },
+      { "op": "create", "kind": "tag", "id": "b1", "record": { "title": "clash" } }
+    ], "outcome": "refused", "refusal": { "part": "entity-graph", "code": "identity-taken", "ruleKey": "identity-taken", "subject": "b1", "measure": 1, "opIndex": 1 } } },
+    { "plan": { "position": 0, "edit": [
+      { "op": "create", "kind": "chapter", "id": "h1", "record": { "title": "One" } }
+    ], "outcome": "refused", "refusal": { "part": "entity-graph", "code": "undeclared-kind", "ruleKey": "undeclared-kind", "subject": "h1", "measure": 1, "opIndex": 0 } } },
+    { "plan": { "position": 0, "edit": [
+      { "op": "remove", "kind": "book", "id": "b1" },
+      { "op": "create", "kind": "book", "id": "b1", "record": { "title": "Dune (revised)", "shelf": "s1", "tags": [] } }
+    ], "outcome": "accepted", "writes": [
+      { "op": "put", "kind": "book", "id": "b1", "record": { "title": "Dune (revised)", "shelf": "s1", "tags": [] } }
+    ] } },
+    { "ask": { "position": 0, "questions": [
+      { "q": "get", "kind": "book", "id": "b1", "answer": { "title": "Dune", "shelf": "s1", "tags": [] } },
+      { "q": "all", "kind": "tag", "answer": ["g1"] }
+    ] } }
+  ]
+}

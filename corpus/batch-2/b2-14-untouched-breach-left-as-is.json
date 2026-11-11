@@ -1,0 +1,63 @@
+{
+  "case": "b2-14-untouched-breach-left-as-is",
+  "batch": 2,
+  "summary": "Breaches already in the view that an edit does not touch are left as they are, a team below its minimum and a person owning two tasks; an edit that does touch them applies the rules to them.",
+  "covers": ["plan-graph-change", "Reference rules", "Judging and refusals"],
+  "readings": ["R1", "R2", "R3", "R14", "R15", "R16", "R17", "R23"],
+  "declare": {
+    "kinds": [
+      { "kind": "person", "references": [] },
+      { "kind": "team", "references": [
+        { "field": "members", "targets": ["person"], "holds": "many", "onTargetDelete": "unlink", "exclusivity": "steal", "min": 2, "onBelowMin": "cascade-delete" }
+      ] },
+      { "kind": "committee", "references": [
+        { "field": "members", "targets": ["person"], "holds": "many", "onTargetDelete": "unlink", "exclusivity": "steal", "min": 2, "onBelowMin": "refuse" }
+      ] },
+      { "kind": "task", "references": [
+        { "field": "waitsOn", "targets": ["task"], "holds": "many", "onTargetDelete": "unlink" },
+        { "field": "assignee", "targets": ["team"], "holds": "one", "onTargetDelete": "unlink", "onUnreferenced": "keep" },
+        { "field": "owner", "targets": ["person"], "holds": "one", "onTargetDelete": "unlink", "exclusivity": "steal" }
+      ] }
+    ]
+  },
+  "verdict": "accepted",
+  "steps": [
+    { "start": { "position": 7, "entities": [
+      { "kind": "person", "id": "p1", "record": { "name": "Ada" } },
+      { "kind": "person", "id": "p2", "record": { "name": "Lin" } },
+      { "kind": "person", "id": "p3", "record": { "name": "Kim" } },
+      { "kind": "person", "id": "p4", "record": { "name": "Max" } },
+      { "kind": "team", "id": "tm1", "record": { "name": "Core", "members": ["p1"] } },
+      { "kind": "team", "id": "tm2", "record": { "name": "Docs", "members": ["p2", "p3"] } },
+      { "kind": "task", "id": "t1", "record": { "title": "Plan", "waitsOn": [], "assignee": null, "owner": "p4" } },
+      { "kind": "task", "id": "t2", "record": { "title": "Test", "waitsOn": [], "assignee": null, "owner": "p4" } }
+    ] } },
+    { "plan": { "position": 7, "edit": [
+      { "op": "create", "kind": "person", "id": "p5", "record": { "name": "Sol" } }
+    ], "outcome": "accepted", "writes": [
+      { "op": "put", "kind": "person", "id": "p5", "record": { "name": "Sol" } }
+    ] } },
+    { "plan": { "position": 7, "edit": [
+      { "op": "create", "kind": "task", "id": "t3", "record": { "title": "Ship", "waitsOn": [], "assignee": null, "owner": "p4" } }
+    ], "outcome": "accepted", "writes": [
+      { "op": "put", "kind": "task", "id": "t3", "record": { "title": "Ship", "waitsOn": [], "assignee": null, "owner": "p4" } },
+      { "op": "put", "kind": "task", "id": "t1", "record": { "title": "Plan", "waitsOn": [], "assignee": null, "owner": null } },
+      { "op": "put", "kind": "task", "id": "t2", "record": { "title": "Test", "waitsOn": [], "assignee": null, "owner": null } }
+    ] } },
+    { "plan": { "position": 7, "edit": [
+      { "op": "change", "kind": "team", "id": "tm1", "record": { "name": "Core", "members": ["p1", "p4"] } }
+    ], "outcome": "accepted", "writes": [
+      { "op": "put", "kind": "team", "id": "tm1", "record": { "name": "Core", "members": ["p1", "p4"] } }
+    ] } },
+    { "plan": { "position": 7, "edit": [
+      { "op": "change", "kind": "team", "id": "tm2", "record": { "name": "Docs", "members": ["p2", "p3", "p1"] } }
+    ], "outcome": "accepted", "writes": [
+      { "op": "put", "kind": "team", "id": "tm2", "record": { "name": "Docs", "members": ["p2", "p3", "p1"] } },
+      { "op": "del", "kind": "team", "id": "tm1" }
+    ] } },
+    { "ask": { "position": 7, "questions": [
+      { "q": "get", "kind": "team", "id": "tm1", "answer": { "name": "Core", "members": ["p1"] } },
+      { "q": "referrersOf", "id": "p4", "answer": [ { "kind": "task", "id": "t1", "field": "owner" }, { "kind": "task", "id": "t2", "field": "owner" } ] }
+    ] } }
+  ]
+}

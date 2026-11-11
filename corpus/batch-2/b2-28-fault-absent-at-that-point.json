@@ -1,0 +1,52 @@
+{
+  "case": "b2-28-fault-absent-at-that-point",
+  "batch": 2,
+  "summary": "A change or removal of an entity absent at that point in the edit is refused at that item, whether it never existed or an earlier item removed it, while a change of an entity an earlier item created is accepted.",
+  "covers": ["plan-graph-change", "Judging and refusals"],
+  "readings": ["R1", "R2", "R14", "R15", "R22", "R23", "R24"],
+  "declare": {
+    "kinds": [
+      { "kind": "shelf", "references": [
+        { "field": "featured", "targets": ["book"], "holds": "one", "onTargetDelete": "unlink" }
+      ] },
+      { "kind": "book", "references": [
+        { "field": "shelf", "targets": ["shelf"], "holds": "one", "onTargetDelete": "refuse" },
+        { "field": "tags", "targets": ["tag"], "holds": "many", "onTargetDelete": "unlink", "onUnreferenced": "delete" }
+      ] },
+      { "kind": "tag", "references": [] }
+    ]
+  },
+  "verdict": "accepted",
+  "steps": [
+    { "start": { "position": 0, "entities": [
+      { "kind": "shelf", "id": "s1", "record": { "title": "Fiction", "featured": null } },
+      { "kind": "book", "id": "b1", "record": { "title": "Dune", "shelf": "s1", "tags": [] } },
+      { "kind": "book", "id": "b2", "record": { "title": "Emma", "shelf": "s1", "tags": [] } },
+      { "kind": "tag", "id": "g1", "record": { "title": "scifi" } }
+    ] } },
+    { "plan": { "position": 0, "edit": [
+      { "op": "change", "kind": "book", "id": "b9", "record": { "title": "Lost", "shelf": "s1", "tags": [] } }
+    ], "outcome": "refused", "refusal": { "part": "entity-graph", "code": "entity-absent", "ruleKey": "entity-absent", "subject": "b9", "measure": 1, "opIndex": 0 } } },
+    { "plan": { "position": 0, "edit": [
+      { "op": "remove", "kind": "book", "id": "b2" },
+      { "op": "change", "kind": "book", "id": "b2", "record": { "title": "Emma", "shelf": "s1", "tags": [] } }
+    ], "outcome": "refused", "refusal": { "part": "entity-graph", "code": "entity-absent", "ruleKey": "entity-absent", "subject": "b2", "measure": 1, "opIndex": 1 } } },
+    { "plan": { "position": 0, "edit": [
+      { "op": "remove", "kind": "tag", "id": "g9" }
+    ], "outcome": "refused", "refusal": { "part": "entity-graph", "code": "entity-absent", "ruleKey": "entity-absent", "subject": "g9", "measure": 1, "opIndex": 0 } } },
+    { "plan": { "position": 0, "edit": [
+      { "op": "remove", "kind": "tag", "id": "g1" },
+      { "op": "remove", "kind": "tag", "id": "g1" }
+    ], "outcome": "refused", "refusal": { "part": "entity-graph", "code": "entity-absent", "ruleKey": "entity-absent", "subject": "g1", "measure": 1, "opIndex": 1 } } },
+    { "plan": { "position": 0, "edit": [
+      { "op": "create", "kind": "book", "id": "b3", "record": { "title": "Odes", "shelf": "s1", "tags": [] } },
+      { "op": "change", "kind": "book", "id": "b3", "record": { "title": "Odes", "shelf": null, "tags": [] } }
+    ], "outcome": "accepted", "writes": [
+      { "op": "put", "kind": "book", "id": "b3", "record": { "title": "Odes", "shelf": null, "tags": [] } }
+    ] } },
+    { "ask": { "position": 0, "questions": [
+      { "q": "all", "kind": "book", "answer": ["b1", "b2"] },
+      { "q": "all", "kind": "tag", "answer": ["g1"] }
+    ] } }
+  ]
+}

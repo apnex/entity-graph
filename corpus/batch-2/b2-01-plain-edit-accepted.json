@@ -1,0 +1,54 @@
+{
+  "case": "b2-01-plain-edit-accepted",
+  "batch": 2,
+  "summary": "A plain edit of a creation and two changes that no rule acts on is accepted with exactly its own writes, lands nothing, and the same writes taken in from the store give the answers it showed.",
+  "covers": ["plan-graph-change", "dated-graph-view"],
+  "readings": ["R1", "R2", "R4", "R7", "R14", "R15", "R23"],
+  "declare": {
+    "kinds": [
+      { "kind": "shelf", "references": [
+        { "field": "featured", "targets": ["book"], "holds": "one", "onTargetDelete": "unlink" }
+      ] },
+      { "kind": "book", "references": [
+        { "field": "shelf", "targets": ["shelf"], "holds": "one", "onTargetDelete": "refuse" },
+        { "field": "tags", "targets": ["tag"], "holds": "many", "onTargetDelete": "unlink", "onUnreferenced": "delete" }
+      ] },
+      { "kind": "tag", "references": [] }
+    ]
+  },
+  "verdict": "accepted",
+  "steps": [
+    { "start": { "position": 5, "entities": [
+      { "kind": "shelf", "id": "s1", "record": { "title": "Fiction", "featured": null } },
+      { "kind": "book", "id": "b1", "record": { "title": "Dune", "shelf": "s1", "tags": ["g1"] } },
+      { "kind": "book", "id": "b2", "record": { "title": "Emma", "shelf": "s1", "tags": ["g2"] } },
+      { "kind": "tag", "id": "g1", "record": { "title": "scifi" } },
+      { "kind": "tag", "id": "g2", "record": { "title": "classic" } }
+    ] } },
+    { "plan": { "position": 5, "edit": [
+      { "op": "create", "kind": "book", "id": "b3", "record": { "title": "Ulysses", "shelf": "s1", "tags": ["g2"] } },
+      { "op": "change", "kind": "book", "id": "b1", "record": { "title": "Dune", "shelf": "s1", "tags": ["g1", "g2"] } },
+      { "op": "change", "kind": "shelf", "id": "s1", "record": { "title": "Fiction", "featured": "b3" } }
+    ], "outcome": "accepted", "writes": [
+      { "op": "put", "kind": "book", "id": "b3", "record": { "title": "Ulysses", "shelf": "s1", "tags": ["g2"] } },
+      { "op": "put", "kind": "book", "id": "b1", "record": { "title": "Dune", "shelf": "s1", "tags": ["g1", "g2"] } },
+      { "op": "put", "kind": "shelf", "id": "s1", "record": { "title": "Fiction", "featured": "b3" } }
+    ] } },
+    { "ask": { "position": 5, "questions": [
+      { "q": "get", "kind": "book", "id": "b3", "answer": null },
+      { "q": "referrersOf", "id": "g2", "answer": [ { "kind": "book", "id": "b2", "field": "tags" } ] },
+      { "q": "get", "kind": "shelf", "id": "s1", "answer": { "title": "Fiction", "featured": null } },
+      { "q": "all", "kind": "book", "answer": ["b1", "b2"] }
+    ] } },
+    { "take": { "position": 6, "writes": [
+      { "op": "put", "kind": "book", "id": "b3", "record": { "title": "Ulysses", "shelf": "s1", "tags": ["g2"] } },
+      { "op": "put", "kind": "book", "id": "b1", "record": { "title": "Dune", "shelf": "s1", "tags": ["g1", "g2"] } },
+      { "op": "put", "kind": "shelf", "id": "s1", "record": { "title": "Fiction", "featured": "b3" } }
+    ] } },
+    { "ask": { "position": 6, "questions": [
+      { "q": "referrersOf", "id": "g2", "answer": [ { "kind": "book", "id": "b1", "field": "tags" }, { "kind": "book", "id": "b2", "field": "tags" }, { "kind": "book", "id": "b3", "field": "tags" } ] },
+      { "q": "get", "kind": "shelf", "id": "s1", "answer": { "title": "Fiction", "featured": "b3" } },
+      { "q": "referrersOf", "id": "b3", "answer": [ { "kind": "shelf", "id": "s1", "field": "featured" } ] }
+    ] } }
+  ]
+}

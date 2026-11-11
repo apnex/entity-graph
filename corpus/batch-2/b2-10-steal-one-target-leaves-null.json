@@ -1,0 +1,49 @@
+{
+  "case": "b2-10-steal-one-target-leaves-null",
+  "batch": 2,
+  "summary": "Giving a task an owner another task holds through a stealing one-target reference takes it from that task, whose owner is left null, by a change or by a creation.",
+  "covers": ["plan-graph-change", "Reference rules"],
+  "readings": ["R1", "R2", "R14", "R15", "R16", "R17", "R23"],
+  "declare": {
+    "kinds": [
+      { "kind": "person", "references": [] },
+      { "kind": "team", "references": [
+        { "field": "members", "targets": ["person"], "holds": "many", "onTargetDelete": "unlink", "exclusivity": "steal", "min": 2, "onBelowMin": "cascade-delete" }
+      ] },
+      { "kind": "committee", "references": [
+        { "field": "members", "targets": ["person"], "holds": "many", "onTargetDelete": "unlink", "exclusivity": "steal", "min": 2, "onBelowMin": "refuse" }
+      ] },
+      { "kind": "task", "references": [
+        { "field": "waitsOn", "targets": ["task"], "holds": "many", "onTargetDelete": "unlink" },
+        { "field": "assignee", "targets": ["team"], "holds": "one", "onTargetDelete": "unlink", "onUnreferenced": "keep" },
+        { "field": "owner", "targets": ["person"], "holds": "one", "onTargetDelete": "unlink", "exclusivity": "steal" }
+      ] }
+    ]
+  },
+  "verdict": "accepted",
+  "steps": [
+    { "start": { "position": 0, "entities": [
+      { "kind": "person", "id": "p1", "record": { "name": "Ada" } },
+      { "kind": "person", "id": "p2", "record": { "name": "Lin" } },
+      { "kind": "task", "id": "t1", "record": { "title": "Plan", "waitsOn": [], "assignee": null, "owner": "p1" } },
+      { "kind": "task", "id": "t2", "record": { "title": "Test", "waitsOn": [], "assignee": null, "owner": null } },
+      { "kind": "task", "id": "t3", "record": { "title": "Fix", "waitsOn": [], "assignee": null, "owner": "p2" } }
+    ] } },
+    { "plan": { "position": 0, "edit": [
+      { "op": "change", "kind": "task", "id": "t2", "record": { "title": "Test", "waitsOn": [], "assignee": null, "owner": "p1" } }
+    ], "outcome": "accepted", "writes": [
+      { "op": "put", "kind": "task", "id": "t2", "record": { "title": "Test", "waitsOn": [], "assignee": null, "owner": "p1" } },
+      { "op": "put", "kind": "task", "id": "t1", "record": { "title": "Plan", "waitsOn": [], "assignee": null, "owner": null } }
+    ] } },
+    { "plan": { "position": 0, "edit": [
+      { "op": "create", "kind": "task", "id": "t4", "record": { "title": "Deploy", "waitsOn": [], "assignee": null, "owner": "p2" } }
+    ], "outcome": "accepted", "writes": [
+      { "op": "put", "kind": "task", "id": "t4", "record": { "title": "Deploy", "waitsOn": [], "assignee": null, "owner": "p2" } },
+      { "op": "put", "kind": "task", "id": "t3", "record": { "title": "Fix", "waitsOn": [], "assignee": null, "owner": null } }
+    ] } },
+    { "ask": { "position": 0, "questions": [
+      { "q": "referrersOf", "id": "p1", "answer": [ { "kind": "task", "id": "t1", "field": "owner" } ] },
+      { "q": "referrersOf", "id": "p2", "answer": [ { "kind": "task", "id": "t3", "field": "owner" } ] }
+    ] } }
+  ]
+}
