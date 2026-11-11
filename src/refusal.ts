@@ -5,9 +5,10 @@
  * application's to choose from them.
  */
 
-/** The codes M1 refuses with (docs/DECISIONS.md D10): a declaration, a change taken in, or a question. */
+/** The codes M1 refuses with (docs/DECISIONS.md D10): a declaration, an opening, a change taken in, or a question. */
 export type GraphRefusalCode =
 	| "invalid-declaration"
+	| "invalid-opening"
 	| "invalid-change"
 	| "stale-position"
 	| "empty-change"
@@ -42,12 +43,17 @@ export interface GraphRefusal {
 const TEXTS: Readonly<Record<GraphRefusalCode, { what: string; why: string; fix: string }>> = {
 	"invalid-declaration": {
 		what: "The declaration was refused.",
-		why: "Each kind must be declared as data the component can read, each reference naming the declared kinds it may target and how many targets it holds, and each option one the contract allows.",
+		why: "The kinds are declared as plain data in a list, each reference naming its field, the declared kinds it may target, how many targets it holds and what a target's deletion does, each option one the contract allows.",
 		fix: "Correct the member named in details.subject and create the graph again.",
+	},
+	"invalid-opening": {
+		what: "The graph was not opened: its opening is not one the component can read.",
+		why: "An opening is plain data stating the position its entities reflect, a whole number from 0, and those entities, each a kind, an identity and a whole record.",
+		fix: "Send the opening in that form, or none to open an empty graph at position 0; details.subject names the part that is not.",
 	},
 	"invalid-change": {
 		what: "The change was refused: it is not a change the component can read.",
-		why: "A change states a whole-number position from 0 and a list of items, each an entity's kind and identity with its whole record, or with `deleted: true`.",
+		why: "A change is plain data stating a whole-number position from 0 and a list of items, each an entity's kind and identity with its whole record, or with `deleted: true`.",
 		fix: "Send the change in that form; details.subject names the part that is not.",
 	},
 	"stale-position": {

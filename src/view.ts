@@ -9,7 +9,7 @@ import type { CompiledDeclaration, CompiledReference } from "./declaration.js";
 import { ReferenceIndex } from "./references.js";
 import { type GraphRefusal, refuse } from "./refusal.js";
 
-/** The bounds of a change (docs/DECISIONS.md D10): at most as many items as the store beneath lands in one change. */
+/** The bounds of a change (docs/DECISIONS.md D10): at most as many items as the store beneath lands in one change. An opening is no change, and is not bound by it (D12). */
 export const GRAPH_LIMITS = Object.freeze({ maxChangeItems: 2000 });
 
 /** A record: an entity's fields, plain JSON. */
@@ -49,9 +49,13 @@ function deepFreeze<T>(value: T): T {
 	return value;
 }
 
-/** The targets a reference field holds in a record, or undefined when the field holds a form its declaration does not allow. */
+/**
+ * The targets a reference field holds in a record, or undefined when the field holds a form its declaration does not allow.
+ * Read from the record's own members alone, so a field named as a member every object inherits -- `constructor`,
+ * `__proto__` -- is absent from a record that does not hold it.
+ */
 function heldBy(record: GraphRecord, ref: CompiledReference): readonly string[] | undefined {
-	const value = record[ref.field];
+	const value = Object.hasOwn(record, ref.field) ? record[ref.field] : undefined;
 	if (value === undefined || value === null) return [];
 	if (ref.holds === "one") return typeof value === "string" && value !== "" ? [value] : undefined;
 	if (!Array.isArray(value) || new Set(value).size !== value.length) return undefined;
@@ -83,24 +87,33 @@ export class EntityView {
 		return ids.map((id) => this.entities.get(id)).filter((e): e is GraphEntity => e !== undefined);
 	}
 
-	/** Takes in a change after the view's position, whole, or refuses it and changes nothing. */
-	take(change: unknown): { ok: true; position: number } | { ok: false; refusal: GraphRefusal } {
-		if (!isObject(change)) return { ok: false, refusal: refuse("invalid-change", "") };
+	/**
+	 * Takes in a change after the view's position, whole, or refuses it and changes nothing. The change is read once, as plain
+	 * JSON, before any of it is used, so a getter or a Proxy is refused rather than run, and a value read twice cannot differ.
+	 */
+	take(input: unknown): { ok: true; position: number } | { ok: false; refusal: GraphRefusal } {
+		const read = readPlainJson(input);
+		if (!read.ok || !isObject(read.value)) return { ok: false, refusal: refuse("invalid-change", "change") };
+		const change = read.value;
 		if (!isPosition(change["position"])) return { ok: false, refusal: refuse("invalid-change", "position") };
 		const position = change["position"];
 		if (position <= this.current) return { ok: false, refusal: refuse("stale-position", String(position)) };
-		return this.land(position, change["items"], false);
+		const items = change["items"];
+		if (!Array.isArray(items)) return { ok: false, refusal: refuse("invalid-change", "items") };
+		if (items.length === 0) return { ok: false, refusal: refuse("empty-change", "items") };
+		if (items.length > GRAPH_LIMITS.maxChangeItems) return { ok: false, refusal: refuse("too-many-items", String(items.length)) };
+		return this.land(position, items, false);
 	}
 
-	/** Fills an empty view from entities stated with its position: the first fill (docs/DECISIONS.md D12). */
-	fill(entities: unknown): { ok: true; position: number } | { ok: false; refusal: GraphRefusal } {
+	/**
+	 * Fills an empty view from entities stated with its position, already read as plain JSON: the first fill (docs/DECISIONS.md
+	 * D12). An opening is no change, so no bound on a change's items applies to it.
+	 */
+	fill(entities: readonly unknown[]): { ok: true; position: number } | { ok: false; refusal: GraphRefusal } {
 		return this.land(this.current, entities, true);
 	}
 
-	private land(position: number, items: unknown, first: boolean): { ok: true; position: number } | { ok: false; refusal: GraphRefusal } {
-		if (!Array.isArray(items)) return { ok: false, refusal: refuse("invalid-change", "items") };
-		if (!first && items.length === 0) return { ok: false, refusal: refuse("empty-change", "items") };
-		if (items.length > GRAPH_LIMITS.maxChangeItems) return { ok: false, refusal: refuse("too-many-items", String(items.length)) };
+	private land(position: number, items: readonly unknown[], first: boolean): { ok: true; position: number } | { ok: false; refusal: GraphRefusal } {
 		const checked: Checked[] = [];
 		const seen = new Set<string>();
 		for (const [i, item] of items.entries()) {
@@ -141,9 +154,10 @@ export class EntityView {
 			return { ok: true, checked: { kind, id, record: null, fields: new Map() } };
 		}
 		if (held !== undefined && held.kind !== kind) return fault("identity-taken", subject);
-		const read = readPlainJson(item["record"]);
-		if (!read.ok || !isObject(read.value)) return fault("not-plain", subject);
-		const record = deepFreeze(read.value) as GraphRecord;
+		// the change or the opening was read as plain JSON whole, so a record is plain data already: an object, or refused
+		const record = item["record"];
+		if (!isObject(record)) return fault("not-plain", subject);
+		deepFreeze(record);
 		const fields = new Map<string, readonly string[]>();
 		for (const ref of refs) {
 			const targets = heldBy(record, ref);

@@ -2,8 +2,8 @@
 //
 // The harness maps the corpus's format onto this implementation and nothing else: the declaration is the implementation's
 // own form, so it is passed as it stands; each write becomes an item of a change; each answer is read into the corpus's
-// form, lists compared without regard to order; each refusal label maps to the implementation's code, and every name the
-// case lists must be a word of the refusal's subject or its texts. A start at a position above 0 is run twice, filled and
+// form, lists compared without regard to order; each refusal label maps to the code and to the member and fault the
+// refusal's subject must state, and every name the case lists must be a word of that subject. A start at a position above 0 is run twice, filled and
 // landed as one change into an empty view, and both must answer alike (corpus/README.md, *Steps*).
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -16,14 +16,29 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const dir = path.join(root, "corpus", "batch-1");
 const CASES = fs.readdirSync(dir).filter((f) => f.endsWith(".json")).sort().map((f) => JSON.parse(fs.readFileSync(path.join(dir, f), "utf8")));
 
-/** The corpus's refusal labels, each mapped to the code this implementation refuses with (corpus/README.md, R9). */
-const LABEL_CODES = {
-	"target-kind-undeclared": "invalid-declaration", "no-target-kind": "invalid-declaration", "duplicate-kind": "invalid-declaration",
-	"duplicate-reference-field": "invalid-declaration", "target-count-undeclared": "invalid-declaration", "onTargetDelete-undeclared": "invalid-declaration",
-	"onTargetDelete-invalid": "invalid-declaration", "exclusivity-invalid": "invalid-declaration", "onUnreferenced-invalid": "invalid-declaration",
-	"min-without-onBelowMin": "invalid-declaration", "onBelowMin-without-min": "invalid-declaration", "onBelowMin-invalid": "invalid-declaration",
-	"min-invalid": "invalid-declaration", "unknown-reference-option": "invalid-declaration",
+/**
+ * The corpus's refusal labels (corpus/README.md, R9), each mapped to what distinguishes it in this implementation's refusal:
+ * the code, and its `details.subject`, `<kind>[.<field>][.<member>]: <fault>` -- how deep the path goes, the member refused,
+ * and the fault. A label swapped for another, or a fault reported at the wrong member, fails here.
+ */
+const LABELS = {
+	"target-kind-undeclared": { depth: 3, member: "targets", fault: /^undeclared \S+$/ },
+	"no-target-kind": { depth: 3, member: "targets", fault: /^(?:missing|empty)$/ },
+	"duplicate-kind": { depth: 1, fault: /^duplicate$/ },
+	"duplicate-reference-field": { depth: 2, fault: /^duplicate$/ },
+	"target-count-undeclared": { depth: 3, member: "holds", fault: /^missing$/ },
+	"onTargetDelete-undeclared": { depth: 3, member: "onTargetDelete", fault: /^missing$/ },
+	"onTargetDelete-invalid": { depth: 3, member: "onTargetDelete", fault: /^invalid$/ },
+	"exclusivity-invalid": { depth: 3, member: "exclusivity", fault: /^invalid$/ },
+	"onUnreferenced-invalid": { depth: 3, member: "onUnreferenced", fault: /^invalid$/ },
+	"min-without-onBelowMin": { depth: 3, member: "min", fault: /^unpaired$/ },
+	"onBelowMin-without-min": { depth: 3, member: "onBelowMin", fault: /^unpaired$/ },
+	"onBelowMin-invalid": { depth: 3, member: "onBelowMin", fault: /^invalid$/ },
+	"min-invalid": { depth: 3, member: "min", fault: /^invalid$/ },
+	"unknown-reference-option": { depth: 3, fault: /^unknown$/ },
 };
+/** The refusal code every declaration label maps to. */
+const DECLARATION_CODE = "invalid-declaration";
 
 const sorted = (list) => [...list].map((x) => JSON.stringify(x)).sort();
 const item = (w) => (w.op === "put" ? { kind: w.kind, id: w.id, record: w.record } : w.op === "del" ? { kind: w.kind, id: w.id, deleted: true } : assert.fail(`no write op ${w.op}`));
@@ -90,10 +105,20 @@ for (const c of CASES) {
 			const made = createEntityGraph(c.declare);
 			assert.equal(made.ok, false, "the declaration was accepted");
 			assert.equal(made.refusal.part, c.refusal.part);
-			assert.ok(Object.hasOwn(LABEL_CODES, c.refusal.reason), `no code mapped for the label ${c.refusal.reason}`);
-			assert.equal(made.refusal.code, LABEL_CODES[c.refusal.reason]);
-			const words = new Set([made.refusal.details.subject, made.refusal.what, made.refusal.why, made.refusal.fix].join(" ").split(/[^A-Za-z0-9_-]+/));
-			for (const name of c.refusal.names) assert.ok(words.has(name), `the refusal does not name ${name}: ${JSON.stringify(made.refusal.details)}`);
+			const label = LABELS[c.refusal.reason];
+			assert.ok(label, `no mapping for the label ${c.refusal.reason}`);
+			assert.equal(made.refusal.code, DECLARATION_CODE);
+			const subject = made.refusal.details.subject;
+			const at = subject.indexOf(": ");
+			assert.ok(at > 0, `the subject names no fault: ${subject}`);
+			const steps = subject.slice(0, at).split(".");
+			const fault = subject.slice(at + 2);
+			assert.equal(steps.length, label.depth, `${c.refusal.reason}: refused at ${subject}`);
+			if (label.member) assert.equal(steps.at(-1), label.member, `${c.refusal.reason}: refused at ${subject}`);
+			assert.match(fault, label.fault, `${c.refusal.reason}: refused at ${subject}`);
+			// the names are matched against the subject alone, where the refusal names what it refused, never its fixed texts
+			const words = new Set(subject.split(/[^A-Za-z0-9_-]+/));
+			for (const name of c.refusal.names) assert.ok(words.has(name), `the refusal's subject does not name ${name}: ${subject}`);
 			return;
 		}
 		assert.equal(c.verdict, "accepted");

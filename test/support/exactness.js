@@ -23,7 +23,7 @@ const byId = (a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : a.field < b.field ?
 export function freshReading(entities) {
 	const kindOf = (id) => entities.get(id)?.kind ?? null;
 	const held = (record, field, holds) => {
-		const v = record[field];
+		const v = Object.hasOwn(record, field) ? record[field] : undefined;   // a record's own members alone
 		if (holds === "one") return typeof v === "string" ? [v] : [];
 		return Array.isArray(v) ? v : [];
 	};

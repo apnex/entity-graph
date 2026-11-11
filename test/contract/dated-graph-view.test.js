@@ -157,3 +157,17 @@ test("a change holds at most GRAPH_LIMITS.maxChangeItems items, entity-store's b
 	assert.equal(g.applyChange({ position: 1, items: items(2000) }).ok, true);
 	assert.equal(g.all("tag").entities.length, 2000);
 });
+
+test("an opening is not a change: a graph opens from more than GRAPH_LIMITS.maxChangeItems entities (D12)", () => {
+	const entities = Array.from({ length: 5001 }, (_, i) => put("tag", `t${i}`));
+	const made = createEntityGraph(WORLD, { position: 3, entities });
+	assert.equal(made.ok, true, JSON.stringify(made.refusal));
+	assert.equal(made.graph.all("tag").entities.length, 5001);
+	assert.equal(made.graph.position(), 3);
+});
+
+test("get answers an entity only under its own kind", () => {
+	const g = open({ position: 1, entities: [put("book", "b1", { tags: [] })] });
+	assert.deepEqual(g.get("shelf", "b1"), { ok: true, position: 1, entity: null }, "b1 is a book, not a shelf");
+	assert.equal(g.get("book", "b1").entity?.id, "b1");
+});

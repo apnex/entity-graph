@@ -36,10 +36,8 @@ if [ ${#args[@]} -eq 0 ]; then
 	# opened, so a new document passed locally and failed in CI on first add.
 	# A file staged for deletion is still in the index, so drop anything that
 	# is no longer on disk.
-	# corpus/ is the neutral corpus, written by an agent other than the implementer and never edited here (CONTRACT.md,
-	# *Acceptance*; docs/DECISIONS.md D10): its files' style is its author's to keep, so it is not held to this gate.
 	mapfile -t files < <(
-		git ls-files --cached --others --exclude-standard '*.md' ':!corpus/' \
+		git ls-files --cached --others --exclude-standard '*.md' \
 			| sort -u \
 			| while IFS= read -r candidate; do
 				[ -f "$candidate" ] && printf '%s\n' "$candidate"

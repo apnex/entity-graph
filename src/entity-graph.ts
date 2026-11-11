@@ -5,6 +5,7 @@
  * entity refers to, which containers of a kind hold a member, and what can be reached from an entity by following references.
  * Asking changes nothing. A question naming a kind or a field the declaration does not hold is refused, not answered empty.
  */
+import { readPlainJson } from "@apnex/shape-check";
 import { type CompiledDeclaration, compileDeclaration, type GraphDeclaration } from "./declaration.js";
 import type { Referrer } from "./references.js";
 import { type GraphRefusal, refuse } from "./refusal.js";
@@ -47,26 +48,37 @@ export interface EntityGraph {
 const byId = (a: { id: string }, b: { id: string }): number => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
 const isList = (value: unknown): value is unknown[] => Array.isArray(value);
 
-/** The filter's problem, as the subject of a refusal, or null when it names declared kinds and fields alone. */
-function filterProblem(filter: unknown, declaration: CompiledDeclaration): string | null {
-	if (filter === undefined) return null;
-	if (typeof filter !== "object" || filter === null || Array.isArray(filter)) return "filter";
-	for (const key of Object.keys(filter)) if (key !== "kinds" && key !== "fields") return `filter.${key}`;
-	const { kinds, fields } = filter as { kinds?: unknown; fields?: unknown };
-	if (kinds !== undefined && (!isList(kinds) || !kinds.every((k) => typeof k === "string" && declaration.kinds.has(k)))) return "filter.kinds";
-	if (fields !== undefined && (!isList(fields) || !fields.every((f) => typeof f === "string" && declaration.fields.has(f)))) return "filter.fields";
-	return null;
+/**
+ * A filter read once as plain JSON, naming declared kinds and fields alone, or the subject of its refusal: a getter or a Proxy is
+ * refused rather than run, and what is checked is what is used.
+ */
+function readFilter(input: unknown, declaration: CompiledDeclaration): { filter: { kinds?: readonly string[]; fields?: readonly string[] } } | { problem: string } {
+	if (input === undefined) return { filter: {} };
+	const read = readPlainJson(input);
+	if (!read.ok || typeof read.value !== "object" || read.value === null || Array.isArray(read.value)) return { problem: "filter" };
+	const value = read.value as Record<string, unknown>;
+	for (const key of Object.keys(value)) if (key !== "kinds" && key !== "fields") return { problem: `filter.${key}` };
+	const { kinds, fields } = value;
+	if (kinds !== undefined && (!isList(kinds) || !kinds.every((k) => typeof k === "string" && declaration.kinds.has(k)))) return { problem: "filter.kinds" };
+	if (fields !== undefined && (!isList(fields) || !fields.every((f) => typeof f === "string" && declaration.fields.has(f)))) return { problem: "filter.fields" };
+	return { filter: { ...(kinds !== undefined ? { kinds: kinds as string[] } : {}), ...(fields !== undefined ? { fields: fields as string[] } : {}) } };
 }
 
 /** Makes a graph from a declaration, or refuses the declaration or the first entities, naming what is wrong. */
-export function createEntityGraph(declaration: GraphDeclaration, opening: GraphOpening = {}): { ok: true; graph: EntityGraph } | { ok: false; refusal: GraphRefusal } {
+export function createEntityGraph(declaration: GraphDeclaration, opening?: GraphOpening): { ok: true; graph: EntityGraph } | { ok: false; refusal: GraphRefusal } {
 	const compiled = compileDeclaration(declaration);
 	if (!compiled.ok) return compiled;
 	const d = compiled.declaration;
-	const start = opening.position ?? 0;
-	if (typeof start !== "number" || !Number.isSafeInteger(start) || start < 0) return { ok: false, refusal: refuse("invalid-change", "position") };
+	// the opening read once as plain JSON (D12): none opens an empty graph at 0, and anything not plain data is refused
+	const read = opening === undefined ? { ok: true as const, value: {} } : readPlainJson(opening);
+	if (!read.ok || typeof read.value !== "object" || read.value === null || Array.isArray(read.value)) return { ok: false, refusal: refuse("invalid-opening", "opening") };
+	const { position: start = 0, entities = [], ...rest } = read.value as Record<string, unknown>;
+	const stray = Object.keys(rest)[0];
+	if (stray !== undefined) return { ok: false, refusal: refuse("invalid-opening", `opening.${stray}`) };
+	if (typeof start !== "number" || !Number.isSafeInteger(start) || start < 0) return { ok: false, refusal: refuse("invalid-opening", "opening.position") };
+	if (!Array.isArray(entities)) return { ok: false, refusal: refuse("invalid-opening", "opening.entities") };
 	const view = new EntityView(d, start);
-	const filled = view.fill(opening.entities ?? []);
+	const filled = view.fill(entities);
 	if (!filled.ok) return filled;
 
 	const query = (subject: string) => ({ ok: false as const, refusal: refuse("invalid-query", subject) });
@@ -85,11 +97,12 @@ export function createEntityGraph(declaration: GraphDeclaration, opening: GraphO
 			if (!d.kinds.has(kind)) return query("kind");
 			return { ok: true, position: at(), entities: view.all(kind) };
 		},
-		referrersOf(targetId, filter) {
+		referrersOf(targetId, input) {
 			if (!isId(targetId)) return query("targetId");
-			const problem = filterProblem(filter, d);
-			if (problem !== null) return query(problem);
-			const referrers = view.index.referrersOf(targetId).filter((r) => (filter?.kinds === undefined || filter.kinds.includes(r.kind)) && (filter?.fields === undefined || filter.fields.includes(r.field)));
+			const read = readFilter(input, d);
+			if ("problem" in read) return query(read.problem);
+			const filter = read.filter;
+			const referrers = view.index.referrersOf(targetId).filter((r) => (filter.kinds === undefined || filter.kinds.includes(r.kind)) && (filter.fields === undefined || filter.fields.includes(r.field)));
 			return { ok: true, position: at(), referrers };
 		},
 		targetsOf(id, field) {
@@ -108,22 +121,24 @@ export function createEntityGraph(declaration: GraphDeclaration, opening: GraphO
 			const owners = [...new Set(view.index.referrersOf(memberId).filter((r) => r.kind === containerKind).map((r) => r.id))];
 			return { ok: true, position: at(), owners };
 		},
-		reachable(fromId, filter) {
+		reachable(fromId, input) {
 			if (!isId(fromId)) return query("fromId");
-			const problem = filterProblem(filter, d);
-			if (problem !== null) return query(problem);
+			const read = readFilter(input, d);
+			if ("problem" in read) return query(read.problem);
+			const filter = read.filter;
 			// every identity reached by a path of one or more references: the start only when a cycle leads back to it, and an
 			// identity the view does not hold reached, as held, leading nowhere further (D13)
+			// the queue is read by a moving index, never shifted, so a walk costs what it reaches
 			const reachedIds = new Set<string>();
 			const queue = [fromId];
-			while (queue.length > 0) {
-				const from = queue.shift() as string;
+			for (let next = 0; next < queue.length; next++) {
+				const from = queue[next] as string;
 				if (view.get(from) === undefined) continue;
 				for (const [f, ids] of view.index.targetsOf(from)) {
-					if (filter?.fields !== undefined && !filter.fields.includes(f)) continue;
+					if (filter.fields !== undefined && !filter.fields.includes(f)) continue;
 					for (const t of ids) {
 						const kind = view.get(t)?.kind ?? null;
-						if (reachedIds.has(t) || (filter?.kinds !== undefined && (kind === null || !filter.kinds.includes(kind)))) continue;
+						if (reachedIds.has(t) || (filter.kinds !== undefined && (kind === null || !filter.kinds.includes(kind)))) continue;
 						reachedIds.add(t);
 						queue.push(t);
 					}
