@@ -1,7 +1,7 @@
 // dated-graph-view - CONTRACT.md's row: answers what an entity refers to, what refers to it, and what can be reached
 // from it by following references, each answer stating the store position it reflects and true of the entities as
 // they stood at that position; asking changes nothing. M1 (docs/DECISIONS.md D10): changes are taken in, in position
-// order, whole or not at all; the view is first filled from entities stated with their position (D11).
+// order, whole or not at all; the view is first filled from entities stated with their position (D12).
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createEntityGraph } from "../../dist/index.js";
@@ -57,18 +57,22 @@ test("referrersOf answers every referrer by kind, id and field, in id order, fil
 test("ownerOf answers every entity of the container kind holding the member, in id order", () => {
 	const g = open({ position: 1, entities: [put("member", "m1"), put("member", "m2"), put("team", "red", { members: ["m1", "m2"] }), put("team", "blue", { members: ["m2"] })] });
 	assert.deepEqual(g.ownerOf("m1", "team"), { ok: true, position: 1, owners: ["red"] });
-	assert.deepEqual(g.ownerOf("m2", "team"), { ok: true, position: 1, owners: ["blue", "red"] }, "two containers: both answered (D12)");
+	assert.deepEqual(g.ownerOf("m2", "team"), { ok: true, position: 1, owners: ["blue", "red"] }, "two containers: both answered (D13)");
 	assert.deepEqual(g.ownerOf("m3", "team").owners, []);
 });
 
-test("reachable follows references outward, transitively, each entity once, never the start, in id order, through a cycle", () => {
+test("reachable follows references outward, transitively, each identity once, the start only through a cycle, an absent target leading nowhere (D13)", () => {
 	const g = open({ position: 4, entities: [
 		put("task", "a", { waitsOn: ["b"], team: "t" }), put("task", "b", { waitsOn: ["c"] }), put("task", "c", { waitsOn: ["a", "gone"] }), put("team", "t", { members: [] }),
+		put("task", "d", { waitsOn: ["b"] }),
 	] });
-	assert.deepEqual(g.reachable("a"), { ok: true, position: 4, reached: [{ kind: "task", id: "b" }, { kind: "task", id: "c" }, { kind: "team", id: "t" }] });
-	assert.deepEqual(ids(g.reachable("a", { fields: ["waitsOn"] }).reached), ["b", "c"], "following one field");
-	assert.deepEqual(ids(g.reachable("a", { kinds: ["team"] }).reached), ["t"], "entering one kind");
-	assert.deepEqual(g.reachable("absent").reached, []);
+	assert.deepEqual(g.reachable("a"), { ok: true, position: 4, reached: [
+		{ kind: "task", id: "a" }, { kind: "task", id: "b" }, { kind: "task", id: "c" }, { kind: null, id: "gone" }, { kind: "team", id: "t" },
+	] }, "the start, through the cycle; gone, held and absent");
+	assert.deepEqual(ids(g.reachable("d").reached), ["a", "b", "c", "gone", "t"], "no cycle returns to d");
+	assert.deepEqual(ids(g.reachable("a", { fields: ["waitsOn"] }).reached), ["a", "b", "c", "gone"], "following one field");
+	assert.deepEqual(ids(g.reachable("a", { kinds: ["team"] }).reached), ["t"], "entering one kind; an absent target is of no kind");
+	assert.deepEqual(g.reachable("gone").reached, [], "an absent entity holds nothing");
 });
 
 test("a change lands whole or not at all: one bad item refuses the change, naming it, and every answer stays as it was", () => {
@@ -90,7 +94,7 @@ test("changes are taken in position order: a change at or before the view's posi
 		const r = g.applyChange({ position, items: [put("tag", "t1")] });
 		assert.equal(r.refusal?.code, "stale-position", `position ${position}`);
 	}
-	assert.equal(g.applyChange({ position: 9, items: [put("tag", "t1")] }).ok, true, "a later position, gaps allowed (D11)");
+	assert.equal(g.applyChange({ position: 9, items: [put("tag", "t1")] }).ok, true, "a later position, gaps allowed (D12)");
 });
 
 test("a change's items are checked: references held as declared, an identity in one kind, a delete of what exists, one item per entity", () => {

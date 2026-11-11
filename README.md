@@ -10,5 +10,6 @@ Planning, undo and the store port come in later milestones (`docs/BUILD-PLAN.md`
 - `CONTRACT.md` - what a consumer can depend on, one capability per row.
 - `docs/DECISIONS.md` - the rulings about this component.
 - `docs/BUILD-PLAN.md` - how it is built, milestone by milestone.
+- `corpus/` - the neutral corpus, written from the contract by an agent other than the implementer; every case runs in the gate.
 
 It belongs to the component set composed by zorg (`apnex/zorg`, `BL33`) and drawv2 (`apnex/drawv2`).

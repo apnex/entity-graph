@@ -92,7 +92,7 @@ export class EntityView {
 		return this.land(position, change["items"], false);
 	}
 
-	/** Fills an empty view from entities stated with its position: the first fill (docs/DECISIONS.md D11). */
+	/** Fills an empty view from entities stated with its position: the first fill (docs/DECISIONS.md D12). */
 	fill(entities: unknown): { ok: true; position: number } | { ok: false; refusal: GraphRefusal } {
 		return this.land(this.current, entities, true);
 	}

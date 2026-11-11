@@ -196,13 +196,15 @@ Writing them as mechanism in `VISION.md` - `D2` keeps mechanism out of the visio
 
 **Ruling.**\
 The build plan is carried into this repository as `docs/BUILD-PLAN.md`, and its first milestone is built.\
-`dated-graph-view` is served in memory: a graph made from the declaration takes in each change in position order, whole or not at all, and answers `get`, `all`, `referrersOf`, `targetsOf`, `ownerOf` and `reachable`, each answer stating the position it reflects (`D11`, `D12`, `D13`).\
-The declaration is read as far as the view needs: the kinds, and each reference with the declared kinds it may target, how many targets it holds (`holds: "one" | "many"`), and the values of the rule options, whose effects are planning's.\
+`dated-graph-view` is served in memory: a graph made from the declaration takes in each change in position order, whole or not at all, and answers `get`, `all`, `referrersOf`, `targetsOf`, `ownerOf` and `reachable`, each answer stating the position it reflects.\
+The declaration is read as far as the view needs: the kinds, and each reference with its field, the declared kinds it may target, how many targets it holds and the rule options, whose values are checked here and whose effects are planning's.\
 A kind's shape, conditions, consequences and intent resolver, and the phases, are accepted and not yet read.\
 `graph-declaration` is deferred until M4 serves every member of it, `plan-graph-change` until M2 to M4, `reversible-history` until M5 and `positioned-graph-sync` until M6, each named under this ruling in `export-map.json`'s `deferred`.\
 A change holds at most 2,000 items (`GRAPH_LIMITS.maxChangeItems`), the bound the reference store places on one change.\
 A refusal is a `GraphRefusal` in the shared form, its `details.ruleKey` the refusal's code until planning brings rules, `measure` 1, and `opIndex` the index of the item that faults, or `-1`.\
-The scaffold follows the released components: `engines >=22` and `.nvmrc` 22, `shape-check` taken as its `0.1.0` release file, a gate on Node 22 and 24 with the consumer test, no release workflow until M8, and a vocabulary check refusing draw's listed words in `src/` (`tools/check-vocabulary.mjs`, taken from snap-grid's); zorg's repositories hold no list today.
+The scaffold follows the released components: `engines >=22` and `.nvmrc` 22, `shape-check` taken as its `0.1.0` release file, a gate on Node 22 and 24 with the consumer test, no release workflow until M8, and a vocabulary check refusing draw's listed words in `src/` (`tools/check-vocabulary.mjs`, taken from snap-grid's); zorg's repositories hold no list today.\
+The neutral corpus's first batch (`corpus/`, written by another agent) runs in the gate, every case unedited (`test/corpus.test.js`); its files are never edited here, so the docs check does not hold them to the repository's style (`tools/check-docs.sh`), which is their author's to keep.\
+Where the contract leaves a question open or owes a decision, M1 adopts the readings `D11` to `D14` propose, for zorg's review.
 
 **Why.**\
 The plan's M1 lands a dated reverse index usable alone, needing nothing still being built, and the rows not yet served are deferred with a ruling so the export map says exactly what the package offers.\
@@ -214,19 +216,41 @@ Taking the corpus's view cases as M1's only acceptance - the Exactness property 
 
 ---
 
-## D11 - The view is first filled from entities stated with their position, then takes in each later change in order
+## D11 - Proposed reading: the declaration is a list of kinds, each with a list of references, the options the contract gives no default required
 
-**Ruled by:** the builder of M1, 2026-11-11, under the build plan's decisions owed before M1 (`docs/BUILD-PLAN.md`, section 4; `CONTRACT.md`, *Design owed*).\
-**Affects:** `src/view.ts`, `src/entity-graph.ts`.
+**Proposed by:** the builder of M1, 2026-11-11, for zorg's review; it reads `CONTRACT.md`'s *Reference rules* where the contract fixes no form (*Design owed*, the exact signatures).\
+**Affects:** `src/declaration.ts`.
 
-**Ruling.**\
-A graph starts from the entities it is given and the position they reflect, as a reading of a store at that position gives them, or empty at position 0.\
-Every change taken in afterwards states a position after the view's, and the view moves to it; a change at or before the view's position is refused, `stale-position`, and changes nothing.\
-A change states each entity's whole state after it, or its deletion, as a store's list of changes does, and is checked whole, against the view as the items before it leave it, before any item is applied.\
-A gap between positions is allowed, since a store may give positions to changes this graph does not take in; whether a gap means a missed change, and what the graph does when the store no longer holds the position it needs, are settled with the store port at M6.
+**Reading.**\
+A declaration is `{ kinds: [ { kind, references: [ { field, targets, holds, onTargetDelete, exclusivity?, min?, onBelowMin?, onUnreferenced? } ] } ] }`, lists rather than objects, so the order of kinds and of references is the order written, and a kind or a field written twice is refused.\
+`targets`, `holds` (`"one"` or `"many"`) and `onTargetDelete` are required, since the contract says a reference declares each and gives none a default; `exclusivity` is optional, absent meaning not exclusive; `onUnreferenced` is optional, `"keep"` when absent.\
+`min` and `onBelowMin` are declared together, either alone refused, and `min` is a whole number from 0, at most 1 where a reference holds one target.\
+An option the contract does not name is refused, and named, before a missing one is reported; a reference may target a kind declared after it.\
+A refusal's `details.subject` names the kind, the field and the member at fault, and the undeclared kind a reference targets.\
+These are the corpus's readings `R2`, `R9`, `R10`, `R11`, `R12` and `R13` (`corpus/README.md`), and the form is its declaration's; draw declares its kinds as such a list of rows (draw's `model/shape.mjs`).
 
 **Why.**\
-Exactness asks every answer to be true at the position it states, so a change is applied whole and only in order, and an answer given is never changed by a later change.
+An option silently defaulted, or an unknown one silently ignored, is a rule the application did not state or a rule not kept; a written order serves the declared order of consequences and phases the later milestones read.
+
+**Alternatives refuted.**\
+Kinds and references as objects keyed by name - a duplicate cannot be written, so it cannot be refused, and an integer-like name reorders.
+
+---
+
+## D12 - Proposed reading: the view is first filled from entities stated with their position, and takes in each later change in order, applying no rule
+
+**Proposed by:** the builder of M1, 2026-11-11, for zorg's review, on the build plan's decision owed before M1 (`docs/BUILD-PLAN.md`, section 4; `CONTRACT.md`, *Design owed*).\
+**Affects:** `src/view.ts`, `src/entity-graph.ts`.
+
+**Reading.**\
+A graph starts from the entities it is given and the position they reflect, as a reading of a store at that position gives them, or empty at position 0; the corpus leaves the first fill uncovered, and asks only that filling and landing the entities as one change answer alike.\
+Every change taken in afterwards states a position after the view's, which the view moves to; a change at or before it is refused, `stale-position`, and changes nothing; a gap between positions is allowed (the corpus's `R7`, `R7a`).\
+A change states each entity's whole state after it, or its deletion, and is checked whole, against the view as the items before it leave it, before any item is applied.\
+Taking a change in applies no reference rule: a deleted target leaves its referrers' references, and a reference to an absent target or a target of a kind the reference does not allow, an exclusive target held twice and a reference below its minimum are each held as they stand (the corpus's `R3`); only a form the declaration cannot hold, such as a list in a one-target reference, is refused, `invalid-reference`.\
+What the graph does when the store no longer holds the position it needs, and whether a gap means a missed change, are settled with the store port at M6.
+
+**Why.**\
+Exactness asks every answer to be true at the position it states, so a change is applied whole and only in order; and the store is the record, so the view reflects what it holds rather than judging writes that have already landed (`VISION.md`, *Not a gate on other writers*).
 
 **Alternatives refuted.**\
 Taking changes as patches - a store's changes carry whole states, and a patch applied to a missed state would answer wrongly with nothing to show it.\
@@ -234,42 +258,40 @@ Refusing any gap - a store numbering every change of every kind would refuse a g
 
 ---
 
-## D12 - `reachable` follows references outward; a filter names kinds and fields; `ownerOf` answers every container holding the member
+## D13 - Proposed reading: answers read the references entities hold; `reachable` goes forward; a filter names kinds and fields; `ownerOf` answers every holder
 
-**Ruled by:** the builder of M1, 2026-11-11, under the build plan's decisions owed before M1 (`docs/BUILD-PLAN.md`, section 4; `CONTRACT.md`, *Design owed*).\
+**Proposed by:** the builder of M1, 2026-11-11, for zorg's review, on the build plan's decisions owed before M1 (`docs/BUILD-PLAN.md`, section 4; `CONTRACT.md`, *Design owed*).\
 **Affects:** `src/entity-graph.ts`, `src/references.ts`.
 
-**Ruling.**\
-`reachable(fromId, filter?)` follows references from the entity that holds them to their targets, transitively, answering each entity the view holds once, never the start, in identity order.\
-A filter is `{ kinds?, fields? }`: `fields` names the reference fields followed, and `kinds` the kinds an answered entity may be - for `reachable` the kinds it enters, for `referrersOf` the kinds of the referrers.\
-`ownerOf(memberId, containerKind)` answers `owners`, every entity of the container kind holding the member in any reference, in identity order; under an exclusive reference there is at most one, and where there are more, all are answered.\
-`referrersOf` answers each referrer's kind, identity and field, in identity then field order; `targetsOf` answers each target with its field and its kind, or `null` when the view holds no entity of that identity, in declaration order then the order the record holds them.\
-A reference to an identity the view does not hold is answered as held, since a fresh reading of the records holds it.\
+**Reading.**\
+An answer is what a fresh reading of the records at its position gives, so a reference to an identity the view does not hold is answered as held; an absent entity holds nothing (the corpus's `R4`).\
+`reachable(fromId, filter?)` follows references forward, from the entity holding a reference to its target, transitively, and answers every identity reached by one or more references: the start only when a cycle leads back to it, and an absent target reached and leading nowhere further, its kind `null` (the corpus's `R5`, `R5a`, `R5b`).\
+`ownerOf(memberId, containerKind)` answers `owners`, every entity of the container kind holding the member directly in any of its references, in identity order; the corpus's `R6` reads one holder or `null` and leaves two holders owed, and where there are two this reading answers both rather than choosing one.\
+A filter is `{ kinds?, fields? }`: `fields` names the reference fields followed, and `kinds` the kinds an answered entity may be - for `reachable` the kinds it enters, an absent target being of no kind, and for `referrersOf` the kinds of the referrers; the corpus uses no filter.\
+`referrersOf` answers each referrer's kind, identity and field, in identity then field order; `targetsOf` answers each target with its field and its kind, or `null`, in declaration order then the order the record holds them; `all` answers in identity order.\
 A question naming a kind or a field the declaration does not hold is refused, `invalid-query`, and is not answered empty.
 
 **Why.**\
-Each answer is what a fresh reading of the records at its position gives, so none hides a reference the records hold, and an order fixed by identity makes two readings of one position equal.\
-Answering one owner where two exist would hide the breach an exclusive reference exists to prevent.
+None of these answers hides a reference the records hold, and an order fixed by identity makes two readings of one position equal; answering one owner where two exist would hide the breach an exclusive reference exists to prevent.
 
 **Alternatives refuted.**\
-Following references in both directions in `reachable` - `referrersOf` answers the inward question, and a two-way reach answers a different question under the same name.\
+Following references both ways in `reachable` - `referrersOf` answers the inward question.\
 Answering one owner, the first by identity - it chooses silently.
 
 ---
 
-## D13 - An identity names one entity across every kind of a graph, and a reference holds identities in the form it declares
+## D14 - Proposed reading: an identity names one entity across every kind of a graph, and a reference holds identities in the form it declares
 
-**Ruled by:** the builder of M1, 2026-11-11, under `CONTRACT.md`'s *Identity across undo* and *Design owed*.\
+**Proposed by:** the builder of M1, 2026-11-11, for zorg's review, under `CONTRACT.md`'s *Identity across undo* and *Design owed*.\
 **Affects:** `src/view.ts`, `src/entity-graph.ts`.
 
-**Ruling.**\
-An entity's identity is the name its application gives it, and it names one entity across every kind of the graph, since references hold identities alone; a change putting an identity an entity of another kind holds is refused, `identity-taken`.\
-A reference holding one target holds an identity, or `null`, or is left out; a reference holding many holds a list of distinct identities, or is left out; any other form is refused, `invalid-reference`.\
-Whether a target is of a kind the reference may target is a rule planning judges (M2); the view answers references as the records hold them.
+**Reading.**\
+An entity's identity is the name its application gives it, and it names one entity across every kind of the graph, since references hold identities alone; a change putting an identity an entity of another kind holds is refused, `identity-taken` (the corpus's `R1`).\
+A reference holding one target holds an identity or `null`, or is left out; one holding many holds a list of distinct identities, or is left out (the corpus's `R2`); a field the declaration names no reference is plain data, whatever it holds.\
+A rename is a deletion and a creation in one change, and referrers not rewritten keep the old identity (the corpus's `R8`).
 
 **Why.**\
-The contract's surface asks `referrersOf(targetId)`, `targetsOf(id)` and `reachable(fromId)` by identity alone, and an application naming its own entities keeps their identities across undo.\
-The reference store keeps names unique within a kind, so an application keeps its names unique across the kinds of one graph, and the store port checks it at M6.
+The contract's surface asks `referrersOf(targetId)`, `targetsOf(id)` and `reachable(fromId)` by identity alone, and an application naming its own entities keeps their identities across undo; the reference store keeps names unique within a kind, so an application keeps them unique across the kinds of one graph, and the store port checks it at M6.
 
 **Alternatives refuted.**\
 References holding a kind and a name - every question would then need both, where the contract's surface asks by identity.

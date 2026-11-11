@@ -1,7 +1,7 @@
 // exactness - the vision's Exactness, checked over random streams of changes: after every change, every answer equals what
 // a fresh reading of the entities at that position gives. The fresh reading is computed here from the records alone, by
 // code that shares nothing with the index under test.
-import { WORLD } from "./worlds.js";
+import { REFERENCES, WORLD } from "./worlds.js";
 
 /** A seeded generator (mulberry32), so a failing stream replays from its seed. */
 export function seeded(seed) {
@@ -15,8 +15,8 @@ export function seeded(seed) {
 	};
 }
 
-const KINDS = Object.keys(WORLD.kinds);
-const refsOf = (kind) => Object.entries(WORLD.kinds[kind].references ?? {});
+const KINDS = WORLD.kinds.map((k) => k.kind);
+const refsOf = (kind) => REFERENCES[kind].map((r) => [r.field, r]);
 const byId = (a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : a.field < b.field ? -1 : a.field > b.field ? 1 : 0);
 
 /** What a fresh reading of `entities` (id -> { kind, record }) answers. */
@@ -49,10 +49,10 @@ export function freshReading(entities) {
 		return { found: true, targets };
 	};
 	const ownerOf = (member, containerKind) => [...new Set(referrersOf(member, { kinds: [containerKind] }).map((r) => r.id))].sort();
+	// every identity reached by one or more references; the start only through a cycle; an absent target reached, leading nowhere
 	const reachable = (from, filter = {}) => {
-		const seen = new Set([from]);
+		const reached = new Set();
 		const queue = [from];
-		const reached = [];
 		while (queue.length) {
 			const e = entities.get(queue.shift());
 			if (!e) continue;
@@ -60,14 +60,13 @@ export function freshReading(entities) {
 				if (filter.fields && !filter.fields.includes(field)) continue;
 				for (const t of held(e.record, field, ref.holds)) {
 					const k = kindOf(t);
-					if (seen.has(t) || k === null || (filter.kinds && !filter.kinds.includes(k))) continue;
-					seen.add(t);
-					reached.push({ kind: k, id: t });
+					if (reached.has(t) || (filter.kinds && (k === null || !filter.kinds.includes(k)))) continue;
+					reached.add(t);
 					queue.push(t);
 				}
 			}
 		}
-		return reached.sort(byId);
+		return [...reached].map((id) => ({ kind: kindOf(id), id })).sort(byId);
 	};
 	const all = (kind) => [...entities].filter(([, e]) => e.kind === kind).map(([id, e]) => ({ kind, id, record: e.record })).sort(byId);
 	return { referrersOf, targetsOf, ownerOf, reachable, all };

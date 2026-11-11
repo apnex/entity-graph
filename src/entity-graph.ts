@@ -1,5 +1,5 @@
 /**
- * createEntityGraph (CONTRACT.md `dated-graph-view`; docs/DECISIONS.md D10 to D12): a graph made from the application's
+ * createEntityGraph (CONTRACT.md `dated-graph-view`; docs/DECISIONS.md D10 to D14): a graph made from the application's
  * declaration and, optionally, the entities it holds at a stated position; it takes in each later change in position order
  * and answers, each answer stating the position it reflects: an entity, a kind's entities, what refers to an entity, what an
  * entity refers to, which containers of a kind hold a member, and what can be reached from an entity by following references.
@@ -10,7 +10,7 @@ import type { Referrer } from "./references.js";
 import { type GraphRefusal, refuse } from "./refusal.js";
 import { EntityView, type GraphChange, type GraphEntity } from "./view.js";
 
-/** Where a graph starts: the position its first entities are stated at, and those entities (docs/DECISIONS.md D11). */
+/** Where a graph starts: the position its first entities are stated at, and those entities (docs/DECISIONS.md D12). */
 export interface GraphOpening {
 	position?: number;
 	entities?: readonly { kind: string; id: string; record: unknown }[];
@@ -40,7 +40,7 @@ export interface EntityGraph {
 	referrersOf(targetId: string, filter?: ReferenceFilter): Dated<{ referrers: Referrer[] }>;
 	targetsOf(id: string, field?: string): Dated<{ found: boolean; targets: HeldTarget[] }>;
 	ownerOf(memberId: string, containerKind: string): Dated<{ owners: string[] }>;
-	reachable(fromId: string, filter?: ReferenceFilter): Dated<{ reached: { kind: string; id: string }[] }>;
+	reachable(fromId: string, filter?: ReferenceFilter): Dated<{ reached: { kind: string | null; id: string }[] }>;
 	applyChange(change: GraphChange): { ok: true; position: number } | { ok: false; refusal: GraphRefusal };
 }
 
@@ -112,24 +112,25 @@ export function createEntityGraph(declaration: GraphDeclaration, opening: GraphO
 			if (!isId(fromId)) return query("fromId");
 			const problem = filterProblem(filter, d);
 			if (problem !== null) return query(problem);
-			const seen = new Set([fromId]);
+			// every identity reached by a path of one or more references: the start only when a cycle leads back to it, and an
+			// identity the view does not hold reached, as held, leading nowhere further (D13)
+			const reachedIds = new Set<string>();
 			const queue = [fromId];
-			const reached: { kind: string; id: string }[] = [];
 			while (queue.length > 0) {
 				const from = queue.shift() as string;
 				if (view.get(from) === undefined) continue;
 				for (const [f, ids] of view.index.targetsOf(from)) {
 					if (filter?.fields !== undefined && !filter.fields.includes(f)) continue;
 					for (const t of ids) {
-						const kind = view.get(t)?.kind;
-						if (seen.has(t) || kind === undefined || (filter?.kinds !== undefined && !filter.kinds.includes(kind))) continue;
-						seen.add(t);
-						reached.push({ kind, id: t });
+						const kind = view.get(t)?.kind ?? null;
+						if (reachedIds.has(t) || (filter?.kinds !== undefined && (kind === null || !filter.kinds.includes(kind)))) continue;
+						reachedIds.add(t);
 						queue.push(t);
 					}
 				}
 			}
-			return { ok: true, position: at(), reached: reached.sort(byId) };
+			const reached = [...reachedIds].map((id) => ({ kind: view.get(id)?.kind ?? null, id })).sort(byId);
+			return { ok: true, position: at(), reached };
 		},
 		applyChange(change) {
 			return view.take(change);
