@@ -1,0 +1,20 @@
+{
+  "case": "b1-36-refused-onBelowMin-without-min",
+  "batch": 1,
+  "summary": "onBelowMin declared without a minimum is refused, since it would name what happens below a minimum that does not exist.",
+  "covers": ["graph-declaration", "Reference rules"],
+  "readings": ["R9", "R11"],
+  "declare": {
+    "kinds": [
+      { "kind": "folder", "references": [
+        { "field": "notes", "targets": ["note"], "holds": "many", "onTargetDelete": "unlink", "onBelowMin": "refuse" }
+      ] },
+      { "kind": "note", "references": [
+        { "field": "tags", "targets": ["tag"], "holds": "many", "onTargetDelete": "unlink" }
+      ] },
+      { "kind": "tag", "references": [] }
+    ]
+  },
+  "verdict": "refused",
+  "refusal": { "reason": "onBelowMin-without-min", "part": "entity-graph", "names": ["folder", "notes"] }
+}

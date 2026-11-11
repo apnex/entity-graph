@@ -1,0 +1,21 @@
+{
+  "case": "b1-28-refused-duplicate-field",
+  "batch": 1,
+  "summary": "A kind declaring the same reference field twice, with different rules, is refused, since each reference is stated in one place.",
+  "covers": ["graph-declaration", "Reference rules"],
+  "readings": ["R9"],
+  "declare": {
+    "kinds": [
+      { "kind": "folder", "references": [
+        { "field": "notes", "targets": ["note"], "holds": "many", "onTargetDelete": "unlink" }
+      ] },
+      { "kind": "note", "references": [
+        { "field": "tags", "targets": ["tag"], "holds": "many", "onTargetDelete": "unlink" },
+        { "field": "tags", "targets": ["tag"], "holds": "one", "onTargetDelete": "refuse" }
+      ] },
+      { "kind": "tag", "references": [] }
+    ]
+  },
+  "verdict": "refused",
+  "refusal": { "reason": "duplicate-reference-field", "part": "entity-graph", "names": ["note", "tags"] }
+}

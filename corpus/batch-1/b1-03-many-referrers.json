@@ -1,0 +1,50 @@
+{
+  "case": "b1-03-many-referrers",
+  "batch": 1,
+  "summary": "A target held by several referrers through a non-exclusive list answers every one of them, and an unreferenced entity answers none.",
+  "covers": ["dated-graph-view", "positioned-graph-sync"],
+  "readings": ["R1", "R2", "R7", "R10"],
+  "declare": {
+    "kinds": [
+      { "kind": "folder", "references": [
+        { "field": "notes", "targets": ["note"], "holds": "many", "onTargetDelete": "unlink", "exclusivity": "refuse" }
+      ] },
+      { "kind": "note", "references": [
+        { "field": "tags", "targets": ["tag"], "holds": "many", "onTargetDelete": "unlink", "onUnreferenced": "delete" },
+        { "field": "author", "targets": ["owner"], "holds": "one", "onTargetDelete": "refuse" }
+      ] },
+      { "kind": "tag", "references": [] },
+      { "kind": "owner", "references": [
+        { "field": "folders", "targets": ["folder"], "holds": "many", "onTargetDelete": "unlink", "exclusivity": "steal" }
+      ] }
+    ]
+  },
+  "verdict": "accepted",
+  "steps": [
+    { "start": { "position": 0, "entities": [
+      { "kind": "tag", "id": "t1", "record": { "title": "urgent" } },
+      { "kind": "tag", "id": "t2", "record": { "title": "later" } },
+      { "kind": "tag", "id": "t3", "record": { "title": "someday" } },
+      { "kind": "note", "id": "n1", "record": { "title": "One", "tags": ["t1", "t2"], "author": null } },
+      { "kind": "note", "id": "n2", "record": { "title": "Two", "tags": ["t1"], "author": null } },
+      { "kind": "note", "id": "n3", "record": { "title": "Three", "tags": [], "author": null } }
+    ] } },
+    { "ask": { "position": 0, "questions": [
+      { "q": "referrersOf", "id": "t1", "answer": [ { "kind": "note", "id": "n1", "field": "tags" }, { "kind": "note", "id": "n2", "field": "tags" } ] },
+      { "q": "referrersOf", "id": "t2", "answer": [ { "kind": "note", "id": "n1", "field": "tags" } ] },
+      { "q": "referrersOf", "id": "t3", "answer": [] },
+      { "q": "targetsOf", "id": "n1", "answer": [ { "field": "tags", "id": "t1" }, { "field": "tags", "id": "t2" } ] },
+      { "q": "targetsOf", "id": "n1", "field": "author", "answer": [] },
+      { "q": "targetsOf", "id": "n3", "answer": [] }
+    ] } },
+    { "take": { "position": 1, "writes": [
+      { "op": "put", "kind": "note", "id": "n3", "record": { "title": "Three", "tags": ["t1", "t3"], "author": null } }
+    ] } },
+    { "ask": { "position": 1, "questions": [
+      { "q": "referrersOf", "id": "t1", "answer": [ { "kind": "note", "id": "n1", "field": "tags" }, { "kind": "note", "id": "n2", "field": "tags" }, { "kind": "note", "id": "n3", "field": "tags" } ] },
+      { "q": "referrersOf", "id": "t2", "answer": [ { "kind": "note", "id": "n1", "field": "tags" } ] },
+      { "q": "referrersOf", "id": "t3", "answer": [ { "kind": "note", "id": "n3", "field": "tags" } ] },
+      { "q": "targetsOf", "id": "n3", "field": "tags", "answer": ["t1", "t3"] }
+    ] } }
+  ]
+}

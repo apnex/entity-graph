@@ -1,0 +1,20 @@
+{
+  "case": "b1-29-refused-target-count-undeclared",
+  "batch": 1,
+  "summary": "A reference that does not declare how many targets it holds is refused.",
+  "covers": ["graph-declaration", "Reference rules"],
+  "readings": ["R2", "R9", "R10"],
+  "declare": {
+    "kinds": [
+      { "kind": "folder", "references": [
+        { "field": "notes", "targets": ["note"], "holds": "many", "onTargetDelete": "unlink" }
+      ] },
+      { "kind": "note", "references": [
+        { "field": "tags", "targets": ["tag"], "onTargetDelete": "unlink" }
+      ] },
+      { "kind": "tag", "references": [] }
+    ]
+  },
+  "verdict": "refused",
+  "refusal": { "reason": "target-count-undeclared", "part": "entity-graph", "names": ["note", "tags"] }
+}

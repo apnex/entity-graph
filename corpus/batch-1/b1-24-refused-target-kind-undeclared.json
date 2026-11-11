@@ -1,0 +1,19 @@
+{
+  "case": "b1-24-refused-target-kind-undeclared",
+  "batch": 1,
+  "summary": "A reference that targets a kind the declaration does not declare is refused, since no kind is built in.",
+  "covers": ["graph-declaration", "Reference rules"],
+  "readings": ["R9"],
+  "declare": {
+    "kinds": [
+      { "kind": "folder", "references": [
+        { "field": "notes", "targets": ["note"], "holds": "many", "onTargetDelete": "unlink" }
+      ] },
+      { "kind": "note", "references": [
+        { "field": "tags", "targets": ["tag"], "holds": "many", "onTargetDelete": "unlink" }
+      ] }
+    ]
+  },
+  "verdict": "refused",
+  "refusal": { "reason": "target-kind-undeclared", "part": "entity-graph", "names": ["note", "tags", "tag"] }
+}

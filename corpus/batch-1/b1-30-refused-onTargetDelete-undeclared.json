@@ -1,0 +1,20 @@
+{
+  "case": "b1-30-refused-onTargetDelete-undeclared",
+  "batch": 1,
+  "summary": "A reference that does not declare what becomes of the referrer when a target is deleted is refused, since onTargetDelete has no default and no rule is built in.",
+  "covers": ["graph-declaration", "Reference rules"],
+  "readings": ["R9", "R10"],
+  "declare": {
+    "kinds": [
+      { "kind": "folder", "references": [
+        { "field": "notes", "targets": ["note"], "holds": "many", "onTargetDelete": "unlink" }
+      ] },
+      { "kind": "note", "references": [
+        { "field": "tags", "targets": ["tag"], "holds": "many" }
+      ] },
+      { "kind": "tag", "references": [] }
+    ]
+  },
+  "verdict": "refused",
+  "refusal": { "reason": "onTargetDelete-undeclared", "part": "entity-graph", "names": ["note", "tags"] }
+}

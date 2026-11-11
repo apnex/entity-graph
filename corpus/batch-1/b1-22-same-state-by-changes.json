@@ -1,0 +1,72 @@
+{
+  "case": "b1-22-same-state-by-changes",
+  "batch": 1,
+  "summary": "Reaching the entities b1-15 starts from by four changes with detours gives the same answers b1-15 gives at its start, as a fresh reading of those entities would.",
+  "covers": ["dated-graph-view", "positioned-graph-sync"],
+  "readings": ["R1", "R2", "R4", "R5", "R5a", "R7"],
+  "declare": {
+    "kinds": [
+      { "kind": "folder", "references": [
+        { "field": "notes", "targets": ["note"], "holds": "many", "onTargetDelete": "unlink", "exclusivity": "refuse" }
+      ] },
+      { "kind": "note", "references": [
+        { "field": "tags", "targets": ["tag"], "holds": "many", "onTargetDelete": "unlink", "onUnreferenced": "delete" },
+        { "field": "author", "targets": ["owner"], "holds": "one", "onTargetDelete": "refuse" }
+      ] },
+      { "kind": "tag", "references": [] },
+      { "kind": "owner", "references": [
+        { "field": "folders", "targets": ["folder"], "holds": "many", "onTargetDelete": "unlink", "exclusivity": "steal" }
+      ] }
+    ]
+  },
+  "verdict": "accepted",
+  "steps": [
+    { "start": { "position": 0, "entities": [] } },
+    { "take": { "position": 1, "writes": [
+      { "op": "put", "kind": "owner", "id": "o1", "record": { "title": "Ada", "folders": [] } },
+      { "op": "put", "kind": "folder", "id": "f1", "record": { "title": "Inbox", "notes": [] } },
+      { "op": "put", "kind": "tag", "id": "t1", "record": { "title": "urgent" } },
+      { "op": "put", "kind": "tag", "id": "t3", "record": { "title": "spare" } }
+    ] } },
+    { "take": { "position": 2, "writes": [
+      { "op": "put", "kind": "note", "id": "n1", "record": { "title": "One", "tags": ["t1", "t3"], "author": null } },
+      { "op": "put", "kind": "note", "id": "n2", "record": { "title": "Two", "tags": [], "author": "o1" } },
+      { "op": "put", "kind": "owner", "id": "o2", "record": { "title": "Grace", "folders": ["f1"] } }
+    ] } },
+    { "ask": { "position": 2, "questions": [
+      { "q": "referrersOf", "id": "f1", "answer": [ { "kind": "owner", "id": "o2", "field": "folders" } ] },
+      { "q": "referrersOf", "id": "o1", "answer": [ { "kind": "note", "id": "n2", "field": "author" } ] },
+      { "q": "referrersOf", "id": "t3", "answer": [ { "kind": "note", "id": "n1", "field": "tags" } ] },
+      { "q": "reachable", "from": "o2", "answer": ["f1"] },
+      { "q": "reachable", "from": "n2", "answer": ["o1"] },
+      { "q": "reachable", "from": "n1", "answer": ["t1", "t3"] }
+    ] } },
+    { "take": { "position": 3, "writes": [
+      { "op": "put", "kind": "folder", "id": "f1", "record": { "title": "Inbox", "notes": ["n1", "n2"] } },
+      { "op": "put", "kind": "owner", "id": "o1", "record": { "title": "Ada", "folders": ["f1"] } },
+      { "op": "put", "kind": "owner", "id": "o2", "record": { "title": "Grace", "folders": [] } },
+      { "op": "put", "kind": "tag", "id": "t2", "record": { "title": "later" } }
+    ] } },
+    { "take": { "position": 4, "writes": [
+      { "op": "del", "kind": "tag", "id": "t3" },
+      { "op": "put", "kind": "note", "id": "n1", "record": { "title": "One", "tags": ["t1"], "author": "o1" } },
+      { "op": "put", "kind": "note", "id": "n2", "record": { "title": "Two", "tags": ["t2"], "author": "o2" } }
+    ] } },
+    { "ask": { "position": 4, "questions": [
+      { "q": "reachable", "from": "o1", "answer": ["o1", "f1", "n1", "n2", "t1", "t2", "o2"] },
+      { "q": "reachable", "from": "f1", "answer": ["o1", "f1", "n1", "n2", "t1", "t2", "o2"] },
+      { "q": "reachable", "from": "n1", "answer": ["o1", "f1", "n1", "n2", "t1", "t2", "o2"] },
+      { "q": "reachable", "from": "n2", "answer": ["t2", "o2"] },
+      { "q": "reachable", "from": "o2", "answer": [] },
+      { "q": "reachable", "from": "t1", "answer": [] },
+      { "q": "referrersOf", "id": "t3", "answer": [] },
+      { "q": "referrersOf", "id": "f1", "answer": [ { "kind": "owner", "id": "o1", "field": "folders" } ] },
+      { "q": "referrersOf", "id": "o1", "answer": [ { "kind": "note", "id": "n1", "field": "author" } ] },
+      { "q": "referrersOf", "id": "o2", "answer": [ { "kind": "note", "id": "n2", "field": "author" } ] },
+      { "q": "get", "kind": "tag", "id": "t3", "answer": null },
+      { "q": "all", "kind": "tag", "answer": ["t1", "t2"] },
+      { "q": "all", "kind": "owner", "answer": ["o1", "o2"] },
+      { "q": "get", "kind": "owner", "id": "o2", "answer": { "title": "Grace", "folders": [] } }
+    ] } }
+  ]
+}

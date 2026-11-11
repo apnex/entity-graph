@@ -1,0 +1,49 @@
+{
+  "case": "b1-06-absent-target",
+  "batch": 1,
+  "summary": "A reference to an absent target is indexed from both ends, and creating the target later changes no reference answer but makes the entity readable.",
+  "covers": ["dated-graph-view", "positioned-graph-sync"],
+  "readings": ["R1", "R2", "R3", "R4", "R7"],
+  "declare": {
+    "kinds": [
+      { "kind": "folder", "references": [
+        { "field": "notes", "targets": ["note"], "holds": "many", "onTargetDelete": "unlink", "exclusivity": "refuse" }
+      ] },
+      { "kind": "note", "references": [
+        { "field": "tags", "targets": ["tag"], "holds": "many", "onTargetDelete": "unlink", "onUnreferenced": "delete" },
+        { "field": "author", "targets": ["owner"], "holds": "one", "onTargetDelete": "refuse" }
+      ] },
+      { "kind": "tag", "references": [] },
+      { "kind": "owner", "references": [
+        { "field": "folders", "targets": ["folder"], "holds": "many", "onTargetDelete": "unlink", "exclusivity": "steal" }
+      ] }
+    ]
+  },
+  "verdict": "accepted",
+  "steps": [
+    { "start": { "position": 0, "entities": [
+      { "kind": "tag", "id": "t1", "record": { "title": "urgent" } },
+      { "kind": "note", "id": "n1", "record": { "title": "Minutes", "tags": ["t1", "t9"], "author": "o9" } }
+    ] } },
+    { "ask": { "position": 0, "questions": [
+      { "q": "targetsOf", "id": "n1", "answer": [ { "field": "tags", "id": "t1" }, { "field": "tags", "id": "t9" }, { "field": "author", "id": "o9" } ] },
+      { "q": "referrersOf", "id": "o9", "answer": [ { "kind": "note", "id": "n1", "field": "author" } ] },
+      { "q": "referrersOf", "id": "t9", "answer": [ { "kind": "note", "id": "n1", "field": "tags" } ] },
+      { "q": "get", "kind": "owner", "id": "o9", "answer": null },
+      { "q": "get", "kind": "tag", "id": "t9", "answer": null },
+      { "q": "all", "kind": "owner", "answer": [] },
+      { "q": "all", "kind": "tag", "answer": ["t1"] }
+    ] } },
+    { "take": { "position": 1, "writes": [
+      { "op": "put", "kind": "owner", "id": "o9", "record": { "title": "Lin", "folders": [] } }
+    ] } },
+    { "ask": { "position": 1, "questions": [
+      { "q": "referrersOf", "id": "o9", "answer": [ { "kind": "note", "id": "n1", "field": "author" } ] },
+      { "q": "get", "kind": "owner", "id": "o9", "answer": { "title": "Lin", "folders": [] } },
+      { "q": "all", "kind": "owner", "answer": ["o9"] },
+      { "q": "targetsOf", "id": "n1", "field": "author", "answer": ["o9"] },
+      { "q": "referrersOf", "id": "t9", "answer": [ { "kind": "note", "id": "n1", "field": "tags" } ] },
+      { "q": "targetsOf", "id": "o9", "answer": [] }
+    ] } }
+  ]
+}

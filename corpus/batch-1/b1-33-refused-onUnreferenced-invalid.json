@@ -1,0 +1,20 @@
+{
+  "case": "b1-33-refused-onUnreferenced-invalid",
+  "batch": 1,
+  "summary": "An onUnreferenced value outside keep and delete is refused, even one that is valid for another option.",
+  "covers": ["graph-declaration", "Reference rules"],
+  "readings": ["R9"],
+  "declare": {
+    "kinds": [
+      { "kind": "folder", "references": [
+        { "field": "notes", "targets": ["note"], "holds": "many", "onTargetDelete": "unlink" }
+      ] },
+      { "kind": "note", "references": [
+        { "field": "tags", "targets": ["tag"], "holds": "many", "onTargetDelete": "unlink", "onUnreferenced": "cascade-delete" }
+      ] },
+      { "kind": "tag", "references": [] }
+    ]
+  },
+  "verdict": "refused",
+  "refusal": { "reason": "onUnreferenced-invalid", "part": "entity-graph", "names": ["note", "tags"] }
+}

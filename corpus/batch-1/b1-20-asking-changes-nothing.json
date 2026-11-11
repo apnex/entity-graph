@@ -1,0 +1,55 @@
+{
+  "case": "b1-20-asking-changes-nothing",
+  "batch": 1,
+  "summary": "Asking changes nothing: the same questions asked twice, and in a second step with no change between, give the same answers at the same position.",
+  "covers": ["dated-graph-view"],
+  "readings": ["R1", "R2", "R6", "R7"],
+  "declare": {
+    "kinds": [
+      { "kind": "folder", "references": [
+        { "field": "notes", "targets": ["note"], "holds": "many", "onTargetDelete": "unlink", "exclusivity": "refuse" }
+      ] },
+      { "kind": "note", "references": [
+        { "field": "tags", "targets": ["tag"], "holds": "many", "onTargetDelete": "unlink", "onUnreferenced": "delete" },
+        { "field": "author", "targets": ["owner"], "holds": "one", "onTargetDelete": "refuse" }
+      ] },
+      { "kind": "tag", "references": [] },
+      { "kind": "owner", "references": [
+        { "field": "folders", "targets": ["folder"], "holds": "many", "onTargetDelete": "unlink", "exclusivity": "steal" }
+      ] }
+    ]
+  },
+  "verdict": "accepted",
+  "steps": [
+    { "start": { "position": 2, "entities": [
+      { "kind": "folder", "id": "f1", "record": { "title": "Inbox", "notes": ["n1"] } },
+      { "kind": "note", "id": "n1", "record": { "title": "Minutes", "tags": ["t1"], "author": "o1" } },
+      { "kind": "tag", "id": "t1", "record": { "title": "urgent" } },
+      { "kind": "owner", "id": "o1", "record": { "title": "Ada", "folders": ["f1"] } }
+    ] } },
+    { "ask": { "position": 2, "questions": [
+      { "q": "referrersOf", "id": "n1", "answer": [ { "kind": "folder", "id": "f1", "field": "notes" } ] },
+      { "q": "targetsOf", "id": "n1", "answer": [ { "field": "tags", "id": "t1" }, { "field": "author", "id": "o1" } ] },
+      { "q": "get", "kind": "note", "id": "n1", "answer": { "title": "Minutes", "tags": ["t1"], "author": "o1" } },
+      { "q": "all", "kind": "note", "answer": ["n1"] },
+      { "q": "ownerOf", "member": "n1", "containerKind": "folder", "answer": "f1" },
+      { "q": "reachable", "from": "t1", "answer": [] },
+      { "q": "referrersOf", "id": "n1", "answer": [ { "kind": "folder", "id": "f1", "field": "notes" } ] },
+      { "q": "targetsOf", "id": "n1", "answer": [ { "field": "tags", "id": "t1" }, { "field": "author", "id": "o1" } ] },
+      { "q": "get", "kind": "note", "id": "n1", "answer": { "title": "Minutes", "tags": ["t1"], "author": "o1" } }
+    ] } },
+    { "ask": { "position": 2, "questions": [
+      { "q": "referrersOf", "id": "n1", "answer": [ { "kind": "folder", "id": "f1", "field": "notes" } ] },
+      { "q": "ownerOf", "member": "n1", "containerKind": "folder", "answer": "f1" },
+      { "q": "all", "kind": "note", "answer": ["n1"] }
+    ] } },
+    { "take": { "position": 3, "writes": [
+      { "op": "put", "kind": "tag", "id": "t2", "record": { "title": "later" } }
+    ] } },
+    { "ask": { "position": 3, "questions": [
+      { "q": "referrersOf", "id": "n1", "answer": [ { "kind": "folder", "id": "f1", "field": "notes" } ] },
+      { "q": "all", "kind": "tag", "answer": ["t1", "t2"] },
+      { "q": "referrersOf", "id": "t2", "answer": [] }
+    ] } }
+  ]
+}

@@ -1,0 +1,53 @@
+{
+  "case": "b1-23-declaration-every-option-accepted",
+  "batch": 1,
+  "summary": "A declaration using every value of every reference option, a reference to its own kind, a reference with several target kinds, references to kinds declared later, and a kind with no references is accepted and answers.",
+  "covers": ["graph-declaration", "Reference rules", "dated-graph-view", "positioned-graph-sync"],
+  "readings": ["R1", "R2", "R6", "R7", "R10", "R11", "R13"],
+  "declare": {
+    "kinds": [
+      { "kind": "shelf", "references": [
+        { "field": "books", "targets": ["book"], "holds": "many", "onTargetDelete": "unlink", "exclusivity": "steal", "min": 1, "onBelowMin": "cascade-delete" }
+      ] },
+      { "kind": "book", "references": [
+        { "field": "tags", "targets": ["tag"], "holds": "many", "onTargetDelete": "unlink", "onUnreferenced": "delete" },
+        { "field": "ownedBy", "targets": ["owner"], "holds": "one", "onTargetDelete": "refuse", "min": 1, "onBelowMin": "refuse" },
+        { "field": "sequel", "targets": ["book"], "holds": "one", "onTargetDelete": "cascade-delete", "exclusivity": "refuse", "onUnreferenced": "keep" },
+        { "field": "mentions", "targets": ["book", "tag", "owner"], "holds": "many", "onTargetDelete": "unlink" }
+      ] },
+      { "kind": "tag", "references": [] },
+      { "kind": "owner", "references": [
+        { "field": "shelves", "targets": ["shelf"], "holds": "many", "onTargetDelete": "unlink" }
+      ] }
+    ]
+  },
+  "verdict": "accepted",
+  "steps": [
+    { "start": { "position": 0, "entities": [] } },
+    { "ask": { "position": 0, "questions": [
+      { "q": "all", "kind": "shelf", "answer": [] },
+      { "q": "all", "kind": "book", "answer": [] },
+      { "q": "all", "kind": "tag", "answer": [] },
+      { "q": "all", "kind": "owner", "answer": [] }
+    ] } },
+    { "take": { "position": 1, "writes": [
+      { "op": "put", "kind": "tag", "id": "g1", "record": { "title": "poetry" } },
+      { "op": "put", "kind": "owner", "id": "w1", "record": { "title": "Ada", "shelves": ["s1"] } },
+      { "op": "put", "kind": "shelf", "id": "s1", "record": { "title": "Top", "books": ["b1"] } },
+      { "op": "put", "kind": "book", "id": "b1", "record": { "title": "First", "tags": ["g1"], "ownedBy": "w1", "sequel": "b2", "mentions": ["g1", "w1"] } },
+      { "op": "put", "kind": "book", "id": "b2", "record": { "title": "Second", "tags": [], "ownedBy": "w1", "sequel": null, "mentions": ["b1"] } }
+    ] } },
+    { "ask": { "position": 1, "questions": [
+      { "q": "referrersOf", "id": "w1", "answer": [ { "kind": "book", "id": "b1", "field": "ownedBy" }, { "kind": "book", "id": "b1", "field": "mentions" }, { "kind": "book", "id": "b2", "field": "ownedBy" } ] },
+      { "q": "referrersOf", "id": "g1", "answer": [ { "kind": "book", "id": "b1", "field": "tags" }, { "kind": "book", "id": "b1", "field": "mentions" } ] },
+      { "q": "referrersOf", "id": "b1", "answer": [ { "kind": "shelf", "id": "s1", "field": "books" }, { "kind": "book", "id": "b2", "field": "mentions" } ] },
+      { "q": "referrersOf", "id": "b2", "answer": [ { "kind": "book", "id": "b1", "field": "sequel" } ] },
+      { "q": "referrersOf", "id": "s1", "answer": [ { "kind": "owner", "id": "w1", "field": "shelves" } ] },
+      { "q": "targetsOf", "id": "b1", "answer": [ { "field": "tags", "id": "g1" }, { "field": "ownedBy", "id": "w1" }, { "field": "sequel", "id": "b2" }, { "field": "mentions", "id": "g1" }, { "field": "mentions", "id": "w1" } ] },
+      { "q": "targetsOf", "id": "b1", "field": "mentions", "answer": ["g1", "w1"] },
+      { "q": "targetsOf", "id": "b2", "field": "sequel", "answer": [] },
+      { "q": "ownerOf", "member": "b1", "containerKind": "shelf", "answer": "s1" },
+      { "q": "ownerOf", "member": "s1", "containerKind": "owner", "answer": "w1" }
+    ] } }
+  ]
+}

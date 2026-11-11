@@ -1,0 +1,47 @@
+{
+  "case": "b1-13-reachable-chain",
+  "batch": 1,
+  "summary": "reachable follows references forward through a chain, a branch and a diamond, without cycles, and extends when the end of the chain gains a reference.",
+  "covers": ["dated-graph-view", "positioned-graph-sync"],
+  "readings": ["R1", "R2", "R5", "R7"],
+  "declare": {
+    "kinds": [
+      { "kind": "task", "references": [
+        { "field": "waitsOn", "targets": ["task"], "holds": "many", "onTargetDelete": "unlink" }
+      ] }
+    ]
+  },
+  "verdict": "accepted",
+  "steps": [
+    { "start": { "position": 0, "entities": [
+      { "kind": "task", "id": "a", "record": { "title": "Write", "waitsOn": ["b"] } },
+      { "kind": "task", "id": "b", "record": { "title": "Outline", "waitsOn": ["c"] } },
+      { "kind": "task", "id": "c", "record": { "title": "Research", "waitsOn": ["d"] } },
+      { "kind": "task", "id": "d", "record": { "title": "Choose", "waitsOn": [] } },
+      { "kind": "task", "id": "e", "record": { "title": "Review", "waitsOn": ["b", "f"] } },
+      { "kind": "task", "id": "f", "record": { "title": "Schedule", "waitsOn": ["d"] } }
+    ] } },
+    { "ask": { "position": 0, "questions": [
+      { "q": "reachable", "from": "a", "answer": ["b", "c", "d"] },
+      { "q": "reachable", "from": "b", "answer": ["c", "d"] },
+      { "q": "reachable", "from": "c", "answer": ["d"] },
+      { "q": "reachable", "from": "d", "answer": [] },
+      { "q": "reachable", "from": "e", "answer": ["b", "c", "d", "f"] },
+      { "q": "reachable", "from": "f", "answer": ["d"] },
+      { "q": "referrersOf", "id": "d", "answer": [ { "kind": "task", "id": "c", "field": "waitsOn" }, { "kind": "task", "id": "f", "field": "waitsOn" } ] },
+      { "q": "referrersOf", "id": "b", "answer": [ { "kind": "task", "id": "a", "field": "waitsOn" }, { "kind": "task", "id": "e", "field": "waitsOn" } ] },
+      { "q": "targetsOf", "id": "e", "field": "waitsOn", "answer": ["b", "f"] }
+    ] } },
+    { "take": { "position": 1, "writes": [
+      { "op": "put", "kind": "task", "id": "d", "record": { "title": "Choose", "waitsOn": ["g"] } },
+      { "op": "put", "kind": "task", "id": "g", "record": { "title": "Ask", "waitsOn": [] } }
+    ] } },
+    { "ask": { "position": 1, "questions": [
+      { "q": "reachable", "from": "a", "answer": ["b", "c", "d", "g"] },
+      { "q": "reachable", "from": "e", "answer": ["b", "c", "d", "f", "g"] },
+      { "q": "reachable", "from": "f", "answer": ["d", "g"] },
+      { "q": "reachable", "from": "g", "answer": [] },
+      { "q": "referrersOf", "id": "g", "answer": [ { "kind": "task", "id": "d", "field": "waitsOn" } ] }
+    ] } }
+  ]
+}
