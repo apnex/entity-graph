@@ -1,7 +1,8 @@
 # The gate (docs/DECISIONS.md D10; entity-store's and shape-check's, taken under draw's H31-10): the repository's own tests --
 # the contract suite, the Exactness property, the mutation checks and the vocabulary check among them -- and its docs check on
 # every push and pull request, on Node 22 and Node 24, then the consumer test on Node 22: the package packed, installed into an
-# empty project with --omit=dev, and every export imported by name. No release workflow until M8 (docs/BUILD-PLAN.md).
+# empty project with --omit=dev, every export imported by name, and the corpus it ships run against it. A release is made by
+# release.yml alone, on a protected v* tag (docs/DECISIONS.md D44).
 name: gate
 
 on:

@@ -965,3 +965,84 @@ The adapter maps the graph's writes onto entity-store's capabilities one for one
 **Alternatives refuted.**\
 Asking the graph to say whether each write creates or updates - the store is the authority on what it holds, read in the same synchronous call that lands the change.
 
+---
+
+## D44 - M8 is built: `0.1.0`, the first release, its costs stated and its corpus shipped
+
+**Ruled by:** the build plan, approved by the director as draw's `H31-10` (2026-11-11, draw's `dev/DECISIONS.md`), on the contract co-signed by zorg (`zorg/docs/DECISIONS.md` `D76`); the as-built choices are the builder's of M8, proposed for zorg's review.\
+**Affects:** `package.json`, `export-map.json`, `README.md`, `CONTRACT.md`, `.github/workflows/`, `tools/bundle-corpus.mjs`, `tools/consumer-test.mjs`, `tools/measure-costs.mjs`, `test/`.
+
+**Ruling.**\
+`0.1.0` is entity-graph's first release, made only by `.github/workflows/release.yml` on a `v*` tag, as shape-check's and entity-store's are: the tag must be `package.json`'s version and within `0.x`, the gate runs, the package is packed once with its SHA-512 written beside it, the consumer test runs on that very file, and a draft release holding both is downloaded back and compared byte for byte before it is published.\
+The repository's `release tags` ruleset holds `refs/tags/v*` against creation, update, deletion and force-push by anyone but a repository admin, as entity-store's and shape-check's do, and its releases are immutable, both read from GitHub's API at build.\
+A consumer names the release file in its `package.json`, `https://github.com/apnex/entity-graph/releases/download/v0.1.0/apnex-entity-graph-0.1.0.tgz`, with its `.sha512` beside it.\
+Every row is served and nothing is deferred; `package.json` stays `private`, as the released components keep theirs, so it is never published to a registry, and ships `dist` and `corpus`.
+
+**The corpus shipped.**\
+The neutral corpus ships as `@apnex/entity-graph/corpus`, a bundle written at build from the case files under `corpus/` and never edited, as shape-check bundles its corpus: `{ worlds, cases }`, the cases batch by batch and each batch by file name, and `worlds` naming the specifier of each world module a case names.\
+The world module ships as `@apnex/entity-graph/corpus/worlds/document`, the master file under `corpus/worlds/` itself, and the case files and `corpus/README.md` ship beside it.\
+The gate's corpus harness reads the code, the cases and the world module through those public specifiers (`test/support/under-test.js`), and checks that the bundle is exactly the case files.\
+The consumer test, after installing the packed file into an empty project with `--omit=dev` and importing every export of every path `export-map.json` names, runs that harness against the installed package, the corpus it ships and the code it ships, and checks that every specifier resolved inside the project.
+
+**Costs, measured on Node 22.**\
+`tools/measure-costs.mjs` measures each size in a fresh Node 22 process with `--expose-gc`, over three neutral kinds: boxes, one per hundred entities; ten tags; and items, each in one box (`cascade-delete`) and holding one tag (`unlink`).\
+Each time is the median of 101 runs for an answer and of 21 for an edit, a change taken in, a commit, an undo and a redo, each after three warm-up runs, timed around the one call measured.\
+"With a consequence" adds a phase whose consequence sets a field on every item the edit creates, and commits, undos, redos and syncs run over the in-memory store port.\
+Memory is the heap after a full collection with the graph held and its opening released, less the heap before the opening was made.\
+Measured by the builder on an Intel Core i7-8665U, Node 22.22.2, in milliseconds:
+
+| Cost | 1,000 entities | 10,000 entities | 100,000 entities |
+|---|---:|---:|---:|
+| get | 0.0011 | 0.0009 | 0.0011 |
+| targetsOf an item | 0.0027 | 0.0021 | 0.0030 |
+| ownerOf an item | 0.0013 | 0.0007 | 0.0009 |
+| reachable from an item | 0.0050 | 0.0030 | 0.0044 |
+| referrersOf a box (about 100 referrers) | 0.046 | 0.044 | 0.075 |
+| referrersOf a tag (a tenth of the items) | 0.015 | 0.166 | 3.6 |
+| all boxes (a hundredth of the entities) | 0.0015 | 0.013 | 0.180 |
+| all items | 0.108 | 1.0 | 20 |
+| plan 1 creation | 0.054 | 0.041 | 0.049 |
+| plan 10 creations | 0.211 | 0.198 | 0.236 |
+| plan 100 creations | 1.9 | 1.6 | 1.7 |
+| plan 1,000 creations | 10 | 10 | 12 |
+| plan 1 creation, a consequence on each | 0.065 | 0.116 | 0.122 |
+| plan 100 creations, a consequence on each | 2.3 | 3.6 | 2.4 |
+| plan 1,000 creations, a consequence on each | 20 | 22 | 23 |
+| plan removing a box (about 100 cascade deletes) | 0.705 | 0.734 | 0.794 |
+| applyChange of 1 write | 0.021 | 0.012 | 0.022 |
+| sync of a change of 1 write | 0.060 | 0.035 | 0.052 |
+| applyChange of 100 writes | 0.773 | 0.622 | 0.920 |
+| sync of a change of 100 writes | 0.774 | 0.888 | 1.1 |
+| commit 1 creation | 0.165 | 0.165 | 0.262 |
+| undo 1 creation | 0.306 | 0.159 | 0.291 |
+| redo 1 creation | 0.254 | 0.170 | 0.257 |
+| commit 100 creations | 4.0 | 4.1 | 4.1 |
+| undo 100 creations | 3.1 | 3.2 | 3.2 |
+| redo 100 creations | 4.4 | 4.6 | 4.5 |
+| memory per graph | 1.1 MB (1137 B per entity) | 9.7 MB (1022 B per entity) | 95.0 MB (996 B per entity) |
+
+An answer about one entity costs the same at every size, and an answer listing entities costs what it lists: all boxes and referrers of a tag grow with the entities they hold, and referrers of a box, about 100 at every size, do not.\
+An edit costs what it touches, about 10 ms per 1,000 creations and twice that with a consequence on each, at every size, and a change taken in, a commit, an undo and a redo cost what they write.\
+A graph holds about 1 KB per entity of these small records, its view, its reference index and its history's positions.\
+Times vary with the machine; which costs follow the size and which do not is the claim, and the tool reproduces the table.
+
+**Code size, measured at build.**\
+Its 18 source files, 3,225 lines of TypeScript, build to 150,458 bytes of JavaScript, 36,262 compressed with `gzip -9`, declaration files and source maps aside; the `./entity-store` adapter is 4,109 of those bytes.\
+The packed file is 151,695 bytes and holds 195 files, 117 of them the corpus's cases.
+
+**Still proposed, and still owed.**\
+zorg accepted `D10` to `D25` (`D30`) and `D26` to `D29` in its review of M4 (2026-11-12, `drawv2-entity-graph-m4-reply.md`).\
+`D31` and `D32` to `D44` are proposed for zorg's review, `D37` ruled for by draw's director under `H31-15`, its sentence for *Undo and redo* waiting on zorg's agreement, so `CONTRACT.md` does not yet carry it.\
+draw's questions from its own cases, `Q1` to `Q7` and `Q9`, wait on zorg's answers; `0.1.0` answers them as `D17` to `D21` and `D8` read the contract, and an answer that changes a reading is a new version.\
+Whether `CONTRACT.md` lists the entity-store capabilities the adapter uses beyond those it names is put to zorg under `D41`.
+
+**What `0.1.0` does not do.**\
+A client reaching the store only through entity-api lands no edit, since entity-api does not yet carry `change`, the expected position or the note (`D40`).\
+The view a client keeps is not entity-api's deferred `dated-local-view` (mission-kit's `B106`), which stays out of `0.1.0`, as the build plan places it.
+
+**Why.**\
+A consumer takes a component by its release file, as draw takes shape-check and entity-store, so `0.1.0` makes the contract's rows something a consumer can depend on, with the costs it will pay stated and the corpus it can run itself.
+
+**Alternatives refuted.**\
+Shipping the corpus's case files alone, with no bundle - a consumer would walk a directory of files to read what one import gives it, and shape-check's consumers already read its bundle that way.\
+Measuring costs in the gate - a time asserted on a shared machine decides nothing, so the gate asserts bounds generous against these times, and the table is the measurement.
