@@ -3,7 +3,8 @@
 // accepted plan's net writes, taken in, leave a view equal to a fresh reading of the entities they describe (Exactness), and
 // no breach new or worse, read over the whole graph from the entities alone;
 // its steps, replayed, describe the same entities, and its reversal restores the start; and every plan ends, its steps
-// bounded by what the rules can remove.
+// bounded by what the rules can remove. The same hold with consequences in two phases, a shape and a condition in play (M3),
+// and every entity a consequence keeps in step is in step after each accepted plan.
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createEntityGraph } from "../dist/index.js";
@@ -21,6 +22,15 @@ const KINDS = [
 	{ kind: "seat" },
 ];
 const REFS = Object.fromEntries(KINDS.map((k) => [k.kind, k.references ?? []]));
+// M3's world: a box keeps its count of items in step in the first phase; a removed item leaves a mark in the second; a label's
+// n is at most 8, by a dialect 2 shape; and a box holding more than two items breaks a condition
+const count = { id: "count", phase: "first", trigger: [{ created: ["box"] }, { changed: { kind: "box", fields: ["items", "count"] } }], run: ({ matches }) => matches.filter((m) => m.after !== null).map((m) => ({ op: "set", kind: "box", id: m.id, patch: { count: (m.after.items ?? []).length } })) };
+const mark = { id: "mark", phase: "second", trigger: { deleted: ["item"] }, run: ({ matches, graph }) => matches.map((m) => ({ op: graph.get("lid", `mark-${m.id}`) ? "change" : "create", kind: "lid", id: `mark-${m.id}`, record: { n: 0 } })) };
+const few = { id: "few", check: (graph) => graph.all("box").filter((b) => (b.record.items ?? []).length > 2).map((b) => ({ subject: b.id, measure: b.record.items.length - 2, sentence: `box ${b.id} holds more than two items` })) };
+const PHASED = {
+	phases: ["first", "second"],
+	kinds: KINDS.map((k) => (k.kind === "box" ? { ...k, consequences: [count], conditions: [few] } : k.kind === "item" ? { ...k, consequences: [mark] } : k.kind === "label" ? { ...k, shape: { $schema: "urn:apnex:shape-check:dialect:2", type: "object", properties: { n: { type: "integer", maximum: 8 } } } } : k)),
+};
 const NAMES = KINDS.map((k) => k.kind);
 const POOL = 7;
 // identities any kind may hold, so an edit can remove one kind's entity and create another kind's under its identity (D19)
@@ -64,11 +74,13 @@ const applySteps = (start, steps) => {
 const sameEntities = (a, b) => JSON.stringify([...a].sort()) === JSON.stringify([...b].sort());
 // every breach a state holds, read over the whole graph from the entities alone (the corpus's R18; D19), measure by key:
 // `found` is the state the edit found, against which a target the edit deleted is told from one that was never there
-function breaches(state, found) {
+function breaches(state, found, phased) {
 	const out = new Map();
 	const holders = new Map();
 	const add = (key, measure) => measure > 0 && out.set(key, measure);
 	for (const [id, { kind, record }] of state) {
+		if (phased && kind === "label") add(`label.shape@${id}`, Number.isInteger(record.n) && record.n <= 8 ? 0 : 1);
+		if (phased && kind === "box") add(`box.few@${id}`, (record.items ?? []).length - 2);
 		for (const r of REFS[kind]) {
 			const value = record[r.field];
 			const held = value == null ? [] : r.holds === "one" ? [value] : value;
@@ -82,15 +94,18 @@ function breaches(state, found) {
 	return out;
 }
 
-test("over 30 random graphs and 25 edits each: no answer changed by planning, one answer per edit, Exactness, steps and reversal agreeing, every plan ending", () => {
+function streams(declaration, seedBase, inStep = () => null) {
+	const phased = declaration.phases !== undefined;
 	let accepted = 0, refused = 0;
 	for (let s = 0; s < 30; s++) {
-		const rand = seeded(9000 + s);
+		const rand = seeded(seedBase + s);
 		const pick = (list) => list[Math.floor(rand() * list.length)];
 		const opening = [];
 		for (const kind of NAMES) for (let i = 0; i < POOL; i++) if (rand() < 0.6) opening.push({ kind, id: `${kind}${i}`, record: randomRecord(rand, kind, pick) });
+		// the world starts in step: each box's count is the items it holds
+		if (phased) for (const x of opening) if (x.kind === "box") x.record.count = (x.record.items ?? []).length;
 		for (const id of SHARED) opening.push({ kind: pick(NAMES), id, record: {} });
-		const made = createEntityGraph({ kinds: KINDS }, { position: 1, entities: opening });
+		const made = createEntityGraph(declaration, { position: 1, entities: opening });
 		assert.equal(made.ok, true, JSON.stringify(made.refusal));
 		const g = made.graph;
 		let entities = new Map(opening.map((x) => [x.id, { kind: x.kind, record: x.record }]));
@@ -107,8 +122,9 @@ test("over 30 random graphs and 25 edits each: no answer changed by planning, on
 			const removable = [...entities.values()].reduce((n, x) => n + 1 + Object.values(x.record).flat().length, 0);
 			assert.ok(r.steps.length <= edit.items.length * 2 + removable * 2 + 10, `stream ${s} step ${step}: ${r.steps.length} steps`);
 			const after = applySteps(entities, r.writes);
-			const was = breaches(entities, entities);
-			for (const [key, measure] of breaches(after, entities)) assert.ok(measure <= (was.get(key) ?? 0), `stream ${s} step ${step}: accepted with ${key} at ${measure}, ${was.get(key) ?? 0} before`);
+			const was = breaches(entities, entities, phased);
+			for (const w of r.writes) assert.equal(inStep(w), null, `stream ${s} step ${step}: ${w.kind} ${w.id} out of step`);
+			for (const [key, measure] of breaches(after, entities, phased)) assert.ok(measure <= (was.get(key) ?? 0), `stream ${s} step ${step}: accepted with ${key} at ${measure}, ${was.get(key) ?? 0} before`);
 			assert.ok(sameEntities(applySteps(entities, r.steps), after), "the steps describe what the net writes do");
 			assert.ok(sameEntities(applySteps(after, r.inverse), entities), "the reversal restores the start");
 			if (r.writes.length === 0) continue;
@@ -123,5 +139,16 @@ test("over 30 random graphs and 25 edits each: no answer changed by planning, on
 			for (const k of NAMES) assert.deepEqual(g.all(k).entities, fresh.all(k), `stream ${s} step ${step}: all(${k})`);
 		}
 	}
+	return { accepted, refused };
+}
+
+test("over 30 random graphs and 25 edits each: no answer changed by planning, one answer per edit, Exactness, steps and reversal agreeing, every plan ending", () => {
+	const { accepted, refused } = streams({ kinds: KINDS }, 9000);
+	assert.ok(accepted > 100 && refused > 20, `both kinds of answer exercised: ${accepted} accepted, ${refused} refused`);
+});
+
+test("the same over 30 more, with consequences in two phases, a shape and a condition: each box written keeps its count in step", () => {
+	const inStep = (w) => (w.op === "put" && w.kind === "box" && w.record.count !== (w.record.items ?? []).length ? w.record : null);
+	const { accepted, refused } = streams(PHASED, 19000, inStep);
 	assert.ok(accepted > 100 && refused > 20, `both kinds of answer exercised: ${accepted} accepted, ${refused} refused`);
 });

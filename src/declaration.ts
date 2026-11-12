@@ -1,12 +1,14 @@
 /**
- * The declaration as M1 reads it (CONTRACT.md `graph-declaration`, *Reference rules*; docs/DECISIONS.md D10, D11): a list of
- * kinds, each with the list of references its records hold, each naming its field, the declared kinds it may target, how many
- * targets it holds and what becomes of the referrer when a target is deleted, with the other rule options as the contract
- * allows them; their effects are planning's (M2). A bad declaration is refused at creation, its subject naming the kind, the
- * field and the member at fault. The members later milestones read -- a kind's shape, conditions, consequences and intent
- * resolver, and the phases -- are accepted and not yet read.
+ * The declaration (CONTRACT.md `graph-declaration`, *Reference rules*, *Consequences and the stopping rule*; docs/DECISIONS.md
+ * D10, D11, D20, D21): a list of kinds, each with the list of references its records hold, each naming its field, the declared
+ * kinds it may target, how many targets it holds and what becomes of the referrer when a target is deleted, with the other rule
+ * options as the contract allows them; the shape of its records, prepared through shape-check; its consequences, each a
+ * function with a trigger stated as data and one of the phases the declaration lists; and its conditions over the whole set.
+ * A bad declaration is refused at creation, its subject naming the kind, the member and the part at fault. The index from each
+ * kind to the consequences of each phase listening to it is built here, once. An intent resolver is accepted and not yet read
+ * (M4).
  */
-import { readPlainJson } from "@apnex/shape-check";
+import { type PreparedShape, prepareShapeDocument, readPlainJson } from "@apnex/shape-check";
 import { itemsOf, membersOf } from "./plain-members.js";
 import { type GraphRefusal, refuse } from "./refusal.js";
 
@@ -25,20 +27,81 @@ export interface ReferenceDeclaration {
 	onUnreferenced?: "keep" | "delete";
 }
 
-/** One kind: the references its records hold, and the members later milestones read. */
+/** What a trigger hears: an entity of named kinds created, or deleted, or named fields of a kind changed (D20). */
+export interface TriggerClause {
+	created?: readonly string[];
+	deleted?: readonly string[];
+	changed?: { kind: string; fields: readonly string[] };
+}
+
+/** One change a consequence heard: the entity as the edit found it and as it stands, and the top-level fields that differ. */
+export interface GraphChangeHeard {
+	readonly kind: string;
+	readonly id: string;
+	readonly before: { readonly [field: string]: unknown } | null;
+	readonly after: { readonly [field: string]: unknown } | null;
+	readonly fields: readonly string[];
+}
+
+/** What a consequence or a condition may read while it is called: the entities as they stand, frozen (D22). */
+export interface GraphReader {
+	get(kind: string, id: string): { readonly kind: string; readonly id: string; readonly record: { readonly [field: string]: unknown } } | null;
+	all(kind: string): readonly { readonly kind: string; readonly id: string; readonly record: { readonly [field: string]: unknown } }[];
+	referrersOf(id: string): readonly { readonly kind: string; readonly id: string; readonly field: string }[];
+	targetsOf(id: string): readonly { readonly field: string; readonly id: string }[];
+}
+
+/** An application consequence: a pure function returning writes, called in its phase when its trigger hears a change (D20). */
+export interface ConsequenceDeclaration {
+	id: string;
+	phase: string;
+	trigger: TriggerClause | readonly TriggerClause[];
+	run: (input: { readonly matches: readonly GraphChangeHeard[]; readonly graph: GraphReader }) => unknown;
+}
+
+/** One breach a condition reports: the entity or thing concerned, how much, and the application's own sentence (D21). */
+export interface ConditionBreach {
+	subject: string;
+	measure: number;
+	sentence: string;
+}
+
+/** A condition over the whole set that a shape cannot state (D21). */
+export interface ConditionDeclaration {
+	id: string;
+	check: (graph: GraphReader) => unknown;
+}
+
+/** One kind: its records' shape, the references they hold, its consequences and conditions, and its intent resolver (M4). */
 export interface KindDeclaration {
 	kind: string;
 	references?: readonly ReferenceDeclaration[];
 	shape?: unknown;
-	conditions?: unknown;
-	consequences?: unknown;
+	conditions?: readonly ConditionDeclaration[];
+	consequences?: readonly ConsequenceDeclaration[];
 	intentResolver?: unknown;
 }
 
-/** The application's declaration. */
+/** The application's declaration: its kinds, and the phases its consequences run in, in order. */
 export interface GraphDeclaration {
 	kinds: readonly KindDeclaration[];
-	phases?: unknown;
+	phases?: readonly string[];
+}
+
+/** A consequence as the planner calls it: its key `<kind>.<id>`, its phase, the place it was declared, its trigger and its function. */
+export interface CompiledConsequence {
+	readonly key: string;
+	readonly phase: string;
+	readonly order: number;
+	readonly clauses: readonly TriggerClause[];
+	readonly kinds: readonly string[];
+	readonly run: ConsequenceDeclaration["run"];
+}
+
+/** A condition as the planner calls it: its key `<kind>.<id>` and its function. */
+export interface CompiledCondition {
+	readonly key: string;
+	readonly check: ConditionDeclaration["check"];
 }
 
 /** One reference field as the view, the index and the rules read it: its options, `onUnreferenced` given its default. */
@@ -53,13 +116,25 @@ export interface CompiledReference {
 	readonly onUnreferenced: "keep" | "delete";
 }
 
-/** The declaration checked: each kind's reference fields, in declaration order, and every reference field name. */
+/**
+ * The declaration checked: each kind's reference fields, in declaration order, and every reference field name; each shaped
+ * kind's prepared shape; the phases in order; every consequence and condition in declared order, kind by kind; and, per phase,
+ * the consequences listening to each kind, in declared order -- the dispatch index, built once.
+ */
 export interface CompiledDeclaration {
 	readonly kinds: ReadonlyMap<string, readonly CompiledReference[]>;
 	readonly fields: ReadonlySet<string>;
+	readonly shapes: ReadonlyMap<string, PreparedShape & { accepted: true }>;
+	readonly phases: readonly string[];
+	readonly consequences: readonly CompiledConsequence[];
+	readonly listening: ReadonlyMap<string, ReadonlyMap<string, readonly CompiledConsequence[]>>;
+	readonly conditions: readonly CompiledCondition[];
 }
 
 const TOP = new Set(["kinds", "phases"]);
+const CONSEQUENCE = new Set(["id", "phase", "trigger", "run"]);
+const CONDITION = new Set(["id", "check"]);
+const CLAUSE = new Set(["created", "deleted", "changed"]);
 const KIND = new Set(["kind", "references", "shape", "conditions", "consequences", "intentResolver"]);
 const REFERENCE = new Set(["field", "targets", "holds", "onTargetDelete", "exclusivity", "min", "onBelowMin", "onUnreferenced"]);
 const OPTIONS: Readonly<Record<string, readonly string[]>> = {
@@ -102,8 +177,22 @@ export function compileDeclaration(input: unknown): { ok: true; declaration: Com
 		names.push(declared["kind"]);
 		entries.push(declared);
 	}
+	// the phases, so a consequence names one of them
+	const phases: string[] = [];
+	if (top["phases"] !== undefined) {
+		const listed = itemsOf(top["phases"]);
+		if (listed === null || !listed.every(isName)) return bad("phases", "invalid");
+		if (listed.length === 0) return bad("phases", "empty");
+		for (const phase of listed as string[]) {
+			if (phases.includes(phase)) return bad(`phases.${phase}`, "duplicate");
+			phases.push(phase);
+		}
+	}
 	const compiled = new Map<string, CompiledReference[]>();
 	const fields = new Set<string>();
+	const shapes = new Map<string, PreparedShape & { accepted: true }>();
+	const consequences: CompiledConsequence[] = [];
+	const conditions: CompiledCondition[] = [];
 	for (const declared of entries) {
 		const kind = declared["kind"] as string;
 		const unknown = firstUnknown(declared, KIND);
@@ -155,8 +244,112 @@ export function compileDeclaration(input: unknown): { ok: true; declaration: Com
 			fields.add(field);
 		}
 		compiled.set(kind, list);
+		if (declared["shape"] !== undefined) {
+			const read = readPlainJson(declared["shape"]);
+			if (!read.ok) return bad(`${kind}.shape`, "invalid");
+			const prepared = prepareShapeDocument(read.value);
+			if (!prepared.accepted) return bad(`${kind}.shape${prepared.problems[0]?.pointer ?? ""}`, "invalid");
+			shapes.set(kind, prepared);
+		}
+		const own = compileConsequences(kind, declared["consequences"], names, phases, consequences.length);
+		if (!own.ok) return bad(own.path, own.fault);
+		consequences.push(...own.list);
+		const checks = compileConditions(kind, declared["conditions"]);
+		if (!checks.ok) return bad(checks.path, checks.fault);
+		conditions.push(...checks.list);
 	}
 	const stray = firstUnknown(top, TOP);
 	if (stray !== undefined) return bad(stray, "unknown");
-	return { ok: true, declaration: { kinds: compiled, fields } };
+	// the dispatch index: per phase, which consequences listen to each kind, in declared order
+	const listening = new Map<string, Map<string, CompiledConsequence[]>>(phases.map((p) => [p, new Map()]));
+	for (const c of consequences) {
+		const index = listening.get(c.phase)!;
+		for (const k of c.kinds) {
+			if (!index.has(k)) index.set(k, []);
+			index.get(k)!.push(c);
+		}
+	}
+	return { ok: true, declaration: { kinds: compiled, fields, shapes, phases, consequences, listening, conditions } };
+}
+
+type Compiled<T> = { ok: true; list: T[] } | { ok: false; path: string; fault: string };
+
+/** A trigger read as plain data: one clause or a list of them, each naming declared kinds or a declared kind's fields; or the fault. */
+function compileTrigger(value: unknown, names: readonly string[]): { ok: true; clauses: TriggerClause[] } | { ok: false; fault: string } {
+	if (value === undefined) return { ok: false, fault: "missing" };
+	const read = readPlainJson(value);
+	if (!read.ok) return { ok: false, fault: "invalid" };
+	const given = Array.isArray(read.value) ? read.value : [read.value];
+	if (given.length === 0) return { ok: false, fault: "invalid" };
+	const kindList = (list: unknown): list is string[] => Array.isArray(list) && list.length > 0 && list.every(isName) && new Set(list).size === list.length;
+	const clauses: TriggerClause[] = [];
+	for (const clause of given) {
+		if (!isRecord(clause) || Object.keys(clause).length === 0 || firstUnknown(clause, CLAUSE) !== undefined) return { ok: false, fault: "invalid" };
+		const { created, deleted, changed } = clause;
+		if (created !== undefined && !kindList(created)) return { ok: false, fault: "invalid" };
+		if (deleted !== undefined && !kindList(deleted)) return { ok: false, fault: "invalid" };
+		if (changed !== undefined) {
+			if (!isRecord(changed) || firstUnknown(changed, new Set(["kind", "fields"])) !== undefined || !isName(changed["kind"]) || !kindList(changed["fields"])) return { ok: false, fault: "invalid" };
+		}
+		const named = [...(created ?? []), ...(deleted ?? []), ...(changed ? [changed["kind"] as string] : [])] as string[];
+		const undeclared = named.find((k) => !names.includes(k));
+		if (undeclared !== undefined) return { ok: false, fault: `undeclared ${undeclared}` };
+		clauses.push(Object.freeze({
+			...(created ? { created: Object.freeze([...created]) } : {}),
+			...(deleted ? { deleted: Object.freeze([...deleted]) } : {}),
+			...(changed ? { changed: Object.freeze({ kind: changed["kind"] as string, fields: Object.freeze([...(changed["fields"] as string[])]) }) } : {}),
+		}));
+	}
+	return { ok: true, clauses };
+}
+
+/** A kind's consequences, each read once as plain data, its function kept and never called here; or the fault, named by its part. */
+function compileConsequences(kind: string, value: unknown, names: readonly string[], phases: readonly string[], declaredBefore: number): Compiled<CompiledConsequence> {
+	const list: CompiledConsequence[] = [];
+	if (value === undefined) return { ok: true, list };
+	const listed = itemsOf(value);
+	if (listed === null) return { ok: false, path: `${kind}.consequences`, fault: "invalid" };
+	for (const [j, item] of listed.entries()) {
+		const declared = membersOf(item);
+		if (declared === null || !isName(declared["id"])) return { ok: false, path: `${kind}.consequences[${j}]`, fault: "invalid" };
+		const at = `${kind}.consequences.${declared["id"]}`;
+		const key = `${kind}.${declared["id"]}`;
+		if (list.some((c) => c.key === key)) return { ok: false, path: at, fault: "duplicate" };
+		const stray = firstUnknown(declared, CONSEQUENCE);
+		if (stray !== undefined) return { ok: false, path: `${at}.${stray}`, fault: "unknown" };
+		const phase = declared["phase"];
+		if (phase === undefined) return { ok: false, path: `${at}.phase`, fault: "missing" };
+		if (!isName(phase)) return { ok: false, path: `${at}.phase`, fault: "invalid" };
+		if (!phases.includes(phase)) return { ok: false, path: `${at}.phase`, fault: `undeclared ${phase}` };
+		const trigger = compileTrigger(declared["trigger"], names);
+		if (!trigger.ok) return { ok: false, path: `${at}.trigger`, fault: trigger.fault };
+		const run = declared["run"];
+		if (run === undefined) return { ok: false, path: `${at}.run`, fault: "missing" };
+		if (typeof run !== "function") return { ok: false, path: `${at}.run`, fault: "invalid" };
+		const kinds = [...new Set(trigger.clauses.flatMap((c) => [...(c.created ?? []), ...(c.deleted ?? []), ...(c.changed ? [c.changed.kind] : [])]))];
+		list.push(Object.freeze({ key, phase, order: declaredBefore + list.length, clauses: Object.freeze(trigger.clauses), kinds: Object.freeze(kinds), run: run as ConsequenceDeclaration["run"] }));
+	}
+	return { ok: true, list };
+}
+
+/** A kind's conditions, each read once as plain data, its function kept and never called here; or the fault, named by its part. */
+function compileConditions(kind: string, value: unknown): Compiled<CompiledCondition> {
+	const list: CompiledCondition[] = [];
+	if (value === undefined) return { ok: true, list };
+	const listed = itemsOf(value);
+	if (listed === null) return { ok: false, path: `${kind}.conditions`, fault: "invalid" };
+	for (const [j, item] of listed.entries()) {
+		const declared = membersOf(item);
+		if (declared === null || !isName(declared["id"])) return { ok: false, path: `${kind}.conditions[${j}]`, fault: "invalid" };
+		const at = `${kind}.conditions.${declared["id"]}`;
+		const key = `${kind}.${declared["id"]}`;
+		if (list.some((c) => c.key === key)) return { ok: false, path: at, fault: "duplicate" };
+		const stray = firstUnknown(declared, CONDITION);
+		if (stray !== undefined) return { ok: false, path: `${at}.${stray}`, fault: "unknown" };
+		const check = declared["check"];
+		if (check === undefined) return { ok: false, path: `${at}.check`, fault: "missing" };
+		if (typeof check !== "function") return { ok: false, path: `${at}.check`, fault: "invalid" };
+		list.push(Object.freeze({ key, check: check as ConditionDeclaration["check"] }));
+	}
+	return { ok: true, list };
 }

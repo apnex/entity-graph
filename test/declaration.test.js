@@ -68,7 +68,8 @@ test("an unknown member is refused, naming it -- a misspelt option before a miss
 	assert.equal(refusedAt({ kinds: [{ kind: "item" }], mood: 1 }), "mood: unknown");
 	assert.equal(refusedAt(box(items({ weight: 3 }))), "box.items.weight: unknown");
 	assert.equal(refusedAt(box({ field: "items", targets: ["item"], holds: "many", onDelete: "unlink" })), "box.items.onDelete: unknown", "named, not reported missing");
-	const later = { phases: ["settle"], kinds: [{ kind: "item", shape: { type: "object" }, conditions: [], consequences: [], intentResolver: null }] };
+	// RESTATED at M3 (docs/DECISIONS.md D20): a shape is now handed to shape-check, so it names its dialect; the resolver is M4's
+	const later = { phases: ["settle"], kinds: [{ kind: "item", shape: { $schema: "urn:apnex:shape-check:dialect:1", type: "object" }, conditions: [], consequences: [], intentResolver: null }] };
 	assert.equal(createEntityGraph(later).ok, true);
 });
 

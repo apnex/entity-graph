@@ -14,6 +14,13 @@ export type GraphRefusalCode =
 	| "empty-edit"
 	| "unknown-operation"
 	| "rule-broken"
+	| "shape-misfit"
+	| "condition-broken"
+	| "condition-failed"
+	| "consequence-failed"
+	| "consequence-conflict"
+	| "held-write"
+	| "reentrant"
 	| "too-many-writes"
 	| "stale-position"
 	| "empty-change"
@@ -96,6 +103,41 @@ const TEXTS: Readonly<Record<GraphRefusalCode, { what: string; why: string; fix:
 		what: "The edit was refused: it would leave a declared rule more broken than it found it.",
 		why: "An edit is judged on the state it would leave, each breach of a rule by its key and measure; one it introduces, or whose measure it raises, refuses it.",
 		fix: "Change the edit so the rule in details.ruleKey holds for the entity in details.subject, or holds no worse than before; details.opIndex names the requested item that led there.",
+	},
+	"shape-misfit": {
+		what: "The edit was refused: it would leave an entity's record misfitting its kind's shape more than it found it.",
+		why: "A kind's records are judged against the shape it declares, through shape-check, on the state the edit would leave; a misfit the edit introduces, or more misfits than before, refuses it.",
+		fix: "Change the edit so the record of the entity in details.subject fits its kind's shape, or misfits no more than before; details.measure is how many misfits it would have.",
+	},
+	"condition-broken": {
+		what: "The edit was refused: it would leave one of the application's conditions more broken than it found it.",
+		why: "A condition over the whole set is judged on the state the edit would leave, each breach by its subject and measure; one the edit introduces, or whose measure it raises, refuses it.",
+		fix: "Change the edit so the condition in details.ruleKey holds for details.subject, or holds no worse than before; details.sentence is the condition's own account.",
+	},
+	"condition-failed": {
+		what: "The edit was refused: one of the application's conditions did not answer.",
+		why: "A condition answers a list of breaches, each a subject, a measure above nothing and a sentence, as plain data; one that throws, answers otherwise, or reaches for what it was handed, cannot be judged.",
+		fix: "Correct the condition in details.ruleKey.",
+	},
+	"consequence-failed": {
+		what: "The edit was refused: one of the application's consequences did not answer.",
+		why: "A consequence answers a list of writes as plain data; one that throws, answers otherwise, or reaches for what it was handed, cannot be applied.",
+		fix: "Correct the consequence in details.ruleKey; details.subject is the entity whose change it heard.",
+	},
+	"consequence-conflict": {
+		what: "The edit was refused: two consequences wrote one entity in one run of a phase.",
+		why: "Within a run of a phase each entity is written by one consequence at most, and two writing it is a fault, never resolved by letting one win.",
+		fix: "Change the consequences so one of them writes the entity in details.subject, or move one to another phase; details.ruleKey is the second to write it.",
+	},
+	"held-write": {
+		what: "The edit was refused: an entity a consequence wrote would fail a rule a requested write of it must meet.",
+		why: "Every entity a consequence writes is held, as it stands in the result, to the shape, reference rules and conditions a requested write of it meets, unless it already failed them before the edit.",
+		fix: "Correct the consequence in details.ruleKey, or the edit that set it off, so the entity in details.subject meets its rules.",
+	},
+	"reentrant": {
+		what: "Refused: the graph was asked to change or plan while it was planning.",
+		why: "A consequence or condition is called while the graph plans, and may read what it is handed but may not change the view or start another plan.",
+		fix: "Return writes from the consequence instead, and take a change in once the plan has answered; details.subject names the call refused.",
 	},
 	"too-many-writes": {
 		what: "The edit was refused: what it would write, with everything the rules make of it, is more than one change may hold.",
