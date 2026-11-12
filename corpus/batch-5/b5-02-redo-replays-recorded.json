@@ -1,0 +1,43 @@
+{
+  "case": "b5-02-redo-replays-recorded",
+  "batch": 5,
+  "summary": "An edit committed with a context has autoCaption write the context's prefix; after its undo, planning it again without a context would caption it differently, but redo lands exactly the recorded writes, running no consequence again.",
+  "covers": ["reversible-history", "Undo and redo", "Edit context"],
+  "readings": ["R1", "R2", "R14", "R15", "R23", "R25", "R27", "R28", "R34", "R39", "R40", "R44", "R45"],
+  "world": "document",
+  "variant": "base",
+  "verdict": "accepted",
+  "steps": [
+    { "start": { "position": 0, "entities": [
+      { "kind": "section", "id": "s1", "record": { "heading": "Intro", "parent": null, "cites": [] } },
+      { "kind": "section", "id": "s2", "record": { "heading": "Method", "parent": null, "cites": [] } },
+      { "kind": "figure", "id": "f1", "record": { "title": "Map", "section": "s1", "number": 1 } },
+      { "kind": "figure", "id": "f2", "record": { "title": "Chart", "section": "s1", "number": 2 } },
+      { "kind": "caption", "id": "c1", "record": { "body": "Figure 1: Map", "figure": "f1" } },
+      { "kind": "caption", "id": "c2", "record": { "body": "Figure 2: Chart", "figure": "f2" } }
+    ] } },
+    { "commit": { "position": 0, "context": { "captionPrefix": "Fig." }, "edit": [
+      { "op": "create", "kind": "figure", "id": "f3", "record": { "title": "Plot", "section": "s2", "number": 1 } }
+    ], "outcome": "landed", "landedAt": 1, "writes": [
+      { "op": "put", "kind": "figure", "id": "f3", "record": { "title": "Plot", "section": "s2", "number": 1 } },
+      { "op": "put", "kind": "caption", "id": "cap-f3", "record": { "body": "Fig. 1: Plot", "figure": "f3" } }
+    ] } },
+    { "undo": { "position": 1, "outcome": "landed", "landedAt": 2, "writes": [
+      { "op": "del", "kind": "figure", "id": "f3" },
+      { "op": "del", "kind": "caption", "id": "cap-f3" }
+    ] } },
+    { "plan": { "position": 2, "edit": [
+      { "op": "create", "kind": "figure", "id": "f3", "record": { "title": "Plot", "section": "s2", "number": 1 } }
+    ], "outcome": "accepted", "writes": [
+      { "op": "put", "kind": "figure", "id": "f3", "record": { "title": "Plot", "section": "s2", "number": 1 } },
+      { "op": "put", "kind": "caption", "id": "cap-f3", "record": { "body": "Figure 1: Plot", "figure": "f3" } }
+    ] } },
+    { "redo": { "position": 2, "outcome": "landed", "landedAt": 3, "writes": [
+      { "op": "put", "kind": "figure", "id": "f3", "record": { "title": "Plot", "section": "s2", "number": 1 } },
+      { "op": "put", "kind": "caption", "id": "cap-f3", "record": { "body": "Fig. 1: Plot", "figure": "f3" } }
+    ] } },
+    { "ask": { "position": 3, "questions": [
+      { "q": "get", "kind": "caption", "id": "cap-f3", "answer": { "body": "Fig. 1: Plot", "figure": "f3" } }
+    ] } }
+  ]
+}

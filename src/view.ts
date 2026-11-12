@@ -127,11 +127,45 @@ export class EntityView {
 		if (position <= this.current) return unread("stale-position", String(position));
 		const listed = itemsOf(change["items"], true);
 		if (listed === null) return { ok: false, refusal: refuse("invalid-change", "items") };
-		if (listed.length === 0) return unread("empty-change", "items");
-		if (listed.length > GRAPH_LIMITS.maxChangeItems) return unread("too-many-items", String(listed.length));
+		const bounded = this.bounds(listed);
+		if (bounded !== null) {
+			observeAll(input);
+			return { ok: false, refusal: bounded };
+		}
 		const read = readEachPlain(listed);
 		if (!read.ok) return { ok: false, refusal: refuse("not-plain", `items[${read.at}]`, read.at) };
 		return this.land(position, read.items, false);
+	}
+
+	/** A change's own bounds, which `take` and `checkItems` both apply: at least one item, and at most a change's number (D39). */
+	private bounds(items: readonly unknown[]): GraphRefusal | null {
+		if (items.length === 0) return refuse("empty-change", "items");
+		if (items.length > GRAPH_LIMITS.maxChangeItems) return refuse("too-many-items", String(items.length));
+		return null;
+	}
+
+	/** Each item checked against the view as the items before it leave it, as `take` and `checkItems` both check them. */
+	private checkAll(items: readonly unknown[], first: boolean): { ok: true; checked: Checked[] } | { ok: false; refusal: GraphRefusal } {
+		const checked: Checked[] = [];
+		const seen = new Set<string>();
+		for (const [i, item] of items.entries()) {
+			const one = this.check(item, i, seen, first);
+			if (!one.ok) return one;
+			checked.push(one.checked);
+			seen.add(one.checked.id);
+		}
+		return { ok: true, checked };
+	}
+
+	/**
+	 * Whether the view would take a change's items, by every check `take` makes but the position, which the store gives only as the
+	 * change lands: the change's bounds and each item, applying none; its refusal, or null (D38, D39).
+	 */
+	checkItems(items: readonly unknown[]): GraphRefusal | null {
+		const bounded = this.bounds(items);
+		if (bounded !== null) return bounded;
+		const all = this.checkAll(items, false);
+		return all.ok ? null : all.refusal;
 	}
 
 	/**
@@ -143,15 +177,9 @@ export class EntityView {
 	}
 
 	private land(position: number, items: readonly unknown[], first: boolean): { ok: true; position: number } | { ok: false; refusal: GraphRefusal } {
-		const checked: Checked[] = [];
-		const seen = new Set<string>();
-		for (const [i, item] of items.entries()) {
-			const one = this.check(item, i, seen, first);
-			if (!one.ok) return one;
-			checked.push(one.checked);
-			seen.add(one.checked.id);
-		}
-		for (const c of checked) {
+		const all = this.checkAll(items, first);
+		if (!all.ok) return all;
+		for (const c of all.checked) {
 			if (c.record === null) {
 				this.entities.delete(c.id);
 				this.byKind.get(c.kind)?.delete(c.id);

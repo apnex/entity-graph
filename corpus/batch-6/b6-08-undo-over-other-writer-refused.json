@@ -1,0 +1,50 @@
+{
+  "case": "b6-08-undo-over-other-writer-refused",
+  "batch": 6,
+  "summary": "An undo whose edit wrote an entity another writer has since changed is refused as superseded, naming the entity, store and answers unchanged, while the undo of an edit that wrote a different entity lands; a redo whose entity another writer has since changed is refused alike.",
+  "covers": ["reversible-history", "positioned-graph-sync", "Undo and redo"],
+  "readings": ["R1", "R2", "R14", "R15", "R39", "R40", "R42", "R44", "R45"],
+  "world": "document",
+  "variant": "base",
+  "verdict": "accepted",
+  "steps": [
+    { "start": { "position": 0, "entities": [
+      { "kind": "section", "id": "s1", "record": { "heading": "Intro", "parent": null, "cites": [] } },
+      { "kind": "section", "id": "s2", "record": { "heading": "Method", "parent": null, "cites": [] } }
+    ] } },
+    { "commit": { "position": 0, "edit": [
+      { "op": "change", "kind": "section", "id": "s2", "record": { "heading": "Methods", "parent": null, "cites": [] } }
+    ], "outcome": "landed", "landedAt": 1, "writes": [
+      { "op": "put", "kind": "section", "id": "s2", "record": { "heading": "Methods", "parent": null, "cites": [] } }
+    ] } },
+    { "commit": { "position": 1, "edit": [
+      { "op": "change", "kind": "section", "id": "s1", "record": { "heading": "Introduction", "parent": null, "cites": [] } }
+    ], "outcome": "landed", "landedAt": 2, "writes": [
+      { "op": "put", "kind": "section", "id": "s1", "record": { "heading": "Introduction", "parent": null, "cites": [] } }
+    ] } },
+    { "other": { "position": 3, "writes": [
+      { "op": "put", "kind": "section", "id": "s2", "record": { "heading": "Method B", "parent": null, "cites": [] } }
+    ] } },
+    { "sync": { "position": 3 } },
+    { "ask": { "position": 3, "questions": [
+      { "q": "get", "kind": "section", "id": "s2", "answer": { "heading": "Method B", "parent": null, "cites": [] } }
+    ] } },
+    { "undo": { "position": 3, "outcome": "landed", "landedAt": 4, "writes": [
+      { "op": "put", "kind": "section", "id": "s1", "record": { "heading": "Intro", "parent": null, "cites": [] } }
+    ] } },
+    { "undo": { "position": 4, "outcome": "refused", "storePosition": 4, "refusal": { "part": "entity-graph", "code": "history-superseded", "ruleKey": "history-superseded", "subject": "s2", "measure": 1, "opIndex": -1 } } },
+    { "ask": { "position": 4, "questions": [
+      { "q": "get", "kind": "section", "id": "s2", "answer": { "heading": "Method B", "parent": null, "cites": [] } },
+      { "q": "get", "kind": "section", "id": "s1", "answer": { "heading": "Intro", "parent": null, "cites": [] } }
+    ] } },
+    { "other": { "position": 5, "writes": [
+      { "op": "put", "kind": "section", "id": "s1", "record": { "heading": "Preface", "parent": null, "cites": [] } }
+    ] } },
+    { "sync": { "position": 5 } },
+    { "redo": { "position": 5, "outcome": "refused", "storePosition": 5, "refusal": { "part": "entity-graph", "code": "history-superseded", "ruleKey": "history-superseded", "subject": "s1", "measure": 1, "opIndex": -1 } } },
+    { "ask": { "position": 5, "questions": [
+      { "q": "get", "kind": "section", "id": "s1", "answer": { "heading": "Preface", "parent": null, "cites": [] } },
+      { "q": "get", "kind": "section", "id": "s2", "answer": { "heading": "Method B", "parent": null, "cites": [] } }
+    ] } }
+  ]
+}

@@ -1,0 +1,49 @@
+{
+  "case": "b6-03-other-writers-dated",
+  "batch": 6,
+  "summary": "Three changes by another writer are taken in one at a time, in position order, each answer dated to its change, applying no rule and running no consequence: a deleted figure leaves its caption holding it and its neighbour unnumbered again.",
+  "covers": ["positioned-graph-sync", "The store port", "dated-graph-view"],
+  "readings": ["R1", "R2", "R3", "R4", "R39", "R42"],
+  "world": "document",
+  "variant": "base",
+  "verdict": "accepted",
+  "steps": [
+    { "start": { "position": 0, "entities": [
+      { "kind": "section", "id": "s1", "record": { "heading": "Intro", "parent": null, "cites": [] } },
+      { "kind": "section", "id": "s2", "record": { "heading": "Method", "parent": null, "cites": [] } },
+      { "kind": "figure", "id": "f1", "record": { "title": "Map", "section": "s1", "number": 1 } },
+      { "kind": "figure", "id": "f2", "record": { "title": "Chart", "section": "s1", "number": 2 } },
+      { "kind": "caption", "id": "c1", "record": { "body": "Figure 1: Map", "figure": "f1" } },
+      { "kind": "caption", "id": "c2", "record": { "body": "Figure 2: Chart", "figure": "f2" } }
+    ] } },
+    { "other": { "position": 1, "writes": [
+      { "op": "put", "kind": "section", "id": "s3", "record": { "heading": "Notes", "parent": null, "cites": [] } },
+      { "op": "put", "kind": "figure", "id": "f3", "record": { "title": "Plot", "section": "s3", "number": 1 } }
+    ] } },
+    { "other": { "position": 2, "writes": [
+      { "op": "del", "kind": "figure", "id": "f1" }
+    ] } },
+    { "other": { "position": 3, "writes": [
+      { "op": "put", "kind": "caption", "id": "c1", "record": { "body": "Old map", "figure": "f1" } }
+    ] } },
+    { "sync": { "position": 1 } },
+    { "ask": { "position": 1, "questions": [
+      { "q": "all", "kind": "section", "answer": ["s1", "s2", "s3"] },
+      { "q": "referrersOf", "id": "s3", "answer": [ { "kind": "figure", "id": "f3", "field": "section" } ] },
+      { "q": "get", "kind": "figure", "id": "f1", "answer": { "title": "Map", "section": "s1", "number": 1 } },
+      { "q": "all", "kind": "caption", "answer": ["c1", "c2"] }
+    ] } },
+    { "sync": { "position": 2 } },
+    { "ask": { "position": 2, "questions": [
+      { "q": "get", "kind": "figure", "id": "f1", "answer": null },
+      { "q": "referrersOf", "id": "f1", "answer": [ { "kind": "caption", "id": "c1", "field": "figure" } ] },
+      { "q": "get", "kind": "caption", "id": "c1", "answer": { "body": "Figure 1: Map", "figure": "f1" } },
+      { "q": "get", "kind": "figure", "id": "f2", "answer": { "title": "Chart", "section": "s1", "number": 2 } }
+    ] } },
+    { "sync": { "position": 3 } },
+    { "ask": { "position": 3, "questions": [
+      { "q": "get", "kind": "caption", "id": "c1", "answer": { "body": "Old map", "figure": "f1" } },
+      { "q": "all", "kind": "caption", "answer": ["c1", "c2"] }
+    ] } }
+  ]
+}

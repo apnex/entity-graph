@@ -1,0 +1,59 @@
+{
+  "case": "b5-03-undo-to-named-edit",
+  "batch": 5,
+  "summary": "Undoing down to the edit that landed at position 2 undoes it and the edit after it as one change, each entity restored to its state before the earlier of them; redo then lands the undone edits again one at a time, the oldest first, until none is left.",
+  "covers": ["reversible-history", "Undo and redo"],
+  "readings": ["R1", "R2", "R14", "R15", "R25", "R27", "R28", "R39", "R40", "R44", "R45", "R46"],
+  "world": "document",
+  "variant": "base",
+  "verdict": "accepted",
+  "steps": [
+    { "start": { "position": 0, "entities": [
+      { "kind": "section", "id": "s1", "record": { "heading": "Intro", "parent": null, "cites": [] } },
+      { "kind": "section", "id": "s2", "record": { "heading": "Method", "parent": null, "cites": [] } },
+      { "kind": "figure", "id": "f1", "record": { "title": "Map", "section": "s1", "number": 1 } },
+      { "kind": "figure", "id": "f2", "record": { "title": "Chart", "section": "s1", "number": 2 } },
+      { "kind": "caption", "id": "c1", "record": { "body": "Figure 1: Map", "figure": "f1" } },
+      { "kind": "caption", "id": "c2", "record": { "body": "Figure 2: Chart", "figure": "f2" } }
+    ] } },
+    { "commit": { "position": 0, "edit": [
+      { "op": "create", "kind": "section", "id": "s3", "record": { "heading": "Notes", "parent": null, "cites": [] } }
+    ], "outcome": "landed", "landedAt": 1, "writes": [
+      { "op": "put", "kind": "section", "id": "s3", "record": { "heading": "Notes", "parent": null, "cites": [] } }
+    ] } },
+    { "commit": { "position": 1, "edit": [
+      { "op": "change", "kind": "section", "id": "s3", "record": { "heading": "Notes v2", "parent": null, "cites": [] } }
+    ], "outcome": "landed", "landedAt": 2, "writes": [
+      { "op": "put", "kind": "section", "id": "s3", "record": { "heading": "Notes v2", "parent": null, "cites": [] } }
+    ] } },
+    { "commit": { "position": 2, "edit": [
+      { "op": "create", "kind": "figure", "id": "f3", "record": { "title": "Plot", "section": "s3", "number": 1 } }
+    ], "outcome": "landed", "landedAt": 3, "writes": [
+      { "op": "put", "kind": "figure", "id": "f3", "record": { "title": "Plot", "section": "s3", "number": 1 } },
+      { "op": "put", "kind": "caption", "id": "cap-f3", "record": { "body": "Figure 1: Plot", "figure": "f3" } }
+    ] } },
+    { "undo": { "position": 3, "to": 2, "outcome": "landed", "landedAt": 4, "writes": [
+      { "op": "del", "kind": "figure", "id": "f3" },
+      { "op": "del", "kind": "caption", "id": "cap-f3" },
+      { "op": "put", "kind": "section", "id": "s3", "record": { "heading": "Notes", "parent": null, "cites": [] } }
+    ] } },
+    { "ask": { "position": 4, "questions": [
+      { "q": "get", "kind": "section", "id": "s3", "answer": { "heading": "Notes", "parent": null, "cites": [] } },
+      { "q": "all", "kind": "figure", "answer": ["f1", "f2"] }
+    ] } },
+    { "undo": { "position": 4, "outcome": "landed", "landedAt": 5, "writes": [
+      { "op": "del", "kind": "section", "id": "s3" }
+    ] } },
+    { "redo": { "position": 5, "outcome": "landed", "landedAt": 6, "writes": [
+      { "op": "put", "kind": "section", "id": "s3", "record": { "heading": "Notes", "parent": null, "cites": [] } }
+    ] } },
+    { "redo": { "position": 6, "outcome": "landed", "landedAt": 7, "writes": [
+      { "op": "put", "kind": "section", "id": "s3", "record": { "heading": "Notes v2", "parent": null, "cites": [] } }
+    ] } },
+    { "redo": { "position": 7, "outcome": "landed", "landedAt": 8, "writes": [
+      { "op": "put", "kind": "figure", "id": "f3", "record": { "title": "Plot", "section": "s3", "number": 1 } },
+      { "op": "put", "kind": "caption", "id": "cap-f3", "record": { "body": "Figure 1: Plot", "figure": "f3" } }
+    ] } },
+    { "redo": { "position": 8, "outcome": "refused", "storePosition": 8, "refusal": { "part": "entity-graph", "code": "nothing-to-redo", "ruleKey": "nothing-to-redo", "subject": "history", "measure": 1, "opIndex": -1 } } }
+  ]
+}

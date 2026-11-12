@@ -1,0 +1,52 @@
+{
+  "case": "b6-02-stale-commit-refused-then-replanned",
+  "batch": 6,
+  "summary": "An edit planned at position 0 is refused by the store once another writer has landed a change, the answers unchanged; the caller takes the change in, plans again and lands; an edit a rule refuses leaves the store where it was.",
+  "covers": ["positioned-graph-sync", "The store port", "Judging and refusals"],
+  "readings": ["R1", "R2", "R14", "R15", "R23", "R25", "R27", "R28", "R32", "R39", "R40", "R41", "R42"],
+  "world": "document",
+  "variant": "base",
+  "verdict": "accepted",
+  "steps": [
+    { "start": { "position": 0, "entities": [
+      { "kind": "section", "id": "s1", "record": { "heading": "Intro", "parent": null, "cites": [] } },
+      { "kind": "section", "id": "s2", "record": { "heading": "Method", "parent": null, "cites": [] } },
+      { "kind": "figure", "id": "f1", "record": { "title": "Map", "section": "s1", "number": 1 } },
+      { "kind": "figure", "id": "f2", "record": { "title": "Chart", "section": "s1", "number": 2 } },
+      { "kind": "caption", "id": "c1", "record": { "body": "Figure 1: Map", "figure": "f1" } },
+      { "kind": "caption", "id": "c2", "record": { "body": "Figure 2: Chart", "figure": "f2" } }
+    ] } },
+    { "plan": { "position": 0, "edit": [
+      { "op": "create", "kind": "figure", "id": "f3", "record": { "title": "Plot", "section": "s2", "number": 1 } }
+    ], "outcome": "accepted", "writes": [
+      { "op": "put", "kind": "figure", "id": "f3", "record": { "title": "Plot", "section": "s2", "number": 1 } },
+      { "op": "put", "kind": "caption", "id": "cap-f3", "record": { "body": "Figure 1: Plot", "figure": "f3" } }
+    ] } },
+    { "other": { "position": 1, "writes": [
+      { "op": "put", "kind": "figure", "id": "f4", "record": { "title": "Photo", "section": "s2", "number": 1 } }
+    ] } },
+    { "commit": { "position": 0, "edit": [
+      { "op": "create", "kind": "figure", "id": "f3", "record": { "title": "Plot", "section": "s2", "number": 1 } }
+    ], "outcome": "refused", "storePosition": 1, "refusal": { "part": "entity-graph", "code": "store-moved", "ruleKey": "store-moved", "subject": "position", "measure": 1, "opIndex": -1 } } },
+    { "ask": { "position": 0, "questions": [
+      { "q": "all", "kind": "figure", "answer": ["f1", "f2"] },
+      { "q": "get", "kind": "figure", "id": "f4", "answer": null }
+    ] } },
+    { "sync": { "position": 1 } },
+    { "ask": { "position": 1, "questions": [
+      { "q": "all", "kind": "figure", "answer": ["f1", "f2", "f4"] }
+    ] } },
+    { "commit": { "position": 1, "edit": [
+      { "op": "create", "kind": "figure", "id": "f3", "record": { "title": "Plot", "section": "s2", "number": 2 } }
+    ], "outcome": "landed", "landedAt": 2, "writes": [
+      { "op": "put", "kind": "figure", "id": "f3", "record": { "title": "Plot", "section": "s2", "number": 2 } },
+      { "op": "put", "kind": "caption", "id": "cap-f3", "record": { "body": "Figure 2: Plot", "figure": "f3" } }
+    ] } },
+    { "commit": { "position": 2, "edit": [
+      { "op": "create", "kind": "figure", "id": "f5", "record": { "title": "Sketch", "section": "s2", "number": 3 } }
+    ], "outcome": "refused", "storePosition": 2, "refusal": { "part": "entity-graph", "code": "condition", "ruleKey": "section.figure-limit", "subject": "s2", "measure": 1, "opIndex": -1, "sentence": "Section s2 holds 3 figures; a section holds at most 2." } } },
+    { "ask": { "position": 2, "questions": [
+      { "q": "all", "kind": "figure", "answer": ["f1", "f2", "f3", "f4"] }
+    ] } }
+  ]
+}

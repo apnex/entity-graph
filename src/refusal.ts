@@ -23,6 +23,18 @@ export type GraphRefusalCode =
 	| "invalid-context"
 	| "reentrant"
 	| "too-many-writes"
+	| "too-many-steps"
+	| "store-moved"
+	| "note-bound"
+	| "nothing-to-undo"
+	| "nothing-to-redo"
+	| "replay-changes-nothing"
+	| "undo-target-unknown"
+	| "history-superseded"
+	| "history-unreadable"
+	| "store-failed"
+	| "no-store"
+	| "invalid-options"
 	| "stale-position"
 	| "empty-change"
 	| "too-many-items"
@@ -146,6 +158,66 @@ const TEXTS: Readonly<Record<GraphRefusalCode, { what: string; why: string; fix:
 		what: "The edit was refused: its context is not plain JSON.",
 		why: "A plan's context is read once as plain JSON before any item, running none of its code, and handed as it is to consequences, conditions and resolvers.",
 		fix: "Send a context of plain JSON values - objects, lists, strings, finite numbers, booleans and null - without functions, cycles or class instances.",
+	},
+	"too-many-steps": {
+		what: "The edit was refused: planning it took more steps than a plan may.",
+		why: "A plan takes at most 20,000 steps - each a write of one entity, requested or consequence - so an expansion is refused before it costs more than its undo record could hold.",
+		fix: "Split the edit into smaller edits; details.measure is the step at which planning stopped.",
+	},
+	"store-moved": {
+		what: "Refused: the store has moved since the position this was planned from.",
+		why: "A change lands with the position it was planned from as its expected position, which covers every entity, read or written; a store that has moved refuses it, and the answers stay as they were.",
+		fix: "Take the store's changes in, then commit, undo or redo again.",
+	},
+	"note-bound": {
+		what: "Refused: its undo record would not fit the store's bound on a note.",
+		why: "A change carries its undo record in its note, so every change that lands can be undone, and the store bounds a note; details.measure is the record's size in bytes of canonical UTF-8 JSON.",
+		fix: "Split the edit into smaller edits.",
+	},
+	"nothing-to-undo": {
+		what: "Refused: the history holds no landed edit not yet undone.",
+		why: "An undo replays the reversal of an edit the history holds; an edit undone already, evicted, or never landed by this graph is not held.",
+		fix: "Nothing to do; or commit an edit first.",
+	},
+	"nothing-to-redo": {
+		what: "Refused: the history holds no undone edit.",
+		why: "A redo replays an edit an undo reversed; an edit committed after the undo discards what was undone.",
+		fix: "Nothing to do.",
+	},
+	"replay-changes-nothing": {
+		what: "Refused: the undo or redo would change nothing.",
+		why: "The edits it replays leave every entity as it stands - an edit and a later one reversing it, undone together - and a change that writes nothing lands no change, whose note could hold its record.",
+		fix: "Undo the latest edit alone, or none.",
+	},
+	"undo-target-unknown": {
+		what: "Refused: the undo names no landed edit the history holds and has not undone.",
+		why: "An undo down to an edit names the position where that edit landed, and the history must hold it, not yet undone.",
+		fix: "Name the position of an edit the history holds; history() lists them.",
+	},
+	"history-superseded": {
+		what: "Refused: an entity the undo or redo would write no longer stands as the edit left it.",
+		why: "A reversal is applied only to the state it was recorded against; a change since, by another writer, to an entity it writes would be overwritten.",
+		fix: "Edit the entity in details.subject as it now stands instead.",
+	},
+	"history-unreadable": {
+		what: "Refused: the undo record of an edit could not be read back from the store.",
+		why: "An edit's undo record is kept in the note on the change that landed it, and is read back from the store to undo or redo it.",
+		fix: "Check the store's change at details.subject, whose note is not an undo record this component wrote.",
+	},
+	"store-failed": {
+		what: "Refused: the store port answered what it may not.",
+		why: "A store port answers each call synchronously in plain data: a change landed at a position after the one expected, or refused with the store's position; or the changes after a position, in order.",
+		fix: "Correct the store port; details.subject names the call.",
+	},
+	"no-store": {
+		what: "Refused: the graph has no store port to land an edit through.",
+		why: "A commit, an undo and a redo land as positioned changes in the store beneath, through the port the graph was made with.",
+		fix: "Make the graph with a store port in its options.",
+	},
+	"invalid-options": {
+		what: "The graph's options were refused: they are not options the component can read.",
+		why: "A graph's options name a store port, an object answering noteBound, position(), change() and changes(), and the history's bounds: count, bytes, hardCount and hardBytes, whole numbers from 1 with each hard limit at least its bound, and pin, a function.",
+		fix: "Send the options in that form; details.subject names the part that is not.",
 	},
 	"reentrant": {
 		what: "Refused: the graph was asked to change or plan while it was planning.",

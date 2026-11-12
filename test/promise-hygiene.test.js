@@ -134,3 +134,26 @@ test("what a refusal leaves unread is observed however large: a promise past the
 	await answered(() => graph.plan({ items: [{ op: "create", kind: "note", id: "n", record: {} }] }), "consequence-failed", "a consequence's answer");
 	await answered(() => graph.plan({ items: [{ op: "create", kind: "mark", id: "a", get record() { return {}; } }, ...many, leaky()] }), "not-plain", "an edit's items after the first refused");
 });
+
+// --- M5's paths (docs/DECISIONS.md D33, D35) ---
+
+test("a commit, an undo or a redo refused, a store port or a pin throwing or answering a promise, observes it", async () => {
+	const { createMemoryGraphPort } = await import("../dist/index.js");
+	const open = (port, history) => createEntityGraph({ kinds: [{ kind: "note" }] }, { position: 0 }, { port, ...(history ? { history } : {}) }).graph;
+	const graph = open(createMemoryGraphPort());
+	await answered(() => graph.commit({ items: [leaky()] }, { context: () => 1 }), "invalid-context", "a commit's context");
+	await answered(() => graph.undo(rejected()), "undo-target-unknown", "an undo's target");
+	await answered(() => graph.undo(1, { mode: { held: rejected() } }), "invalid-edit", "an undo's options");
+	await answered(() => graph.redo({ context: { f() {}, held: rejected() } }), "invalid-context", "a redo's context");
+	const throwing = { noteBound: 1000, position: () => 0, change: () => { throw { held: rejected() }; }, changes: () => ({ position: 0, changes: [] }) };
+	await answered(() => open(throwing).commit({ items: [{ op: "create", kind: "note", id: "a", record: {} }] }), "store-failed", "a port that throws");
+	const promising = { noteBound: 1000, position: () => 0, change: () => rejected(), changes: () => ({ position: 0, changes: [] }) };
+	await answered(() => open(promising).commit({ items: [{ op: "create", kind: "note", id: "a", record: {} }] }), "store-failed", "a port answering a promise");
+	const pinning = open(createMemoryGraphPort(), { pin: () => { throw { held: rejected() }; } });
+	const { answer, seen } = await settled(() => pinning.commit({ items: [{ op: "create", kind: "note", id: "a", record: {} }] }));
+	assert.equal(answer.ok, true, "a pin that throws pins nothing, and the edit has landed");
+	assert.equal(seen.length, 0);
+	const second = await settled(() => open(createMemoryGraphPort(), { pin: () => rejected() }).commit({ items: [{ op: "create", kind: "note", id: "a", record: {} }] }));
+	assert.deepEqual([second.answer.ok, second.seen.length], [true, 0], "a pin answering a promise pins nothing");
+	await answered(() => createEntityGraph({ kinds: [{ kind: "note" }] }, undefined, { port: createMemoryGraphPort(), history: { count: rejected() } }), "invalid-options", "history bounds");
+});
