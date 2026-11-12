@@ -4,10 +4,10 @@
  * item stands for. What it answers is read once as plain JSON, running none of its code, and must be a list; a resolver that
  * throws, answers otherwise, or reaches for what it was handed is refused by the planner, and nothing of it reaches the view.
  */
-import { observePromises, readPlainJson } from "@apnex/shape-check";
 import type { CompiledDeclaration, IntentResolver } from "./declaration.js";
 import { openReader } from "./reader.js";
 import type { GraphState } from "./scratch.js";
+import { observeAll, readPlain } from "./plain-members.js";
 
 /** The writes an item stands for, or null where the resolver failed to answer them. */
 export function resolveItem(state: GraphState, d: CompiledDeclaration, resolver: IntentResolver, item: unknown, context: unknown): unknown[] | null {
@@ -16,11 +16,11 @@ export function resolveItem(state: GraphState, d: CompiledDeclaration, resolver:
 	try {
 		returned = Reflect.apply(resolver, undefined, [Object.freeze({ item, graph: reader, context })]);
 	} catch (thrown) {
-		observePromises(thrown); // a thrown value holding a promise that rejects leaves no unhandled rejection (D30)
+		observeAll(thrown); // a thrown value holding a promise that rejects leaves no unhandled rejection (D30)
 		return null;
 	} finally {
 		close();
 	}
-	const read = readPlainJson(returned as never);
+	const read = readPlain(returned as never);
 	return read.ok && Array.isArray(read.value) ? (read.value as unknown[]) : null;
 }

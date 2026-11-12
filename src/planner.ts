@@ -8,10 +8,9 @@
  * answers the steps applied, their reversal and the net writes, at the view's position, or refuses, naming the rule, the
  * entity and the item that led there. The view is only read. Intent resolvers and the edit context are M4's.
  */
-import { observePromises } from "@apnex/shape-check";
 import type { CompiledDeclaration } from "./declaration.js";
 import { applyItem, type ItemFault } from "./items.js";
-import { itemsOf, membersOf } from "./plain-members.js";
+import { itemsOf, membersOf, observeAll } from "./plain-members.js";
 import { type PhaseFault, readConditions, runPhase } from "./phases.js";
 import { type ConditionReading, judge, RuleExpander } from "./reference-rules.js";
 import { type GraphRefusal, type GraphRefusalCode, refuse } from "./refusal.js";
@@ -59,7 +58,7 @@ export function planEdit(view: EntityView, d: CompiledDeclaration, input: unknow
 	const no = (code: GraphRefusalCode, subject: string, opIndex = -1): GraphPlan => ({ ok: false, refusal: refuse(code, subject, opIndex) });
 	// an edit refused before its items are read has its promises observed, so none it holds goes unhandled (D30)
 	const unread = (code: GraphRefusalCode, subject: string): GraphPlan => {
-		observePromises(input);
+		observeAll(input);
 		return no(code, subject);
 	};
 	const edit = membersOf(input);

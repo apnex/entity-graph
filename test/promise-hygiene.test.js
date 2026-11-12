@@ -84,3 +84,53 @@ test("a context that is a rejected promise is refused as not plain JSON, and the
 	assert.deepEqual([answer.refusal?.code, answer.refusal?.details.subject], ["invalid-context", "context"]);
 	assert.equal(seen.length, 0);
 });
+
+// --- the independent check's findings on 6929d79 (docs/DECISIONS.md D31) ---
+
+const answered = async (call, code, label) => {
+	const { answer, seen } = await settled(call);
+	assert.equal(answer.ok, false, `${label}: accepted`);
+	assert.equal(answer.refusal.code, code, label);
+	assert.equal(seen.length, 0, `${label}: ${seen.length} unhandled rejection(s)`);
+};
+const leaky = () => ({ op: "create", kind: "note", id: "x", record: { held: rejected() } });
+
+test("a refusal returning before an argument is read observes that argument: the opening, the edit beside its options, a call made while planning", async () => {
+	await answered(() => createEntityGraph({ kinds: [] }, { entities: [{ kind: "note", id: "x", record: { held: rejected() } }] }), "invalid-declaration", "a declaration refused before its opening");
+	const graph = createEntityGraph({ kinds: [{ kind: "note" }] }).graph;
+	await answered(() => graph.plan({ items: [leaky()] }, { context: () => 1 }), "invalid-context", "a context that is not plain JSON");
+	await answered(() => graph.plan({ items: [leaky()] }, { ctx: 1 }), "invalid-edit", "an option it does not know");
+	await answered(() => graph.plan({ items: [leaky()] }, null), "invalid-edit", "options that are no object");
+	const inner = [];
+	let host = null;
+	const call = { id: "call", phase: "first", trigger: { created: ["note"] }, run: () => {
+		inner.push(host.applyChange({ position: 9, items: [{ kind: "note", id: "y", record: { held: rejected() } }] }));
+		inner.push(host.plan({ items: [leaky()] }, { context: { held: rejected() } }));
+		return [];
+	} };
+	host = createEntityGraph({ phases: ["first"], kinds: [{ kind: "note", consequences: [call] }] }).graph;
+	const { answer, seen } = await settled(() => host.plan({ items: [{ op: "create", kind: "note", id: "n", record: {} }] }));
+	assert.equal(answer.ok, true, JSON.stringify(answer.refusal));
+	assert.deepEqual(inner.map((r) => r.refusal?.code), ["reentrant", "reentrant"]);
+	assert.equal(seen.length, 0, `${seen.length} unhandled rejection(s) from calls made while planning`);
+});
+
+test("a question refused for one argument observes the others", async () => {
+	const graph = createEntityGraph({ kinds: [{ kind: "note", references: [{ field: "to", targets: ["note"], holds: "one", onTargetDelete: "unlink" }] }] }).graph;
+	const calls = [
+		["get, kind", () => graph.get(rejected(), "x")], ["get, id", () => graph.get("note", rejected())], ["all", () => graph.all(rejected())],
+		["referrersOf, id", () => graph.referrersOf(rejected())], ["referrersOf, its filter unread", () => graph.referrersOf(1, { held: rejected() })],
+		["targetsOf, id", () => graph.targetsOf(rejected())], ["targetsOf, field", () => graph.targetsOf("x", rejected())],
+		["ownerOf, member", () => graph.ownerOf(rejected(), "note")], ["ownerOf, container", () => graph.ownerOf("x", rejected())],
+		["reachable, its filter unread", () => graph.reachable(1, { held: rejected() })],
+	];
+	for (const [label, call] of calls) await answered(call, "invalid-query", label);
+});
+
+test("what a refusal leaves unread is observed however large: a promise past the thousandth part of an answer or an edit", async () => {
+	const many = Array.from({ length: 1500 }, (_, i) => ({ op: "create", kind: "mark", id: `m${i}`, record: {} }));
+	const flood = { id: "flood", phase: "first", trigger: { created: ["note"] }, run: () => [...many, { op: "create", kind: "mark", id: "late", get record() { return {}; } }, { held: rejected() }] };
+	const graph = createEntityGraph({ phases: ["first"], kinds: [{ kind: "note", consequences: [flood] }, { kind: "mark" }] }).graph;
+	await answered(() => graph.plan({ items: [{ op: "create", kind: "note", id: "n", record: {} }] }), "consequence-failed", "a consequence's answer");
+	await answered(() => graph.plan({ items: [{ op: "create", kind: "mark", id: "a", get record() { return {}; } }, ...many, leaky()] }), "not-plain", "an edit's items after the first refused");
+});

@@ -143,3 +143,11 @@ test("a condition is judged with the plan's context on the state the edit found 
 	assert.equal(accepted(add({ limit: 3 })).ok, true, "and the reading of the state it found is not carried from one context to another");
 	assert.equal(refused(add()).details.sentence, "3 notes, at most 1");
 });
+
+test("two contexts that differ only in the order of their keys are two contexts to a condition (D31)", () => {
+	const first = { id: "first", check: ({ context }) => (context === undefined ? [] : [{ subject: Object.keys(context)[0], measure: 1, sentence: `first key ${Object.keys(context)[0]}` }]) };
+	const g = make({ kinds: [{ kind: "note", conditions: [first] }] });
+	assert.equal(accepted(g.plan({ items: [create("note", "a")] }, { context: { x: 1, y: 2 } })).ok, true, "the same breach before and after: none new");
+	assert.equal(accepted(g.plan({ items: [create("note", "a")] }, { context: { y: 2, x: 1 } })).ok, true, "and with its keys reordered, read anew on the state the edit found");
+});
+

@@ -7,8 +7,8 @@
  * intent resolver (D26). A bad declaration is refused at creation, its subject naming the kind, the member and the part at fault.
  * The index from each kind to the consequences of each phase listening to it is built here, once.
  */
-import { observePromises, type PreparedShape, prepareShapeDocument, readPlainJson } from "@apnex/shape-check";
-import { itemsOf, membersOf } from "./plain-members.js";
+import { type PreparedShape, prepareShapeDocument } from "@apnex/shape-check";
+import { itemsOf, membersOf, observeAll, readPlain } from "./plain-members.js";
 import { type GraphRefusal, refuse } from "./refusal.js";
 
 /** How many targets a reference holds. */
@@ -167,7 +167,7 @@ const firstUnknown = (value: Record<string, unknown>, known: ReadonlySet<string>
 export function compileDeclaration(input: unknown): { ok: true; declaration: CompiledDeclaration } | { ok: false; refusal: GraphRefusal } {
 	// a refused declaration has its promises observed, whatever part of it was read, so none goes unhandled (D30)
 	const bad = (path: string, fault: string) => {
-		observePromises(input);
+		observeAll(input);
 		return { ok: false as const, refusal: refuse("invalid-declaration", `${path}: ${fault}`) };
 	};
 	const top = membersOf(input);
@@ -212,7 +212,7 @@ export function compileDeclaration(input: unknown): { ok: true; declaration: Com
 		if (listed === null) return bad(`${kind}.references`, "invalid");
 		const references: unknown[] = [];
 		for (const [j, entry] of listed.entries()) {
-			const read = readPlainJson(entry);
+			const read = readPlain(entry);
 			if (!read.ok) return bad(`${kind}.references[${j}]`, "invalid");
 			references.push(read.value);
 		}
@@ -255,7 +255,7 @@ export function compileDeclaration(input: unknown): { ok: true; declaration: Com
 		}
 		compiled.set(kind, list);
 		if (declared["shape"] !== undefined) {
-			const read = readPlainJson(declared["shape"]);
+			const read = readPlain(declared["shape"]);
 			if (!read.ok) return bad(`${kind}.shape`, "invalid");
 			const prepared = prepareShapeDocument(read.value);
 			if (!prepared.accepted) return bad(`${kind}.shape${prepared.problems[0]?.pointer ?? ""}`, "invalid");
@@ -290,7 +290,7 @@ type Compiled<T> = { ok: true; list: T[] } | { ok: false; path: string; fault: s
 /** A trigger read as plain data: one clause or a list of them, each naming declared kinds or a declared kind's fields; or the fault. */
 function compileTrigger(value: unknown, names: readonly string[]): { ok: true; clauses: TriggerClause[] } | { ok: false; fault: string } {
 	if (value === undefined) return { ok: false, fault: "missing" };
-	const read = readPlainJson(value);
+	const read = readPlain(value);
 	if (!read.ok) return { ok: false, fault: "invalid" };
 	const given = Array.isArray(read.value) ? read.value : [read.value];
 	if (given.length === 0) return { ok: false, fault: "invalid" };

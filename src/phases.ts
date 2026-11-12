@@ -16,7 +16,6 @@
  * as plain JSON, running none of its code. A function that throws, answers what is not plain data or is not in the form asked,
  * or reaches for what it was handed, is refused, and nothing of it reaches the view.
  */
-import { observePromises, readPlainJson } from "@apnex/shape-check";
 import type { CompiledConsequence, CompiledDeclaration } from "./declaration.js";
 import { applyItem } from "./items.js";
 import { openReader } from "./reader.js";
@@ -24,6 +23,7 @@ import type { ConditionReading } from "./reference-rules.js";
 import type { GraphRefusalCode } from "./refusal.js";
 import { type Attribution, type GraphChangeRecord, type GraphState, later, type Scratch } from "./scratch.js";
 import { isObject } from "./view.js";
+import { observeAll, readPlain } from "./plain-members.js";
 
 /** Why a phase or a condition stops the plan: the refusal's code and the facts it names. */
 export interface PhaseFault {
@@ -119,12 +119,12 @@ export function runPhase(s: Scratch, d: CompiledDeclaration, phase: string, cont
 		try {
 			returned = Reflect.apply(c.run, undefined, [Object.freeze({ matches: heard, graph: reader, context })]);
 		} catch (thrown) {
-			observePromises(thrown); // a thrown value holding a promise that rejects leaves no unhandled rejection (D30)
+			observeAll(thrown); // a thrown value holding a promise that rejects leaves no unhandled rejection (D30)
 			return failed("consequence-failed", c.key, matches[0]!.id);
 		} finally {
 			close();
 		}
-		const read = readPlainJson(returned as never);
+		const read = readPlain(returned as never);
 		if (!read.ok || !Array.isArray(read.value)) return failed("consequence-failed", c.key, matches[0]!.id);
 		for (const [i, write] of (read.value as unknown[]).entries()) {
 			const id = isObject(write) && typeof write["id"] === "string" ? write["id"] : null;
@@ -150,12 +150,12 @@ export function readConditions(d: CompiledDeclaration, state: GraphState, contex
 		try {
 			returned = Reflect.apply(c.check, undefined, [Object.freeze({ graph: reader, context })]);
 		} catch (thrown) {
-			observePromises(thrown);
+			observeAll(thrown);
 			return failed;
 		} finally {
 			close();
 		}
-		const read = readPlainJson(returned as never);
+		const read = readPlain(returned as never);
 		if (!read.ok || !Array.isArray(read.value)) return failed;
 		const subjects = new Set<string>();
 		for (const b of read.value as unknown[]) {

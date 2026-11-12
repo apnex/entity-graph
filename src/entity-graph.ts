@@ -5,11 +5,10 @@
  * entity refers to, which containers of a kind hold a member, and what can be reached from an entity by following references.
  * Asking changes nothing. A question naming a kind or a field the declaration does not hold is refused, not answered empty.
  */
-import { observePromises, readPlainJson, toCanonicalJson } from "@apnex/shape-check";
 import { type CompiledDeclaration, compileDeclaration, type GraphDeclaration } from "./declaration.js";
 import type { Referrer } from "./references.js";
 import { type GraphRefusal, refuse } from "./refusal.js";
-import { itemsOf, membersOf } from "./plain-members.js";
+import { itemsOf, membersOf, observeAll, readPlain, samePlain } from "./plain-members.js";
 import { readConditions } from "./phases.js";
 import { type ConditionsBefore, type GraphEdit, type GraphPlan, planEdit } from "./planner.js";
 import { viewState } from "./scratch.js";
@@ -64,7 +63,7 @@ const isList = (value: unknown): value is unknown[] => Array.isArray(value);
  */
 function readFilter(input: unknown, declaration: CompiledDeclaration): { filter: { kinds?: readonly string[]; fields?: readonly string[] } } | { problem: string } {
 	if (input === undefined) return { filter: {} };
-	const read = readPlainJson(input);
+	const read = readPlain(input);
 	if (!read.ok || typeof read.value !== "object" || read.value === null || Array.isArray(read.value)) return { problem: "filter" };
 	const value = read.value as Record<string, unknown>;
 	for (const key of Object.keys(value)) if (key !== "kinds" && key !== "fields") return { problem: `filter.${key}` };
@@ -77,7 +76,10 @@ function readFilter(input: unknown, declaration: CompiledDeclaration): { filter:
 /** Makes a graph from a declaration, or refuses the declaration or the first entities, naming what is wrong. */
 export function createEntityGraph(declaration: GraphDeclaration, opening?: GraphOpening): { ok: true; graph: EntityGraph } | { ok: false; refusal: GraphRefusal } {
 	const compiled = compileDeclaration(declaration);
-	if (!compiled.ok) return compiled;
+	if (!compiled.ok) {
+		observeAll(opening); // refused before the opening is read, it is observed unread (D31)
+		return compiled;
+	}
 	const d = compiled.declaration;
 	// the opening read once as plain data, part by part (D12): none opens an empty graph at 0; a member other than its
 	// position and entities, or anything not plain data, is refused, the first entity that is not named by its index
@@ -85,7 +87,7 @@ export function createEntityGraph(declaration: GraphDeclaration, opening?: Graph
 	if (members === null) return { ok: false, refusal: refuse("invalid-opening", "opening") };
 	// an opening refused before its entities are read has its promises observed (D30)
 	const unread = (subject: string) => {
-		observePromises(opening);
+		observeAll(opening);
 		return { ok: false as const, refusal: refuse("invalid-opening", subject) };
 	};
 	const stray = Object.keys(members).find((k) => k !== "position" && k !== "entities");
@@ -100,42 +102,46 @@ export function createEntityGraph(declaration: GraphDeclaration, opening?: Graph
 	const filled = view.fill(entities.items);
 	if (!filled.ok) return filled;
 
-	const query = (subject: string) => ({ ok: false as const, refusal: refuse("invalid-query", subject) });
+	// a question refused for one argument observes all of them, so a promise in one it never read goes unhandled by no one (D31)
+	const query = (subject: string, ...args: unknown[]) => {
+		observeAll(args);
+		return { ok: false as const, refusal: refuse("invalid-query", subject) };
+	};
 	const isId = (value: unknown): value is string => typeof value === "string";
 	const at = () => view.position();
 	// whether a plan is running, so a consequence, condition or resolver calling back in is refused (D22); and the conditions'
 	// breaches as the view stands, read once per position and context (D21, D28)
 	let planning = false;
-	let held: { key: string; reading: ReturnType<ConditionsBefore> } | null = null;
+	// the context compared with its keys' order, since a condition may read that order (D31)
+	let held: { position: number; context: unknown; reading: ReturnType<ConditionsBefore> } | null = null;
 	const conditionsBefore: ConditionsBefore = (context) => {
-		const key = `${view.position()} ${context === undefined ? "" : toCanonicalJson(context as never)}`;
-		if (held === null || held.key !== key) held = { key, reading: readConditions(d, viewState(view), context) };
+		if (held === null || held.position !== view.position() || !samePlain(held.context, context, true)) held = { position: view.position(), context, reading: readConditions(d, viewState(view), context) };
 		return held.reading;
 	};
 
 	const graph: EntityGraph = {
 		position: at,
 		get(kind, id) {
-			if (!d.kinds.has(kind)) return query("kind");
-			if (!isId(id)) return query("id");
+			if (!d.kinds.has(kind)) return query("kind", kind, id);
+			if (!isId(id)) return query("id", kind, id);
 			const e = view.get(id);
 			return { ok: true, position: at(), entity: e !== undefined && e.kind === kind ? e : null };
 		},
 		all(kind) {
-			if (!d.kinds.has(kind)) return query("kind");
+			if (!d.kinds.has(kind)) return query("kind", kind);
 			return { ok: true, position: at(), entities: view.all(kind) };
 		},
 		referrersOf(targetId, input) {
-			if (!isId(targetId)) return query("targetId");
+			if (!isId(targetId)) return query("targetId", targetId, input);
 			const read = readFilter(input, d);
-			if ("problem" in read) return query(read.problem);
+			if ("problem" in read) return query(read.problem, targetId, input);
 			const filter = read.filter;
 			const referrers = view.index.referrersOf(targetId).filter((r) => (filter.kinds === undefined || filter.kinds.includes(r.kind)) && (filter.fields === undefined || filter.fields.includes(r.field)));
 			return { ok: true, position: at(), referrers };
 		},
 		targetsOf(id, field) {
-			if (!isId(id)) return query("id");
-			if (field !== undefined && !(typeof field === "string" && d.fields.has(field))) return query("field");
+			if (!isId(id)) return query("id", id, field);
+			if (field !== undefined && !(typeof field === "string" && d.fields.has(field))) return query("field", id, field);
 			const targets: HeldTarget[] = [];
 			for (const [f, ids] of view.index.targetsOf(id)) {
 				if (field !== undefined && f !== field) continue;
@@ -144,15 +150,15 @@ export function createEntityGraph(declaration: GraphDeclaration, opening?: Graph
 			return { ok: true, position: at(), found: view.get(id) !== undefined, targets };
 		},
 		ownerOf(memberId, containerKind) {
-			if (!isId(memberId)) return query("memberId");
-			if (!d.kinds.has(containerKind)) return query("containerKind");
+			if (!isId(memberId)) return query("memberId", memberId, containerKind);
+			if (!d.kinds.has(containerKind)) return query("containerKind", memberId, containerKind);
 			const owners = [...new Set(view.index.referrersOf(memberId).filter((r) => r.kind === containerKind).map((r) => r.id))];
 			return { ok: true, position: at(), owners };
 		},
 		reachable(fromId, input) {
-			if (!isId(fromId)) return query("fromId");
+			if (!isId(fromId)) return query("fromId", fromId, input);
 			const read = readFilter(input, d);
-			if ("problem" in read) return query(read.problem);
+			if ("problem" in read) return query(read.problem, fromId, input);
 			const filter = read.filter;
 			// every identity reached by a path of one or more references: the start only when a cycle leads back to it, and an
 			// identity the view does not hold reached, as held, leading nowhere further (D13)
@@ -176,27 +182,41 @@ export function createEntityGraph(declaration: GraphDeclaration, opening?: Graph
 			return { ok: true, position: at(), reached };
 		},
 		applyChange(change) {
-			if (planning) return { ok: false, refusal: refuse("reentrant", "applyChange") };
+			if (planning) {
+				observeAll(change); // refused unread (D31)
+				return { ok: false, refusal: refuse("reentrant", "applyChange") };
+			}
 			return view.take(change);
 		},
 		plan(edit, options) {
+			// a call made while planning is refused for that alone, whatever it carries, which is observed unread (D22, D31)
+			if (planning) {
+				observeAll([edit, options]);
+				return { ok: false, refusal: refuse("reentrant", "plan") };
+			}
 			// the context read once as plain JSON before any item, refused of the edit as a whole if it is not (the corpus's R34; D28)
 			let context: unknown;
 			if (options !== undefined) {
 				const given = membersOf(options, true);
-				if (given === null) return { ok: false, refusal: refuse("invalid-edit", "options") };
+				// each refusal before the edit is read observes it, and the options' members it did not read (D30, D31)
+				if (given === null) {
+					observeAll(edit);
+					return { ok: false, refusal: refuse("invalid-edit", "options") };
+				}
 				const stray = Object.keys(given).find((k) => k !== "context");
 				if (stray !== undefined) {
-					observePromises(given); // the options' members, none of them read as plain JSON (D30)
+					observeAll([given, edit]);
 					return { ok: false, refusal: refuse("invalid-edit", `options.${stray}`) };
 				}
 				if (given["context"] !== undefined) {
-					const read = readPlainJson(given["context"]);
-					if (!read.ok) return { ok: false, refusal: refuse("invalid-context", "context") };
+					const read = readPlain(given["context"]);
+					if (!read.ok) {
+						observeAll(edit);
+						return { ok: false, refusal: refuse("invalid-context", "context") };
+					}
 					context = read.value;
 				}
 			}
-			if (planning) return { ok: false, refusal: refuse("reentrant", "plan") };
 			planning = true;
 			try {
 				return planEdit(view, d, edit, context, conditionsBefore);

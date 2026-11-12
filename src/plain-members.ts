@@ -10,13 +10,28 @@
  * it; and whenever a value is refused, the value itself, every member or item read from it so far and anything a Proxy's trap
  * threw are handed to shape-check's `observePromises`, so a promise among them that rejects leaves no unhandled rejection.
  */
-import { observePromises } from "@apnex/shape-check";
+import { observePromises, readPlainJson } from "@apnex/shape-check";
+
+/**
+ * Observes every native promise in a value, walking all of it: shape-check's walk stops after 1,000 objects, so a promise past
+ * them in a large refused value would go unhandled (docs/DECISIONS.md D31).
+ */
+export function observeAll(value: unknown): void {
+	observePromises(value, Number.POSITIVE_INFINITY);
+}
+
+/** shape-check's plain-JSON reading, and, on refusal, every promise in the value observed however far into it (D31). */
+export function readPlain(value: unknown): ReturnType<typeof readPlainJson> {
+	const read = readPlainJson(value as never);
+	if (!read.ok) observeAll(value);
+	return read;
+}
 
 /** An object's own members, copied onto an object with no prototype, or null when it is not plain data. */
 export function membersOf(value: unknown, plainNext = false): Record<string, unknown> | null {
 	const captured: unknown[] = [value];
 	const refused = (thrown?: unknown): null => {
-		observePromises([...captured, thrown]);
+		observeAll([...captured, thrown]);
 		return null;
 	};
 	try {
@@ -41,7 +56,7 @@ export function membersOf(value: unknown, plainNext = false): Record<string, unk
 export function itemsOf(value: unknown, plainNext = false): unknown[] | null {
 	const captured: unknown[] = [value];
 	const refused = (thrown?: unknown): null => {
-		observePromises([...captured, thrown]);
+		observeAll([...captured, thrown]);
 		return null;
 	};
 	try {
@@ -64,11 +79,11 @@ export function itemsOf(value: unknown, plainNext = false): unknown[] | null {
 }
 
 /**
- * Whether two plain JSON values are equal, an object's members compared whatever their order and a list's items in order
- * (docs/DECISIONS.md D19). It walks with a stack of its own rather than recursing, so a value of any depth plain JSON can hold
+ * Whether two plain JSON values are equal, an object's members compared whatever their order - or, `ordered`, in their order too
+ * (D31) - and a list's items in order (docs/DECISIONS.md D19). It walks with a stack of its own rather than recursing, so a value of any depth plain JSON can hold
  * is compared, and stops at the first part shared, as a record's untouched members are after a change of named fields.
  */
-export function samePlain(a: unknown, b: unknown): boolean {
+export function samePlain(a: unknown, b: unknown, ordered = false): boolean {
 	const pending: [unknown, unknown][] = [[a, b]];
 	while (pending.length > 0) {
 		const [x, y] = pending.pop()!;
@@ -83,9 +98,10 @@ export function samePlain(a: unknown, b: unknown): boolean {
 		const left = x as Record<string, unknown>;
 		const right = y as Record<string, unknown>;
 		const keys = Object.keys(left);
-		if (keys.length !== Object.keys(right).length) return false;
-		for (const key of keys) {
-			if (!Object.hasOwn(right, key)) return false;
+		const others = Object.keys(right);
+		if (keys.length !== others.length) return false;
+		for (const [n, key] of keys.entries()) {
+			if (ordered ? others[n] !== key : !Object.hasOwn(right, key)) return false;
 			pending.push([left[key], right[key]]);
 		}
 	}

@@ -5,9 +5,8 @@
  * checked against the view before any item is applied, the position moving to the change's (docs/DECISIONS.md D12, D30).
  * Records are read as plain JSON through shape-check and kept frozen, so no answer can change what is held.
  */
-import { observePromises, readPlainJson } from "@apnex/shape-check";
 import type { CompiledDeclaration, CompiledReference } from "./declaration.js";
-import { itemsOf, membersOf } from "./plain-members.js";
+import { itemsOf, membersOf, observeAll, readPlain } from "./plain-members.js";
 import { ReferenceIndex } from "./references.js";
 import { type GraphRefusal, refuse } from "./refusal.js";
 
@@ -71,10 +70,10 @@ export function heldBy(record: GraphRecord, ref: CompiledReference): readonly st
 export function readEachPlain(items: readonly unknown[]): { ok: true; items: unknown[] } | { ok: false; at: number } {
 	const out: unknown[] = [];
 	for (const [i, item] of items.entries()) {
-		const read = readPlainJson(item);
+		const read = readPlain(item);
 		// the refused item is observed by the reading; the items after it, never read, are observed here (D30)
 		if (!read.ok) {
-			observePromises(items.slice(i + 1));
+			observeAll(items.slice(i + 1));
 			return { ok: false, at: i };
 		}
 		out.push(read.value);
@@ -116,7 +115,7 @@ export class EntityView {
 	take(input: unknown): { ok: true; position: number } | { ok: false; refusal: GraphRefusal } {
 		// a change refused before its items are read has its promises observed, so none it holds goes unhandled (D30)
 		const unread = (code: Parameters<typeof refuse>[0], subject: string) => {
-			observePromises(input);
+			observeAll(input);
 			return { ok: false as const, refusal: refuse(code, subject) };
 		};
 		const change = membersOf(input);

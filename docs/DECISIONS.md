@@ -485,7 +485,8 @@ Naming the second consequence as the conflict's `ruleKey` and the item it follow
 ## D22 - Proposed reading: a consequence or condition cannot change the view
 
 **Proposed by:** the builder of M3, 2026-11-11, for zorg's review, on the brief's purity requirement and `CONTRACT.md`'s "a pure function".\
-**Affects:** `src/reader.ts`, `src/phases.ts`, `src/entity-graph.ts`.
+**Affects:** `src/reader.ts`, `src/phases.ts`, `src/entity-graph.ts`.\
+**Refined by `D31` (2026-11-12):** `plan` refuses a call made while planning before reading anything it carries, and observes what it carries unread.
 
 **Reading.**\
 Everything a consequence or condition is handed is frozen - the matches, each record, every entity and list its reader answers - and its reader answers only during the call it is handed to, throwing when asked afterwards or for a kind the declaration does not hold.\
@@ -619,7 +620,8 @@ Naming the resolver for every fault of its writes - a write onto an entity absen
 ## D28 - Proposed reading: the edit context is read once, as plain JSON, and handed alike to consequences, conditions and resolvers
 
 **Proposed by:** the builder of M4, 2026-11-12, for zorg's review, reading `CONTRACT.md`'s *Edit context*; it takes the corpus's reading `R34`.\
-**Affects:** `src/entity-graph.ts`, `src/planner.ts`, `src/phases.ts`, `src/resolvers.ts`.
+**Affects:** `src/entity-graph.ts`, `src/planner.ts`, `src/phases.ts`, `src/resolvers.ts`.\
+**Corrected by `D31` (2026-11-12):** the reading of the state found was kept by the context's canonical JSON, so two contexts differing only in key order shared it; it is now kept by the context compared with its keys' order.
 
 **Reading.**\
 `plan(edit, { context })` reads the context once, through shape-check's `readPlainJson`, before any item; one that is not plain JSON is refused as `invalid-context`, keyed by the code, `"context"` as `subject`, a measure of 1 and `opIndex` -1, before any fault of an item.\
@@ -656,7 +658,8 @@ Refusing it as `empty-edit` - that would refuse a request for what the applicati
 ## D30 - zorg accepts the readings `D10` to `D25`; `details.writers` enters the contract, promises are observed, and `D12` says what the view checks
 
 **Ruled by:** zorg, reviewing M1 (2026-11-11, `drawv2-planning-builds-reply.md`) and M2 and M3 (2026-11-12, `drawv2-entity-graph-m2-m3-reply.md`), and the director, accepting zorg's three items for M4 as draw's `H31-13`; built by the builder of M4.\
-**Affects:** `CONTRACT.md`, `src/refusal.ts`, `src/index.ts`, `src/plain-members.ts`, `src/phases.ts`, `src/resolvers.ts`, `src/planner.ts`, `src/view.ts`, `src/declaration.ts`, `src/entity-graph.ts`, `test/promise-hygiene.test.js`.
+**Affects:** `CONTRACT.md`, `src/refusal.ts`, `src/index.ts`, `src/plain-members.ts`, `src/phases.ts`, `src/resolvers.ts`, `src/planner.ts`, `src/view.ts`, `src/declaration.ts`, `src/entity-graph.ts`, `test/promise-hygiene.test.js`.\
+**Extended by `D31` (2026-11-12):** what a refusal leaves unread is observed for every argument of every call, the questions and a call made while planning included, and walked whole rather than to shape-check's 1,000 objects.
 
 **Ruling.**\
 The readings `D10` to `D25` are accepted by zorg: `D10` to `D14` in its letter of 2026-11-11, and `D15` to `D25`, `details.writers` included, in its letter of 2026-11-12; `D26` to `D29` stay proposed for its review.\
@@ -671,4 +674,25 @@ A refusal must name the consequence or rule behind it, which the contract's form
 
 **Alternatives refuted.**\
 Refusing a promise in every member and item - an edit holding one would be refused as a whole, where its reading names the item that faulted.
+
+---
+
+## D31 - The independent check's findings on `6929d79` fixed: every refusal observes what it did not read, however large, and the conditions' reading is kept by the context in order
+
+**Ruled by:** the builder of M4, 2026-11-12, on the independent check of pull request 7 at `6929d79`, dispatched by draw's recorder; proposed for zorg's review, with one question for it below.\
+**Affects:** `src/entity-graph.ts`, `src/plain-members.ts`, `src/declaration.ts`, `src/phases.ts`, `src/planner.ts`, `src/resolvers.ts`, `src/view.ts`, `test/promise-hygiene.test.js`, `test/resolvers.test.js`, `test/corpus.test.js`.
+
+**Ruling.**\
+Every refusal that returns before an argument is read observes that argument: a declaration refused before its opening is read observes the opening; options refused as not an object, for a member they do not know, or for a context that is not plain JSON observe the edit; a call made while planning, to `applyChange` or `plan`, is refused before anything it carries is read, and observes it; and a question refused for one argument - a kind, an identity, a field, a filter - observes all of them.\
+Every observation walks the whole of what it is handed, past shape-check's walk of 1,000 objects, and every plain-JSON reading that refuses observes its value whole too, so a promise behind more than 1,000 parts of a refused answer, edit or change is observed.\
+A condition's reading of the state the edit found is kept by the view's position and the context compared with its keys' order, since plain JSON as shape-check reads it keeps the order of an object's keys and a condition may read it; two contexts differing only in that order are read apart.\
+The corpus's `b4-06` and `b4-07` (`a7b82da`, merged unedited) pass with the rest of batch 4: a resolver's write leading to a breach on the result names the item it rewrote.
+**A question for zorg:** shape-check's `readPlainJson` observes the values it captured on refusal through a walk of at most 1,000 objects, and `observePromises` defaults to the same bound; whether shape-check's reading should observe all it captured, so no consumer need walk a refused value again, is shape-check's to rule.
+
+**Why.**\
+An argument left unread is never observed unless the refusal does it, and a host running Node's default treats an unhandled rejection as a crash; and a reading kept for a context must be the reading that context gets.
+
+**Alternatives refuted.**\
+Keying the conditions' reading by the context's canonical JSON, as `D28` first had it - two contexts a condition can tell apart would share a reading.\
+Leaving the bound to shape-check - until it rules, a consumer refusing a large value would leave a promise in it unhandled.
 
