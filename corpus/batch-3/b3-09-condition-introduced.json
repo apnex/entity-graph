@@ -1,0 +1,47 @@
+{
+  "case": "b3-09-condition-introduced",
+  "batch": 3,
+  "summary": "A third figure in a section breaks the whole-set condition and is refused with the condition's own sentence and the edit as a whole; a figure placed elsewhere, a figure moved out, and an edit that adds one and moves one out together are accepted.",
+  "covers": ["plan-graph-change", "graph-declaration", "Judging and refusals"],
+  "readings": ["R1", "R2", "R14", "R15", "R18", "R23", "R24", "R25", "R27", "R28", "R32"],
+  "world": "document",
+  "variant": "base",
+  "verdict": "accepted",
+  "steps": [
+    { "start": { "position": 0, "entities": [
+      { "kind": "section", "id": "s1", "record": { "heading": "Intro", "parent": null, "cites": [] } },
+      { "kind": "section", "id": "s2", "record": { "heading": "Method", "parent": null, "cites": [] } },
+      { "kind": "figure", "id": "f1", "record": { "title": "Map", "section": "s1", "number": 1 } },
+      { "kind": "figure", "id": "f2", "record": { "title": "Chart", "section": "s1", "number": 2 } },
+      { "kind": "caption", "id": "c1", "record": { "body": "Figure 1: Map", "figure": "f1" } },
+      { "kind": "caption", "id": "c2", "record": { "body": "Figure 2: Chart", "figure": "f2" } }
+    ] } },
+    { "plan": { "position": 0, "edit": [
+      { "op": "create", "kind": "figure", "id": "f3", "record": { "title": "Plot", "section": "s1", "number": 3 } }
+    ], "outcome": "refused", "refusal": { "part": "entity-graph", "code": "condition", "ruleKey": "section.figure-limit", "subject": "s1", "measure": 1, "opIndex": -1, "sentence": "Section s1 holds 3 figures; a section holds at most 2." } } },
+    { "plan": { "position": 0, "edit": [
+      { "op": "create", "kind": "figure", "id": "f3", "record": { "title": "Plot", "section": "s2", "number": 1 } }
+    ], "outcome": "accepted", "writes": [
+      { "op": "put", "kind": "figure", "id": "f3", "record": { "title": "Plot", "section": "s2", "number": 1 } },
+      { "op": "put", "kind": "caption", "id": "cap-f3", "record": { "body": "Figure 1: Plot", "figure": "f3" } }
+    ] } },
+    { "plan": { "position": 0, "edit": [
+      { "op": "change", "kind": "figure", "id": "f2", "record": { "title": "Chart", "section": "s2", "number": 1 } }
+    ], "outcome": "accepted", "writes": [
+      { "op": "put", "kind": "figure", "id": "f2", "record": { "title": "Chart", "section": "s2", "number": 1 } },
+      { "op": "put", "kind": "caption", "id": "c2", "record": { "body": "Figure 1: Chart", "figure": "f2" } }
+    ] } },
+    { "plan": { "position": 0, "edit": [
+      { "op": "create", "kind": "figure", "id": "f3", "record": { "title": "Plot", "section": "s1", "number": 3 } },
+      { "op": "change", "kind": "figure", "id": "f2", "record": { "title": "Chart", "section": "s2", "number": 1 } }
+    ], "outcome": "accepted", "writes": [
+      { "op": "put", "kind": "figure", "id": "f3", "record": { "title": "Plot", "section": "s1", "number": 3 } },
+      { "op": "put", "kind": "caption", "id": "cap-f3", "record": { "body": "Figure 3: Plot", "figure": "f3" } },
+      { "op": "put", "kind": "figure", "id": "f2", "record": { "title": "Chart", "section": "s2", "number": 1 } },
+      { "op": "put", "kind": "caption", "id": "c2", "record": { "body": "Figure 1: Chart", "figure": "f2" } }
+    ] } },
+    { "ask": { "position": 0, "questions": [
+      { "q": "all", "kind": "figure", "answer": ["f1", "f2"] }
+    ] } }
+  ]
+}

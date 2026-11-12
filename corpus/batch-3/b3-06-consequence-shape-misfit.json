@@ -1,0 +1,35 @@
+{
+  "case": "b3-06-consequence-shape-misfit",
+  "batch": 3,
+  "summary": "A caption autoCaption writes with a member its shape does not admit is held to the shape a requested write would meet and refused, naming the consequence and the item, at index 1, that created the figure; an edit running no such write is accepted.",
+  "covers": ["plan-graph-change", "Consequence writes held to request rules", "Judging and refusals"],
+  "readings": ["R1", "R2", "R14", "R15", "R17", "R23", "R24", "R25", "R27", "R28", "R30", "R33"],
+  "world": "document",
+  "variant": "sloppy",
+  "verdict": "accepted",
+  "steps": [
+    { "start": { "position": 0, "entities": [
+      { "kind": "section", "id": "s1", "record": { "heading": "Intro", "parent": null, "cites": [] } },
+      { "kind": "section", "id": "s2", "record": { "heading": "Method", "parent": null, "cites": [] } },
+      { "kind": "figure", "id": "f1", "record": { "title": "Map", "section": "s1", "number": 1 } },
+      { "kind": "figure", "id": "f2", "record": { "title": "Chart", "section": "s1", "number": 2 } },
+      { "kind": "caption", "id": "c1", "record": { "body": "Figure 1: Map", "figure": "f1" } },
+      { "kind": "caption", "id": "c2", "record": { "body": "Figure 2: Chart", "figure": "f2" } }
+    ] } },
+    { "plan": { "position": 0, "edit": [
+      { "op": "change", "kind": "section", "id": "s1", "record": { "heading": "Intro (revised)", "parent": null, "cites": [] } },
+      { "op": "create", "kind": "figure", "id": "f3", "record": { "title": "Plot", "section": "s2", "number": 1 } }
+    ], "outcome": "refused", "refusal": { "part": "entity-graph", "code": "shape-misfit", "ruleKey": "caption.shape", "subject": "cap-f3", "measure": 1, "opIndex": 1, "writers": ["figure.autoCaption"] } } },
+    { "plan": { "position": 0, "edit": [
+      { "op": "remove", "kind": "figure", "id": "f1" }
+    ], "outcome": "accepted", "writes": [
+      { "op": "del", "kind": "figure", "id": "f1" },
+      { "op": "del", "kind": "caption", "id": "c1" },
+      { "op": "put", "kind": "figure", "id": "f2", "record": { "title": "Chart", "section": "s1", "number": 1 } },
+      { "op": "put", "kind": "caption", "id": "c2", "record": { "body": "Figure 1: Chart", "figure": "f2" } }
+    ] } },
+    { "ask": { "position": 0, "questions": [
+      { "q": "all", "kind": "caption", "answer": ["c1", "c2"] }
+    ] } }
+  ]
+}

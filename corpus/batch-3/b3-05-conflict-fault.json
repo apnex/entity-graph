@@ -1,0 +1,34 @@
+{
+  "case": "b3-05-conflict-fault",
+  "batch": 3,
+  "summary": "Retitling a figure has retitle and shout both write its caption in one run of the numbering phase, a fault reported naming both and the edit as a whole; removing a figure has renumber and retitle write different entities in that phase, and is accepted.",
+  "covers": ["plan-graph-change", "Consequences and the stopping rule", "Judging and refusals"],
+  "readings": ["R1", "R2", "R14", "R15", "R17", "R23", "R24", "R25", "R26", "R27", "R28", "R29"],
+  "world": "document",
+  "variant": "conflicting",
+  "verdict": "accepted",
+  "steps": [
+    { "start": { "position": 0, "entities": [
+      { "kind": "section", "id": "s1", "record": { "heading": "Intro", "parent": null, "cites": [] } },
+      { "kind": "section", "id": "s2", "record": { "heading": "Method", "parent": null, "cites": [] } },
+      { "kind": "figure", "id": "f1", "record": { "title": "Map", "section": "s1", "number": 1 } },
+      { "kind": "figure", "id": "f2", "record": { "title": "Chart", "section": "s1", "number": 2 } },
+      { "kind": "caption", "id": "c1", "record": { "body": "Figure 1: Map", "figure": "f1" } },
+      { "kind": "caption", "id": "c2", "record": { "body": "Figure 2: Chart", "figure": "f2" } }
+    ] } },
+    { "plan": { "position": 0, "edit": [
+      { "op": "change", "kind": "figure", "id": "f2", "record": { "title": "Chart v2", "section": "s1", "number": 2 } }
+    ], "outcome": "refused", "refusal": { "part": "entity-graph", "code": "consequence-conflict", "ruleKey": "consequence-conflict", "subject": "c2", "measure": 2, "opIndex": -1, "writers": ["caption.retitle", "caption.shout"] } } },
+    { "plan": { "position": 0, "edit": [
+      { "op": "remove", "kind": "figure", "id": "f1" }
+    ], "outcome": "accepted", "writes": [
+      { "op": "del", "kind": "figure", "id": "f1" },
+      { "op": "del", "kind": "caption", "id": "c1" },
+      { "op": "put", "kind": "figure", "id": "f2", "record": { "title": "Chart", "section": "s1", "number": 1 } },
+      { "op": "put", "kind": "caption", "id": "c2", "record": { "body": "Figure 1: Chart", "figure": "f2" } }
+    ] } },
+    { "ask": { "position": 0, "questions": [
+      { "q": "get", "kind": "caption", "id": "c2", "answer": { "body": "Figure 2: Chart", "figure": "f2" } }
+    ] } }
+  ]
+}

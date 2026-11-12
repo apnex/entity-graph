@@ -1,0 +1,35 @@
+{
+  "case": "b4-05-non-plain-context-refused",
+  "batch": 4,
+  "summary": "A context holding a function, or a context that holds itself, is not plain JSON and is refused for the edit as a whole before any item; a plain context of nested values is accepted and read.",
+  "covers": ["plan-graph-change", "Edit context", "Judging and refusals"],
+  "readings": ["R1", "R2", "R14", "R15", "R23", "R24", "R25", "R27", "R28", "R34"],
+  "world": "document",
+  "variant": "base",
+  "verdict": "accepted",
+  "steps": [
+    { "start": { "position": 0, "entities": [
+      { "kind": "section", "id": "s1", "record": { "heading": "Intro", "parent": null, "cites": [] } },
+      { "kind": "section", "id": "s2", "record": { "heading": "Method", "parent": null, "cites": [] } },
+      { "kind": "figure", "id": "f1", "record": { "title": "Map", "section": "s1", "number": 1 } },
+      { "kind": "figure", "id": "f2", "record": { "title": "Chart", "section": "s1", "number": 2 } },
+      { "kind": "caption", "id": "c1", "record": { "body": "Figure 1: Map", "figure": "f1" } },
+      { "kind": "caption", "id": "c2", "record": { "body": "Figure 2: Chart", "figure": "f2" } }
+    ] } },
+    { "plan": { "position": 0, "contextFrom": "withFunction", "edit": [
+      { "op": "create", "kind": "figure", "id": "f3", "record": { "title": "Plot", "section": "s2", "number": 1 } }
+    ], "outcome": "refused", "refusal": { "part": "entity-graph", "code": "invalid-context", "ruleKey": "invalid-context", "subject": "context", "measure": 1, "opIndex": -1 } } },
+    { "plan": { "position": 0, "contextFrom": "withCycle", "edit": [
+      { "op": "create", "kind": "figure", "id": "f3", "record": { "title": "Plot", "section": "s2", "number": 1 } }
+    ], "outcome": "refused", "refusal": { "part": "entity-graph", "code": "invalid-context", "ruleKey": "invalid-context", "subject": "context", "measure": 1, "opIndex": -1 } } },
+    { "plan": { "position": 0, "context": { "captionPrefix": "Fig.", "marks": ["a", { "b": null }], "ratio": 1.5, "draft": true }, "edit": [
+      { "op": "create", "kind": "figure", "id": "f3", "record": { "title": "Plot", "section": "s2", "number": 1 } }
+    ], "outcome": "accepted", "writes": [
+      { "op": "put", "kind": "figure", "id": "f3", "record": { "title": "Plot", "section": "s2", "number": 1 } },
+      { "op": "put", "kind": "caption", "id": "cap-f3", "record": { "body": "Fig. 1: Plot", "figure": "f3" } }
+    ] } },
+    { "ask": { "position": 0, "questions": [
+      { "q": "all", "kind": "figure", "answer": ["f1", "f2"] }
+    ] } }
+  ]
+}

@@ -1,0 +1,39 @@
+{
+  "case": "b3-08-requested-shape-misfits",
+  "batch": 3,
+  "summary": "A requested write whose record does not fit its kind's shape is refused at its item: a field of the wrong type, a required field left out, and, at index 1 of a two-item edit, a member the shape does not admit; a fitting write is accepted.",
+  "covers": ["plan-graph-change", "graph-declaration", "Judging and refusals"],
+  "readings": ["R1", "R2", "R14", "R15", "R23", "R24", "R25", "R31"],
+  "world": "document",
+  "variant": "base",
+  "verdict": "accepted",
+  "steps": [
+    { "start": { "position": 0, "entities": [
+      { "kind": "section", "id": "s1", "record": { "heading": "Intro", "parent": null, "cites": [] } },
+      { "kind": "section", "id": "s2", "record": { "heading": "Method", "parent": null, "cites": [] } },
+      { "kind": "figure", "id": "f1", "record": { "title": "Map", "section": "s1", "number": 1 } },
+      { "kind": "figure", "id": "f2", "record": { "title": "Chart", "section": "s1", "number": 2 } },
+      { "kind": "caption", "id": "c1", "record": { "body": "Figure 1: Map", "figure": "f1" } },
+      { "kind": "caption", "id": "c2", "record": { "body": "Figure 2: Chart", "figure": "f2" } }
+    ] } },
+    { "plan": { "position": 0, "edit": [
+      { "op": "create", "kind": "figure", "id": "f3", "record": { "title": "Plot", "section": "s2", "number": "one" } }
+    ], "outcome": "refused", "refusal": { "part": "entity-graph", "code": "shape-misfit", "ruleKey": "figure.shape", "subject": "f3", "measure": 1, "opIndex": 0 } } },
+    { "plan": { "position": 0, "edit": [
+      { "op": "create", "kind": "section", "id": "s3", "record": { "heading": "Notes", "parent": null } }
+    ], "outcome": "refused", "refusal": { "part": "entity-graph", "code": "shape-misfit", "ruleKey": "section.shape", "subject": "s3", "measure": 1, "opIndex": 0 } } },
+    { "plan": { "position": 0, "edit": [
+      { "op": "create", "kind": "section", "id": "s3", "record": { "heading": "Notes", "parent": null, "cites": [] } },
+      { "op": "change", "kind": "figure", "id": "f2", "record": { "title": "Chart", "section": "s1", "number": 2, "note": "wide" } }
+    ], "outcome": "refused", "refusal": { "part": "entity-graph", "code": "shape-misfit", "ruleKey": "figure.shape", "subject": "f2", "measure": 1, "opIndex": 1 } } },
+    { "plan": { "position": 0, "edit": [
+      { "op": "create", "kind": "section", "id": "s3", "record": { "heading": "Notes", "parent": null, "cites": [] } }
+    ], "outcome": "accepted", "writes": [
+      { "op": "put", "kind": "section", "id": "s3", "record": { "heading": "Notes", "parent": null, "cites": [] } }
+    ] } },
+    { "ask": { "position": 0, "questions": [
+      { "q": "all", "kind": "section", "answer": ["s1", "s2"] },
+      { "q": "get", "kind": "figure", "id": "f2", "answer": { "title": "Chart", "section": "s1", "number": 2 } }
+    ] } }
+  ]
+}

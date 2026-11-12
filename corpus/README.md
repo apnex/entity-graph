@@ -13,8 +13,11 @@ A case the implementer believes wrong goes back to its author, and any change to
 |---|---|---|
 | 1 | `batch-1/` | Milestone M1: declaring kinds and their reference fields, refusals of a bad declaration, entities held by kind and id at a known position, changes taken in, and the answers `targetsOf`, `referrersOf`, `ownerOf` and `reachable`, each dated to a position |
 | 2 | `batch-2/` | Milestone M2: planning an edit with every declared reference rule, to a fixed point, judged on the state it would leave, refused with the facts the contract names, and changing no answer |
+| 3 | `batch-3/` | Milestone M3: application consequences in declared phases under the stopping rule, the conflict fault, consequence writes held to request rules, conditions over the whole set, and shape misfits |
+| 4 | `batch-4/` | Milestone M4: intent resolvers and the edit context |
 
-Application consequences, phases, conditions over the whole set, shapes, resolvers, context, undo and the store port belong to later batches.
+Batches 3 and 4 share the world modules in `worlds/`.\
+Undo and the store port belong to later batches.
 
 ---
 
@@ -200,6 +203,113 @@ Batch 2 is written over three small worlds, each declared in full in every case 
 
 ---
 
+## World modules (batches 3 and 4)
+
+Consequences, conditions and intent resolvers are code by contract, so batches 3 and 4 declare their kinds in modules rather than inline.\
+Batches 1 and 2 keep their inline declarations, unchanged.
+
+### Naming a world
+
+A batch 3 or 4 case carries `world` and, optionally, `variant`, in place of `declare`:
+
+```json
+{ "case": "b3-01-phases-deleted-and-changed", "batch": 3, "world": "document", "variant": "base", "verdict": "accepted", "steps": [] }
+```
+
+- `world` names the module `worlds/<world>.mjs`.
+- `variant` names one of the module's exports, `base` when absent; each variant is a whole declaration.
+- A case carries exactly one of `declare` and `world`.
+- A refused declaration names its world and variant as an accepted one does, and carries `refusal` as batch 1's refused declarations do.
+
+### What a module exports
+
+Each variant is `{ phases, kinds }`.\
+`phases` is the list of the application's phase names, in the order they run.\
+Each kind is batch 1's `{ kind, references }`, with four more members, each optional:
+
+- `shape`: the shape of the kind's records, as data (*Shapes* below).
+- `conditions`: a list of `{ key, check }`, the kind's conditions over the whole set.
+- `consequences`: a list of `{ name, trigger, phase, run }`, the kind's own consequences, in their declared order.
+- `intentResolver`: a function rewriting one requested item of the kind.
+
+A trigger is data, one of three forms:
+
+- `{ "created": [<kind>, ...] }`: an entity of one of the named kinds created.
+- `{ "deleted": [<kind>, ...] }`: an entity of one of the named kinds deleted.
+- `{ "changed": { "kind": <kind>, "fields": [<field>, ...] } }`: one of the named fields of an entity of that kind changed.
+
+A module may also export `contexts`, an object of functions taking nothing and returning a context no JSON file can state (*Contexts* below).
+
+### The functions' protocol
+
+The contract owes the exact signatures (*Design owed*, kept from the first draft), so the modules use the corpus's own protocol, and a harness wraps each function in whatever form the implementation calls it with.\
+Every function is pure: it reads only its argument, changes nothing it is given, and returns new values.
+
+- A consequence's `run({ changes, view, context })` returns a list of writes.
+- A condition's `check({ view, context })` returns a list of breaches, each `{ subject, measure, sentence }`, empty when the condition holds.
+- An intent resolver `({ item, view, context })` returns the list of writes the item stands for.
+
+`view` reads the plan's scratch state at the moment of the call through two methods:
+
+- `view.get(kind, id)` answers the entity's record, or `null` when absent.
+- `view.all(kind)` answers the ids of every present entity of the kind, in no promised order.
+
+`changes` lists, for each change in the edit that matches the consequence's trigger when the consequence runs, `{ kind, id, before, after }`, where `before` is the record the edit found, or `null`, and `after` the record now, or `null` (`R27`).\
+`context` is the plan's context, or `undefined` when the plan has none.\
+A write is an item of batch 2's form, `create`, `change` with a whole record, or `remove`.
+
+### Shapes
+
+A shape is written in a small subset of JSON Schema, and a harness hands it to `shape-check` in that component's own form where the two differ.\
+The subset is `type` (one of `"object"`, `"string"`, `"integer"`, `"array"` and `"null"`, or a list of them), `properties`, `required`, `additionalProperties: false` and `items`, with JSON Schema's meanings.\
+A record fits its kind's shape or it does not, and every record a case states was checked by hand against these meanings.
+
+### Plans in batches 3 and 4
+
+A `plan` step may carry one more member, either of two:
+
+- `context`: the plan's context, any plain JSON value.
+- `contextFrom`: the name of a function in the world module's `contexts`, whose result is the plan's context.
+
+A `plan` step without either has no context.\
+Batches 3 and 4 read a `change` item as replacing the whole record, as `D18` reads it, and one case relies on that, dropping a member the entity held.\
+In batch 4, a `create` item of a kind that declares an intent resolver may leave out `id` and any field the resolver supplies, since the resolver rewrites the item before the component reads it (`R35`).
+
+### Refusals in batches 3 and 4
+
+A refusal may carry two more members:
+
+- `writers`: the consequences that wrote the entity whose write was judged, each `<kind>.<name>`, in their declared order.
+  It is present, and compared exactly, for a refusal of a consequence's write and for the conflict fault; a case without it asserts nothing about writers.
+- `sentence`: an application condition's own sentence, compared character for character.
+  It is present for every refusal under a condition.
+
+The new codes are:
+
+| `code` | Refused for | `ruleKey` |
+|---|---|---|
+| `shape-misfit` | a requested or consequence write whose record does not fit its kind's shape | `<kind>.shape` |
+| `condition` | a condition over the whole set the edit would break, or break further | the condition's `key` |
+| `consequence-conflict` | two consequences writing one entity in one run of a phase | `consequence-conflict` |
+| `invalid-context` | a context that is not plain JSON | `invalid-context` |
+
+The new reasons a declaration is refused for are `phase-undeclared` and `trigger-kind-undeclared`.
+
+### The document world
+
+`worlds/document.mjs` declares sections, figures and captions with batch 2's reference rules, a shape for each kind, one application phase, `numbering`, and one condition over the whole set, `section.figure-limit`.\
+Its comments state what each function does, and its code is what a case's answers were worked out from.
+
+- `figure.renumber` (`numbering`, a figure deleted): each section that lost a figure numbers its remaining figures 1, 2, 3 by their number, then id.
+- `figure.autoCaption` (`numbering`, a figure created): each created figure gets the caption `cap-<figure id>` with the body `Figure <number>: <title>`, unless an entity holds that identity.
+- `caption.retitle` (`numbering`, a figure's `title` or `number` changed): each caption holding such a figure gets that body.
+- `section.figure-limit`: a section holds at most two figures, its breach measured by how many more, its sentence `Section <id> holds <n> figures; a section holds at most 2.`
+
+The prefix `Figure` and the limit 2 give way to a context's `captionPrefix` and `figureLimit` (batch 4).\
+The variants are `indexed`, adding a second phase, `index`, an `index` kind and three consequences; `conflicting`, adding `caption.shout`; `sloppy`, whose `figure.autoCaption` writes a member the caption's shape does not admit; `resolving`, adding an intent resolver on figures; and `undeclaredPhase` and `undeclaredTriggerKind`, each a declaration to be refused.
+
+---
+
 ## Readings
 
 Where the contract leaves a question open, the corpus takes one reading and says so here.\
@@ -265,6 +375,42 @@ Readings `R14` onwards are batch 2's.
 - **R23. Planning changes no answer.** A plan, accepted or refused, leaves the view exactly as it was, including its position, as the `plan-graph-change` row says.
 - **R24. Codes.** The contract names no code for a refusal of a plan, so the corpus's codes are labels a harness maps, one implementation code per label.
 
+Readings `R25` onwards are batches 3 and 4's.\
+They rely on five questions *Design owed* lists, each with the answer the contract proposes where it proposes one: the exact signatures (`R25`); the order consequences apply in and whether planning ends (`R26` to `R28`, as *Consequences and the stopping rule* proposes); whether a shape refusal is a refusal of the plan (`R31`, yes, as proposed); what a refusal carries (`R30`, `R32`); and how much a rule is broken (`R32`).
+
+- **R25. Worlds as modules.** The contract owes the exact signatures, so the modules follow the corpus's protocol and a harness adapts each function to the implementation's.
+  A declaration is `{ phases, kinds }`, `phases` a list in running order, and a kind carries its `shape`, `conditions`, `consequences` and `intentResolver` beside its references, lists in their declared order as `D11` reads the rest.
+  A consequence is named `<kind>.<name>`, the kind it is declared on and its own name.
+- **R26. Declared order.** Within a phase, consequences run in the order of the declaration: the kinds as listed, and each kind's consequences as listed.
+- **R27. When a consequence runs.** A consequence runs at most once in a run of its phase, when its turn comes, if the edit so far then holds a change matching its trigger, and it receives every such change.
+  A change is read against the state the edit found: an entity created is absent then and present now, one deleted is present then and absent now, and a field changed is one of the named fields differing on an entity present both then and now.
+  So a consequence sees, both as a trigger and in `view`, every write of the requested items, the rules and the consequences before it, in its phase and earlier ones; and an entity created and removed within the edit is no change at all.
+  The contract's "takes it into the edit, so the next consequence sees it" is read as covering triggers as well as state.
+- **R28. The stopping rule.** The requested items are applied, each after its kind's resolver, and the rules expanded; then each phase runs once in order, each consequence's writes applied as soon as it returns them, and the rules expanded when the phase completes.
+  A completed phase is never entered again, so a change a later phase or a rule makes that matches an earlier phase's trigger runs nothing.
+- **R29. The conflict fault.** Two different consequences writing one entity, by any write, in one run of a phase is refused as `consequence-conflict`, keyed by the code, the entity as `subject`, the number of consequences that wrote it as `measure`, `opIndex` -1, and the consequences in `writers` in their declared order.
+  The fault is between two consequences, not of one requested item, so it names the edit as a whole.
+  A consequence writing an entity a requested item, a rule or a consequence of an earlier phase wrote is no fault.
+- **R30. Held writes.** Every entity a consequence wrote is judged as it stands in the result by its shape, the reference rules and the conditions, and the edit is refused for a breach it introduces or raises, as batch 2 judges every breach.
+  A misfit of shape is a breach of measure 1, so an entity that already misfit its shape when the edit found it is not refused for still misfitting after a consequence wrote it, as "the entity did not already fail before the edit" says.
+  The contract asks such a refusal to name the consequence but gives no member of `details` for it, so the corpus asserts `writers` and leaves its place to the implementation, proposing `details.writers`.
+  Batch 2's refusals of entities a rule wrote assert no writers, and batches 3 and 4 assert writers only for consequences.
+- **R31. The shape of a requested write.** A requested write whose record does not fit its kind's shape is refused at its item, before any rule is judged, whether or not the entity fit before, as "a shape misfit of a requested ... write refuses the plan" says without the held writes' exception.
+  It is keyed `<kind>.shape`, with the entity as `subject`, a measure of 1, and the item as `opIndex`, a resolver's write carrying its item's index.
+  The view holds a record taken in that does not fit its shape as it stands, as `R3` reads every rule and as `VISION.md` says the component is not a judge of one entity's shape.
+- **R32. Conditions.** A condition is judged by running its `check` on the state the edit found and on the state it would leave, with the plan's context both times; each breach is identified by the condition's `key` and the breach's `subject`, and the plan is refused when a breach is new or its measure higher.
+  The refusal is `condition`, keyed by the condition's `key`, with the breach's `subject` and `measure` and its `sentence` from the state the edit would leave, carried verbatim.
+  Its `opIndex` is -1, since a condition is a function of the whole set and no requested item can be read from its breach.
+- **R33. The item a consequence's write follows from.** A consequence's run follows from the requested items its matching changes follow from, read through every rule and consequence between, as `D19` reads each consequence carrying its cause; a breach of an entity it wrote names that item.
+  No case asks for a consequence whose matching changes follow from more than one item.
+- **R34. The context.** The context is read once as plain JSON before any item, and one that is not plain JSON is refused as `invalid-context`, keyed by the code, with `"context"` as `subject`, a measure of 1, and `opIndex` -1, since it belongs to the edit as a whole.
+  Every consequence, condition and resolver of a plan receives the same context, and `undefined` when the plan has none.
+- **R35. Intent resolvers.** A kind's resolver is called with each requested item of its kind, in item order, before the item is checked, and sees the scratch state as the items before it left it, before any rule is expanded (`R14`).
+  The writes it returns replace the item, are applied in order and checked as items are, and carry the item's index; an item of a kind without a resolver is applied as given.
+- **R36. Declarations of phases and triggers.** A consequence naming a phase the declaration does not list, or a trigger naming a kind it does not declare, is refused when the graph is created, as `phase-undeclared` or `trigger-kind-undeclared`, naming the kind, the consequence and the name undeclared.
+  The contract says each consequence has "one of the phases the application declares" and that no kind is built in.
+- **R37. Consequences' writes.** A consequence writes with `create`, `change` and `remove`, and no case has a consequence write that would be a fault in a request, such as a change of an absent entity.
+
 ---
 
 ## Checking the files
@@ -274,4 +420,5 @@ It checks that each case parses as JSON, carries the keys above, is named for it
 It checks that an accepted case starts with one `start` step, keeps positions strictly increasing, asks at the position of the last step before it, and writes each entity at most once per change.\
 It checks that no answer repeats an element, every reading and label a case names is listed here, every file is plain ASCII under 16 KiB, and no case uses a drawing's words.\
 For batch 2 it also checks that each `plan` step states the view's position, carries the keys of its outcome, and writes each entity at most once, and that the items of an accepted plan name only declared kinds and keep ids unique across kinds.\
-Every expected answer was worked out by hand from the contract text, in both batches.
+For batches 3 and 4 it also checks that each case names a module and an export the module's text declares, that each refusal's code, key and members are of the forms above, and that each world module passes `node --check`; no module was imported or run.\
+Every expected answer was worked out by hand from the contract text and the world modules' code, in every batch.
