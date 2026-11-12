@@ -1,5 +1,5 @@
 /**
- * The store port (CONTRACT.md *The store port*; docs/DECISIONS.md D32): the structural port a graph lands its edits through,
+ * The store port (CONTRACT.md *The store port*; docs/DECISIONS.md D33): the structural port a graph lands its edits through,
  * shaped by entity-store's capabilities - a change of one or more writes landing whole or not at all, a guard naming the store
  * position the change expects, an optional note on a change, and every change after a held position, in order - and the bound
  * the store places on a note. M5 builds what undo and redo need; M6 adds the entity-store adapter, the first fill from the store
@@ -20,7 +20,7 @@ export interface GraphStoreChange {
 	readonly note?: unknown;
 }
 
-/** The structural store port (D32). */
+/** The structural store port (D33). */
 export interface GraphStorePort {
 	/** The bound on a change's note, in bytes of its canonical UTF-8 JSON. */
 	readonly noteBound: number;

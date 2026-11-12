@@ -1,14 +1,14 @@
 /**
- * The history the graph keeps for undo (CONTRACT.md *Undo and redo*; docs/DECISIONS.md D33, D34): which landed edits can be
+ * The history the graph keeps for undo (CONTRACT.md *Undo and redo*; docs/DECISIONS.md D34, D35): which landed edits can be
  * undone and which redone, each by the position of the change that landed it, with the bytes of its undo record; the records
  * themselves are kept in the store, in the note on each change, so the component keeps no record of its own.
  *
- * The undo record (D33) is a note `{ "entity-graph": { v: 1, act, of, entities } }`: `act` is `edit`, `undo` or `redo`; `of` the
+ * The undo record (D34) is a note `{ "entity-graph": { v: 1, act, of, entities } }`: `act` is `edit`, `undo` or `redo`; `of` the
  * positions of the edits an undo or a redo replays, latest first; and `entities` one `[kind, id, before, after]` for each entity
  * the change writes, its record before and after the change, null where it is absent. An undo writes each entity's `before` and
  * a redo its `after`, so neither works a consequence out again.
  *
- * The bounds (D34): a count of edits and a size in bytes of their records, and a pin; after each commit or redo lands, the
+ * The bounds (D35): a count of edits and a size in bytes of their records, and a pin; after each commit or redo lands, the
  * oldest held edit is evicted while either bound is passed, a pinned oldest only while a hard limit is passed, and the edit just
  * landed never, so what is held is always a run of edits each of which can be undone in turn.
  */
@@ -39,7 +39,7 @@ export function recordOf(note: unknown): UndoRecord | null {
 	return { act, of: of as number[], entities: entities as RecordedEntity[] };
 }
 
-/** The history's bounds as the application states them (D34). */
+/** The history's bounds as the application states them (D35). */
 export interface HistoryBounds {
 	count?: number;
 	bytes?: number;

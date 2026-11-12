@@ -66,7 +66,7 @@ export interface GraphChangeRecord {
 	readonly fields: readonly string[];
 }
 
-/** Thrown by a write past the plan's step limit, and caught where the plan is answered (D35). */
+/** Thrown by a write past the plan's step limit, and caught where the plan is answered (D36). */
 export class StepLimitReached extends Error {
 	constructor(readonly steps: number) {
 		super(`the plan took more than its limit of steps, at ${steps}`);
@@ -221,7 +221,7 @@ export class Scratch implements GraphState {
 	 */
 	write(step: GraphStep, cause: number, by: string | null = null, free = false): void {
 		const id = step.id;
-		// the step limit, so an expansion no bound would end is refused before its record is built (D25, D35)
+		// the step limit, so an expansion no bound would end is refused before its record is built (D25, D36)
 		if (this.steps.length >= this.maxSteps) throw new StepLimitReached(this.steps.length + 1);
 		const at: Attribution = { cause, by, seq: this.steps.length };
 		const was = this.get(id);

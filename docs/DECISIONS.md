@@ -698,3 +698,126 @@ An argument left unread is never observed unless the refusal does it, and a host
 Keying the conditions' reading by the context's canonical JSON, as `D28` first had it - two contexts a condition can tell apart would share a reading.\
 Leaving the bound to shape-check - until it rules, a consumer refusing a large value would leave a promise in it unhandled.
 
+---
+
+## D32 - M5 is built: undo and redo over a store port; `reversible-history` served, `positioned-graph-sync` deferred to M6
+
+**Ruled by:** the build plan, approved by the director as draw's `H31-10` (2026-11-11, draw's `dev/DECISIONS.md`), on the contract co-signed by zorg (`zorg/docs/DECISIONS.md` `D76`); the as-built choices are the builder's of M5, proposed for zorg's review, as `D33` to `D37` are.\
+**Affects:** `src/port.ts`, `src/history.ts`, `src/replay.ts`, `src/entity-graph.ts`, `src/planner.ts`, `src/scratch.ts`, `src/refusal.ts`, `export-map.json`, `test/`.
+
+**Ruling.**\
+A graph made over a store port commits an edit as one positioned change carrying its undo record in its note, and undoes and redoes landed edits by replaying their records, each judged and landed as any edit is (`D33`, `D34`); its history is bounded as the application states (`D35`); a plan is refused past a step limit (`D36`); and an undo or a redo is refused where an entity it writes no longer stands as the record left it (`D37`).\
+`reversible-history` is served, with its contract test file; `positioned-graph-sync` stays deferred under this ruling to M6, which owes the entity-store adapter, the first fill from the store, a restart reading the history back from the store's notes, and taking in the store's changes as they come.\
+The neutral corpus's wave C (`d8f2186`, merged unedited) holds batch 5, which passes whole - 34 commits landed and 1 refused, 24 undos landed and 13 refused, 5 redos landed and 2 refused - with batches 1 to 4; batch 6 is M6's, left to it by name.\
+Batch 6's `b6-08` reads an undo over another writer's change as `D37` does not; it is reported to draw's recorder, and the reading is zorg's to rule.
+
+**Why.**\
+The plan's M5 lands undo and redo as the contract states them, over a port shaped so M6 completes it rather than replaces it.
+
+**Alternatives refuted.**\
+Serving `positioned-graph-sync` at M5 - its adapter, first fill, restart and following the store are M6's.
+
+---
+
+## D33 - Proposed reading: commit, undo and redo land through the store port, each judged as any edit is
+
+**Proposed by:** the builder of M5, 2026-11-12, for zorg's review, reading `CONTRACT.md`'s *Undo and redo* and *The store port*, and `D8`; it takes the corpus's readings `R39` to `R42`, `R44` but for what `D37` settles, `R45` and `R46`.\
+**Affects:** `src/port.ts`, `src/entity-graph.ts`, `src/replay.ts`.
+
+**Reading.**\
+The port is a structural `GraphStorePort`: its `noteBound`, the bytes of canonical UTF-8 JSON a note may take; `position()`, the store's latest; `change({ writes, expectedPosition, note })`, landing a change of one or more writes whole at the store's next position or refusing it, `store-moved` where its expected position is not the latest; and `changes(since)`, every change after a position, in order, each with its writes and note.\
+Every answer of a port is read once as plain JSON; a port that throws, or answers otherwise, a promise included, is refused as `store-failed`; and `createMemoryGraphPort` is an in-memory port that numbers its changes one after another, whoever writes them.\
+A graph is made over a port through its options, `{ port, history }`, its opening standing at the port's position; without a port a graph plans and takes changes in, and refuses to commit, undo or redo, `no-store`.\
+`commit(edit, { context })` plans the edit from the view's position and lands its net writes as one change, that position as its expected position and its undo record as its note; the view moves to the change's position as it lands (`R40`); a plan that changes nothing lands nothing and holds no place in the history (`D29`).\
+`undo(to?, { context })` replays the recorded reversal of the latest landed edit not yet undone, or of every such edit down to the one that landed at `to`, latest first, as one change; `redo({ context })` replays the recorded writes of the latest undone edit, one edit per redo, so after an undo of several the oldest goes first (`R45`).\
+Each reads its records back from the notes on the store's changes; restores or rewrites each entity as its records hold it, running no consequence and expanding no rule (`D8`); and is judged on the state it would leave, by the kinds' shapes, the reference rules and the conditions, with its context, refused for a breach it introduces or raises, `opIndex` -1, and by its expected position.\
+A commit that lands discards every undone edit, and an undo or a redo is not itself an edit the history holds.\
+A store that has moved refuses a commit, an undo or a redo as `store-moved`, keyed by the code, `"position"` as `subject`, `opIndex` -1, the view and the store as they were and nothing planned again (`R41`); an empty history refuses an undo as `nothing-to-undo` and a redo as `nothing-to-redo`, `"history"` as `subject` (`R46`); and an undo naming no edit the history holds and has not undone is refused as `undo-target-unknown`.
+
+**Why.**\
+`D8` has an undo replay the reversal recorded with its edit and be judged and land like any other edit; landing each through the port, guarded by the position it was planned from, keeps whole-or-not-at-all and the dated answers the contract asks of every edit.
+
+**Alternatives refuted.**\
+Keeping the records in the graph - the contract keeps them in the store's notes, so the component keeps no record of its own.
+
+---
+
+## D34 - Proposed reading: the undo record, its encoding in the note, its size and its bound
+
+**Proposed by:** the builder of M5, 2026-11-12, for zorg's review, reading `CONTRACT.md`'s *Undo and redo*; it takes the corpus's readings `R43` (as far as reading records back), `R48` and `R49`.\
+**Affects:** `src/history.ts`, `src/entity-graph.ts`.
+
+**Reading.**\
+An undo record is the note `{ "entity-graph": { v: 1, act, of, entities } }`: `act` is `edit`, `undo` or `redo`; `of` the positions of the edits an undo or a redo replays, latest first, empty for an edit; and `entities` one `[kind, id, before, after]` for each entity the change writes, its whole record before and after the change, null where it is absent.\
+That is what replaying the reversal of every step in order yields, entity by entity, so the record holds an edit's requested, rule, consequence and resolver writes alike, and the steps themselves stay what the plan answered.\
+Its size is the bytes of its canonical UTF-8 JSON, as entity-store measures a note; an edit, an undo or a redo whose record would pass the port's `noteBound` is refused before it lands, as `note-bound`, keyed by the code, `"note"` as `subject`, its size as `measure`, `opIndex` -1 (`R48`).\
+Measured against entity-store's 524,288 bytes: an edit creating one small record takes 94 bytes; removing a record holding a 4,000-character string, 4,117; creating 2,000 records of about 25 bytes, 102,728; and changing 2,000 records of about 130 bytes, 564,728, which is refused.\
+So an edit writing the whole 2,000 entities a change may hold can be undone only while each entity's record before and after together stay under about 262 bytes; recording only the fields a change differs in would raise that, and is left open.\
+The history holds each edit by the position of the change that landed it and its record's size, never the record, which is read back from that change's note when the edit is undone or redone; a note this component cannot read refuses as `history-unreadable`.\
+Undoing a deletion recreates the entity under its own identity (`R49`); entity-store's bound on a note's depth, 16 levels, is not yet checked here, and is owed with the adapter at M6.
+
+**Why.**\
+The record must let an undo restore each entity exactly and a redo rewrite it, and let both see whether the entity still stands as the record left it (`D37`); its whole states do that and nothing less does.
+
+**Alternatives refuted.**\
+Recording the steps' reversals one by one - an entity written more than once would be recorded more than once, for the same result.
+
+---
+
+## D35 - Proposed reading: the history's bounds - a count, a size and a pin, each yielding at its hard limit
+
+**Proposed by:** the builder of M5, 2026-11-12, for zorg's review, reading `CONTRACT.md`'s *Undo and redo*; it takes the corpus's reading `R47`.\
+**Affects:** `src/history.ts`, `src/entity-graph.ts`.
+
+**Reading.**\
+A graph's `history` option states `count` and `bytes`, the edits and the bytes of their undo records it keeps to; `hardCount` and `hardBytes`, the limits at which those override the pin; and `pin({ position, writes })`, which pins an edit that lands, answering true; each number a whole number from 1, each hard limit at least its bound, unbounded where not stated.\
+After each commit or redo lands, the history evicts its oldest held edit - landed and not undone - while it holds more than `count` edits or `bytes` bytes; a pinned oldest edit is evicted only while more than `hardCount` or `hardBytes` are held, and otherwise eviction stops; and the edit just landed is never evicted by its own landing.\
+So the edits held are always a run each of which can be undone in turn, and a pinned edit holds back every edit after it, as the contract's "while a younger edit is held" is read.\
+A pin answering anything but true, or throwing, pins nothing, and what it threw or answered is observed for promises (`D30`, `D31`); `history()` answers the edits held, oldest first, each by its position, record bytes, whether pinned and whether undone, and how many were evicted.
+
+**Why.**\
+Evicting from the oldest end alone keeps every held edit undoable, since an undo reaches an edit only through every edit after it.
+
+**Alternatives refuted.**\
+Evicting a younger unpinned edit past a pinned oldest one - every edit older than the evicted one could no longer be undone, the pinned one included.
+
+---
+
+## D36 - Proposed reading: a plan is refused past 20,000 steps
+
+**Proposed by:** the builder of M5, 2026-11-12, for zorg's review, on `D25`'s note that the undo record's bound would need a step limit.\
+**Affects:** `src/planner.ts`, `src/scratch.ts`.
+
+**Reading.**\
+A plan takes at most 20,000 steps - each a write of one entity, by a requested item, a resolver, a reference rule or a consequence - ten times the net writes a change may hold, and the write past them stops the plan, refused as `too-many-steps`, keyed `steps`, `measure` the step it stopped at.\
+So an expansion before a phase, which `D25` lets run to its fixed point, is refused before it costs more than a fraction of a second or builds a record no note could hold; the limit is checked at every write, so it bounds every path to the scratch layer alike.
+
+**Why.**\
+An undo record no note can hold makes an edit that could never land, and a plan that never ends is no answer.
+
+**Alternatives refuted.**\
+Bounding the plan by its net writes alone - an expansion can write and unwrite one entity many times, and its steps are what cost.
+
+---
+
+## D37 - Proposed reading: an undo or a redo is refused where an entity it writes no longer stands as its record left it
+
+**Proposed by:** the builder of M5, 2026-11-12, for zorg's review, on draw's `H31-EG-M5` brief, judging the corpus's `R44` against `D8` and `VISION.md`; draw's director rules on it for draw.\
+**Affects:** `src/replay.ts`, `src/refusal.ts`.
+
+**The two readings.**\
+Reading A, the corpus's (`R44`, `b6-08`): `D8`'s guard is the expected position alone, so an undo planned after the view has taken in another writer's later change to an entity the edit wrote restores the entity, overwriting that change.\
+Reading B, taken here: an undo or a redo is refused, `history-superseded`, the entity as `subject`, `opIndex` -1, where an entity it would write does not stand as its record left it - for an undo, as the latest undone edit left it, each edit's in turn for an undo of several; for a redo, as it stood before the edit.\
+Under both, another writer's change to an entity the undo does not write stands, and a store that has moved since the view's position refuses the undo.
+
+**Why B.**\
+`D8` gives its guard's purpose: "An undo planned from a position the store has since left is refused by the expected position, so a reversal is never applied to a state it was not recorded against."\
+Under A that guarantee holds only when nothing has written to the entities the reversal writes since the edit: once the view takes in such a change, an undo planned from the new position passes the position guard and applies the reversal to a state it was not recorded against.\
+`D8` also refutes applying a reversal unjudged because the undo "could land over a change it never saw"; under A it lands over a change the reversal never accounted for, and the other writer's work is gone with no refusal to tell anyone.\
+`VISION.md` has an edit "undone exactly", restoring "exactly what it changed"; overwriting another writer's change restores more than the edit changed.\
+Against B, `VISION.md` also says every edit that landed can be undone; but an undo is judged like any edit and can already be refused by a rule, as batch 5's refused undos show, and B refuses legibly, naming the entity, where A would lose a change silently.
+
+**What it costs.**\
+An edit whose entity another writer has since changed cannot be undone through the history; the caller edits the entity as it now stands.\
+Batch 5 is answered alike under both readings, since none of its other writers touches an entity an undone edit wrote; batch 6's `b6-08` asserts A, and this implementation refuses it.
+

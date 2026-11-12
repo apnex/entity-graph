@@ -1,12 +1,12 @@
 /**
- * Planning an undo or a redo (CONTRACT.md *Undo and redo*; docs/DECISIONS.md D8, D33, D36): the recorded reversal of each edit
+ * Planning an undo or a redo (CONTRACT.md *Undo and redo*; docs/DECISIONS.md D8, D33, D34, D37): the recorded reversal of each edit
  * undone, latest first, or the recorded writes of the edit redone, applied to a scratch layer over the view as the records hold
  * them - no resolver, no consequence and no rule worked out again, since the records already hold every write of the edits -
  * and the result judged as any edit is, by its shapes, the reference rules and the conditions, on the state it would leave.
  *
  * An entity an undo or a redo writes must stand as the record left it - as the edit left it, for an undo, or as it was before
  * the edit, for a redo - or the replay is refused, `history-superseded`, naming the entity, so a reversal is never applied to a
- * state it was not recorded against (D36).
+ * state it was not recorded against (D37).
  */
 import type { CompiledDeclaration } from "./declaration.js";
 import type { RecordedEntity, UndoRecord } from "./history.js";

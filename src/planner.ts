@@ -28,7 +28,7 @@ export type ConditionsBefore = (context: unknown) => { ok: true; breaches: Reado
 const RESOLVER_FAULTS: ReadonlySet<GraphRefusalCode> = new Set(["invalid-edit", "unknown-operation", "undeclared-kind", "not-plain"]);
 
 /**
- * The bounds of a plan (D17, D35): at most this many requested items, this many net writes after the rules, and this many steps,
+ * The bounds of a plan (D17, D36): at most this many requested items, this many net writes after the rules, and this many steps,
  * ten times the net writes, so an expansion is refused before it costs more than its record could hold.
  */
 export const PLAN_LIMITS = Object.freeze({ maxEditItems: 2000, maxNetWrites: 2000, maxSteps: 20_000 });

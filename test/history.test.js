@@ -1,5 +1,5 @@
 // history - undo and redo (CONTRACT.md *Undo and redo*, *The store port*, *Identity across undo*; docs/DECISIONS.md D8, D32 to
-// D36): an edit is committed through the store port as one positioned change carrying its undo record in its note; undo replays
+// D37): an edit is committed through the store port as one positioned change carrying its undo record in its note; undo replays
 // the recorded reversal of the latest edit not yet undone, or of every such edit down to a named one, and redo the recorded
 // writes of the latest undone, neither working consequences out again, each judged and landed as any edit is; the history is
 // bounded by a count, a size and a pin, each yielding at its hard limit.
