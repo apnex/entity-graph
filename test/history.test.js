@@ -225,3 +225,20 @@ test("an undo reads one page of the store's changes from the edit, however many 
 	assert.equal(ok(graph.undo(1)).ok, true);
 	assert.ok(read <= 100, `an undo read ${read} changes at once`);
 });
+
+// --- the re-check's finding on 5d913da (docs/DECISIONS.md D39) ---
+
+test("an undo of several edits past the net-write bound is refused before anything lands; one of exactly the bound lands", () => {
+	const docs = (from, n) => ({ items: Array.from({ length: n }, (_, i) => create("doc", `d${from + i}`)) });
+	const over = open({ kinds: [{ kind: "doc" }] });
+	for (const from of [0, 1500, 3000]) ok(over.graph.commit(docs(from, 1500)));
+	const r = no(over.graph.undo(1));
+	assert.deepEqual([r.code, r.details.ruleKey, r.details.subject, r.details.measure, r.details.opIndex], ["too-many-writes", "net-writes", "bound 2000", 4500, -1]);
+	assert.deepEqual([over.port.position(), over.graph.position(), over.port.changes(0).changes.length, over.graph.all("doc").entities.length], [3, 3, 3, 4500], "nothing landed, the store and the view equal");
+	assert.equal(ok(over.graph.undo()).position, 4, "the latest alone still undoes");
+	const exact = open({ kinds: [{ kind: "doc" }] });
+	ok(exact.graph.commit(docs(0, 1000)));
+	ok(exact.graph.commit(docs(1000, 1000)));
+	const u = ok(exact.graph.undo(1));
+	assert.deepEqual([u.position, u.writes.length, exact.port.position(), exact.graph.all("doc").entities.length], [3, 2000, 3, 0]);
+});

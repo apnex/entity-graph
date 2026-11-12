@@ -12,7 +12,7 @@ import type { CompiledDeclaration } from "./declaration.js";
 import type { RecordedEntity, UndoRecord } from "./history.js";
 import { samePlain } from "./plain-members.js";
 import { readConditions } from "./phases.js";
-import type { ConditionsBefore } from "./planner.js";
+import { type ConditionsBefore, PLAN_LIMITS } from "./planner.js";
 import { type ConditionReading, judge } from "./reference-rules.js";
 import { type GraphRefusal, refuse } from "./refusal.js";
 import { Scratch } from "./scratch.js";
@@ -39,6 +39,8 @@ export function planReplay(view: EntityView, d: CompiledDeclaration, records: re
 	const writes = s.netWrites();
 	// a reversal that changes nothing lands no change, and leaves no note a restart could rebuild the history from (D38)
 	if (writes.length === 0) return facts(refuse("replay-changes-nothing", "history"), { ruleKey: "replay-changes-nothing", measure: 1 });
+	// a replay of several edits can pass the net-write bound no one of them passed, and is refused as a commit's plan is (D39)
+	if (writes.length > PLAN_LIMITS.maxNetWrites) return facts(refuse("too-many-writes", `bound ${PLAN_LIMITS.maxNetWrites}`), { ruleKey: "net-writes", measure: writes.length });
 	// one change holds one write per identity, so an identity the view holds under one kind cannot be put under another (D14, D38)
 	const crossing = writes.find((w) => w.op === "put" && view.get(w.id) !== undefined && view.get(w.id)!.kind !== w.kind);
 	if (crossing !== undefined) return facts(refuse("identity-taken", crossing.id), { ruleKey: "identity-taken", measure: 1 });

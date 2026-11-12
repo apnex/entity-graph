@@ -185,6 +185,35 @@ const planted = async (edits) => {
 		fs.rmSync(dir, { recursive: true, force: true });
 	}
 };
+// B3 at 5d913da (D39): an undo of several edits past the net-write bound, refused by the replay and by land's check alike
+const overBound = (mod) => {
+	const port = mod.createMemoryGraphPort();
+	const g = mod.createEntityGraph({ kinds: [{ kind: "doc" }] }, { position: 0 }, { port }).graph;
+	for (const from of [0, 1500]) g.commit({ items: Array.from({ length: 1500 }, (_, i) => ({ op: "create", kind: "doc", id: `d${from + i}`, record: {} })) });
+	const r = g.undo(1);
+	return { refused: r.ok === false, equal: port.position() === g.position() };
+};
+test("an undo past the net-write bound: land's check alone keeps the store and the view equal, and without both they part", async () => {
+	const plant = async (edits) => {
+		const dir = fs.mkdtempSync(path.join(root, ".mutants-"));
+		try {
+			fs.cpSync(path.join(root, "dist"), dir, { recursive: true });
+			for (const [file, needle, replacement] of edits) {
+				const text = fs.readFileSync(path.join(dir, file), "utf8");
+				assert.equal(text.split(needle).length, 2, `the needle is in ${file} exactly once: ${needle}`);
+				fs.writeFileSync(path.join(dir, file), text.replace(needle, replacement));
+			}
+			return overBound(await import(pathToFileURL(path.join(dir, "index.js")).href));
+		} finally {
+			fs.rmSync(dir, { recursive: true, force: true });
+		}
+	};
+	const replayGuard = ["replay.js", "if (writes.length > PLAN_LIMITS.maxNetWrites)", "if (false)"];
+	const landGuard = ["entity-graph.js", "if (unfit !== null)", "if (false)"];
+	assert.deepEqual(await plant([replayGuard]), { refused: true, equal: true }, "land's check alone");
+	assert.deepEqual(await plant([replayGuard, landGuard]), { refused: true, equal: false }, "neither: the store moved, the view did not");
+});
+
 test("an undo carrying an identity across kinds: land's check alone keeps the store and the view equal, and without both they part", async () => {
 	const replayGuard = ["replay.js", "if (crossing !== undefined)", "if (false)"];
 	const landGuard = ["entity-graph.js", "if (unfit !== null)", "if (false)"];

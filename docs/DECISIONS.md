@@ -848,3 +848,21 @@ An undo that lands in the store and not in the view leaves the graph unable to l
 Landing an identity's change of kind as a deletion and a creation in one change - a change holds one write per identity, and the store beneath keys an entity by its identity.\
 Accepting an undo of nothing as no change - it would move the history without a note to rebuild it from.
 
+---
+
+## D39 - The re-check's finding on `5d913da` fixed: a replay is held to the net-write bound, and the view's pre-check is every check it takes a change by
+
+**Ruled by:** the builder of M5, 2026-11-12, on the re-check of pull request 8 at `5d913da`, dispatched by draw's recorder; proposed for zorg's review.\
+**Affects:** `src/replay.ts`, `src/view.ts`, `test/history.test.js`, `test/mutation.test.js`.
+
+**Ruling.**\
+An undo or a redo whose net writes pass the bound a change may hold, 2,000, as an undo of several edits each within it can, is refused before anything lands, as `too-many-writes`, keyed `net-writes`, the bound as `subject` and the writes as `measure`, `opIndex` -1, as a commit's plan is refused (`D17`).\
+The view's check of a change before it is sent (`D38`) is now every check `take` makes but the position: the change's bounds - at least one item and at most 2,000 - and each item against the view; `take` and the check share the functions that make them, so a change the check passes the view takes, and the store and the view cannot part.\
+The position is the one check left to `take`, since the store gives it only as the change lands; a store answering a position the view cannot take is answered as `store-failed`.
+
+**Why.**\
+A commit's net writes are bounded by its plan, a replay's by nothing until now, and a check that is not the view's own checks lets the store and the view part again.
+
+**Alternatives refuted.**\
+Leaving the bound to the store - entity-store refuses a change past 2,000 writes, but the in-memory port and any other port need not, and the graph must not depend on which it is given.
+
