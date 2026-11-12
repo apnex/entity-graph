@@ -6,12 +6,16 @@
 // M3's: a phase re-entered, the conflict let through, a held write not judged, a condition's worsening let through.
 // M4's: a resolver called against the edit as it was found, its writes given the wrong index, the context not handed to a
 // resolver, a consequence or a condition. M5's: a consequence run on undo, a reversal recorded after its write, a pinned edit
-// evicted below the hard limit, the note's bound left unchecked. Each mutant must land, or its verdict would measure nothing.
+// evicted below the hard limit, the note's bound left unchecked. M6's: a stale commit let through, a committed change taken in
+// twice, a restart losing the history, the note's nesting left unchecked; and, found by the independent check of 6e9ce7e, the
+// adapter's identity-reused read as a failure, its snapshot reading one page of a kind, a forgotten position reported held, and
+// the halving search for the earliest held position cut wrong. Each mutant must land, or its verdict would measure nothing.
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { test } from "node:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { createMemoryStoragePort, openEntityStore } from "@apnex/entity-store";
 import { checkExactness } from "./support/exactness.js";
 import { WORLD } from "./support/worlds.js";
 
@@ -107,7 +111,7 @@ const contextToCondition = (createEntityGraph) => {
 };
 // M5's scenarios: an undo runs no consequence and restores the state before the edit; a pinned oldest edit holds below the hard
 // limit; an undo record past the note's bound is refused by the graph, before the store sees it
-const overPort = (mod, declaration, entities, options = {}) => mod.createEntityGraph(declaration, { position: 0, entities }, { port: mod.createMemoryGraphPort(options.port ?? {}), ...(options.history ? { history: options.history } : {}) }).graph;
+const overPort = (mod, declaration, entities, options = {}) => mod.createEntityGraph(declaration, { position: 0, entities }, { writer: "w", port: mod.createMemoryGraphPort(options.port ?? {}), ...(options.history ? { history: options.history } : {}) }).graph;
 const undoRunsNothing = (createEntityGraph, mod) => {
 	let ran = 0;
 	const count = { id: "count", phase: "first", trigger: [{ created: ["item"] }, { deleted: ["item"] }], run: () => (ran++, []) };
@@ -132,6 +136,81 @@ const noteBoundChecked = (createEntityGraph, mod) => {
 	const r = g.commit({ items: [{ op: "create", kind: "item", id: "a", record: { text: "x".repeat(200) } }] });
 	return r.ok === false && r.refusal.code === "note-bound" ? null : { what: "the note's bound was not checked before the store", got: r };
 };
+// M6's scenarios: a commit planned before another writer landed is refused; a change this graph committed is not taken in again;
+// a restart reads the history back; an undo record nesting past the store's bound is refused by the graph, before the store sees it
+const staleRefused = (createEntityGraph, mod) => {
+	const port = mod.createMemoryGraphPort();
+	const g = createEntityGraph({ kinds: [{ kind: "item" }] }, undefined, { writer: "w", port }).graph;
+	port.change({ writes: [{ kind: "item", id: "theirs", record: {} }], expectedPosition: 0 });
+	const r = g.commit({ items: [{ op: "create", kind: "item", id: "mine", record: {} }] });
+	return r.ok === false && r.refusal.code === "store-moved" && port.position() === 1 ? null : { what: "a stale commit was let through", got: r };
+};
+const takenInOnce = (createEntityGraph, mod) => {
+	const port = mod.createMemoryGraphPort();
+	const g = createEntityGraph({ kinds: [{ kind: "item" }] }, undefined, { writer: "w", port }).graph;
+	g.commit({ items: [{ op: "create", kind: "item", id: "a", record: {} }] });
+	const r = g.sync();
+	return r.ok && r.position === 1 ? null : { what: "a change this graph committed was taken in again", got: r };
+};
+const historyRestarts = (createEntityGraph, mod) => {
+	const port = mod.createMemoryGraphPort();
+	createEntityGraph({ kinds: [{ kind: "item" }] }, undefined, { writer: "w", port }).graph.commit({ items: [{ op: "create", kind: "item", id: "a", record: {} }] });
+	const r = createEntityGraph({ kinds: [{ kind: "item" }] }, undefined, { writer: "w", port }).graph.undo();
+	return r.ok && port.position() === 2 ? null : { what: "a restart lost the history", got: r };
+};
+const nestingChecked = (createEntityGraph, mod) => {
+	const g = createEntityGraph({ kinds: [{ kind: "item" }] }, undefined, { writer: "w", port: mod.createMemoryGraphPort({ noteDepth: 6 }) }).graph;
+	const r = g.commit({ items: [{ op: "create", kind: "item", id: "a", record: { b: { c: { d: 1 } } } }] });
+	return r.ok === false && r.refusal.code === "note-bound" && r.refusal.details.ruleKey === "note-depth" ? null : { what: "the note's nesting was not checked before the store", got: r };
+};
+// the adapter's scenarios load ./entity-store from the copy the mutant is planted in, over a real entity-store store
+const NOTE_SHAPE = { $schema: "urn:apnex:shape-check:dialect:1", type: "object" };
+const adapterIn = async (dir) => (await import(pathToFileURL(path.join(dir, "entity-store-port.js")).href)).createEntityStorePort;
+const noteStore = (now = () => 1_700_000_000_000, historyMs = 3_600_000) => openEntityStore({ storage: createMemoryStoragePort(), clock: { now }, historyMs, maxEntityBytes: 65536, kinds: { note: NOTE_SHAPE } }).store;
+const NOTE_KINDS = { kinds: [{ kind: "note" }] };
+const identityCollision = async (createEntityGraph, mod, dir) => {
+	const port = await adapterIn(dir);
+	const store = noteStore();
+	const first = createEntityGraph(NOTE_KINDS, undefined, { port: port(store, { writer: "shared" }), writer: "g1" }).graph;
+	const second = createEntityGraph(NOTE_KINDS, undefined, { port: port(store, { writer: "shared" }), writer: "g2" }).graph;
+	first.commit({ items: [{ op: "create", kind: "note", id: "a", record: {} }] });
+	const r = second.commit({ items: [{ op: "create", kind: "note", id: "b", record: {} }] });
+	return r.ok === false && r.refusal.code === "store-moved" ? null : { what: "a write identity already taken was not read as a moved store", got: r };
+};
+const pagedSnapshot = async (createEntityGraph, mod, dir) => {
+	const port = await adapterIn(dir);
+	const store = noteStore();
+	const writes = Array.from({ length: 1200 }, (_, i) => ({ operation: "create", input: { kind: "note", name: `n${i}`, tags: [], body: { text: "x".repeat(600) } } }));
+	store.change({ writes: writes.slice(0, 600) }, { writer: "seed", writeId: "seed-0" });
+	store.change({ writes: writes.slice(600) }, { writer: "seed", writeId: "seed-1" });
+	const g = createEntityGraph(NOTE_KINDS, undefined, { port: port(store, { writer: "r" }), writer: "r" }).graph;
+	const n = g.all("note").entities.length;
+	return n === 1200 ? null : { what: "the first fill read a kind's first page alone", got: n };
+};
+const forgottenHeld = async (createEntityGraph, mod, dir) => {
+	const port = await adapterIn(dir);
+	let now = 1_700_000_000_000;
+	const store = noteStore(() => now, 1000);
+	const g = createEntityGraph(NOTE_KINDS, undefined, { port: port(store, { writer: "mine" }), writer: "mine" }).graph;
+	g.commit({ items: [{ op: "create", kind: "note", id: "a", record: {} }] });
+	const theirs = port(store, { writer: "theirs" });
+	theirs.change({ writes: [{ kind: "note", id: "b", record: {} }], expectedPosition: 1 });
+	now += 5000;
+	theirs.change({ writes: [{ kind: "note", id: "c", record: {} }], expectedPosition: 2 });
+	const r = g.sync();
+	return r.ok && r.position === 3 && g.all("note").entities.length === 3 ? null : { what: "a forgotten position was read as held, and the view left behind", got: r };
+};
+const halving = (createEntityGraph, mod) => {
+	for (const forgotten of [1, 3, 5, 6]) {
+		const port = mod.createMemoryGraphPort();
+		const g = createEntityGraph(NOTE_KINDS, undefined, { port, writer: "w" }).graph;
+		for (let i = 0; i < 8; i++) g.commit({ items: [{ op: "create", kind: "note", id: `n${i}`, record: {} }] });
+		port.forget(forgotten);
+		const got = createEntityGraph(NOTE_KINDS, undefined, { port, writer: "w" }).graph.history().edits.map((e) => e.position);
+		if (got.length !== 8 - forgotten || got[0] !== forgotten + 1) return { what: `a restart after forgetting through ${forgotten} read back the wrong edits`, got };
+	}
+	return null;
+};
 const MUTANTS = [
 	{ name: "a stale reverse entry", file: "references.js", needle: "this.drop(id); // the references it held before this change" },
 	{ name: "a missed delete", file: "references.js", needle: "this.drop(id); // a deleted entity refers to nothing" },
@@ -152,12 +231,21 @@ const MUTANTS = [
 	{ name: "a reversal recorded after its write", file: "entity-graph.js", needle: "[w.kind, w.id, view.get(w.id)?.record ?? null, w.op === \"put\" ? w.record : null]", replacement: "[w.kind, w.id, w.op === \"put\" ? w.record : null, w.op === \"put\" ? w.record : null]", check: undoRestoresBefore },
 	{ name: "a pinned edit evicted below the hard limit", file: "history.js", needle: "if (oldest.pinned && held <= hardCount && size <= hardBytes)", replacement: "if (false)", check: pinHolds },
 	{ name: "the note's bound left unchecked", file: "entity-graph.js", needle: "if (bytes > port.noteBound)", replacement: "if (false)", check: noteBoundChecked },
+	{ name: "a stale commit let through", file: "entity-graph.js", needle: "expectedPosition: view.position(), note", replacement: "expectedPosition: port.position(), note", check: staleRefused },
+	{ name: "a committed change taken in twice", file: "entity-graph.js", needle: "port.changes(view.position())", replacement: "port.changes(view.position() - 1)", check: takenInOnce },
+	{ name: "a restart losing the history", file: "entity-graph.js", needle: "if (port !== undefined)\n        rebuildHistory(port);", replacement: "", check: historyRestarts },
+	{ name: "the note's nesting left unchecked", file: "entity-graph.js", needle: "if (port.noteDepth !== undefined && depth > port.noteDepth)", replacement: "if (false)", check: nestingChecked },
+	{ name: "the adapter reading identity-reused as a failure", file: "entity-store-port.js", needle: 'code === "position-moved" || code === "identity-reused" ? "store-moved" : code', replacement: 'code === "position-moved" ? "store-moved" : code', check: identityCollision },
+	{ name: "the adapter's snapshot reading one page of a kind", file: "entity-store-port.js", needle: "if (answer.answer.next === null)", replacement: "if (true)", check: pagedSnapshot },
+	{ name: "the adapter reporting a forgotten position held", file: "entity-store-port.js", needle: 'held: answer.refusal.code !== "position-not-held"', replacement: "held: true", check: forgottenHeld },
+	{ name: "the halving search moving the wrong bound", file: "entity-graph.js", needle: "                high = middle;\n            else\n                low = middle;", replacement: "                low = middle;\n            else\n                high = middle;", check: halving },
+	{ name: "the halving search answering the last position not held", file: "entity-graph.js", needle: "        return high;\n    }", replacement: "        return low;\n    }", check: halving },
 	{ name: "a condition's worsening let through: only a new breach refuses", file: "reference-rules.js", needle: "if (c.measure <= (conditionsBefore.get(key)?.measure ?? 0))", replacement: "if (conditionsBefore.has(key))", check: conditionWorseningRefused },
 ];
 
 test("each scenario a mutant is caught by answers as the contract says on the built package", async () => {
 	const mod = await import(pathToFileURL(path.join(root, "dist", "index.js")).href);
-	for (const mutant of MUTANTS) if (mutant.check) assert.equal(mutant.check(mod.createEntityGraph, mod), null, `${mutant.name}: the scenario fails unmutated`);
+	for (const mutant of MUTANTS) if (mutant.check) assert.equal(await mutant.check(mod.createEntityGraph, mod, path.join(root, "dist")), null, `${mutant.name}: the scenario fails unmutated`);
 });
 
 // B1 at 27276b1 (docs/DECISIONS.md D38): an undo carrying an identity across kinds is refused twice over - by the replay, and by
@@ -165,7 +253,7 @@ test("each scenario a mutant is caught by answers as the contract says on the bu
 // keeps the store and the view equal; and with both planted out, the store moves where the view cannot follow, as it did
 const crossKinds = (mod) => {
 	const port = mod.createMemoryGraphPort();
-	const g = mod.createEntityGraph({ kinds: [{ kind: "person" }, { kind: "tag" }] }, { position: 0, entities: [{ kind: "person", id: "x", record: {} }] }, { port }).graph;
+	const g = mod.createEntityGraph({ kinds: [{ kind: "person" }, { kind: "tag" }] }, { position: 0, entities: [{ kind: "person", id: "x", record: {} }] }, { writer: "w", port }).graph;
 	g.commit({ items: [{ op: "remove", kind: "person", id: "x" }] });
 	g.commit({ items: [{ op: "create", kind: "tag", id: "x", record: {} }] });
 	const r = g.undo(1);
@@ -188,7 +276,7 @@ const planted = async (edits) => {
 // B3 at 5d913da (D39): an undo of several edits past the net-write bound, refused by the replay and by land's check alike
 const overBound = (mod) => {
 	const port = mod.createMemoryGraphPort();
-	const g = mod.createEntityGraph({ kinds: [{ kind: "doc" }] }, { position: 0 }, { port }).graph;
+	const g = mod.createEntityGraph({ kinds: [{ kind: "doc" }] }, { position: 0 }, { writer: "w", port }).graph;
 	for (const from of [0, 1500]) g.commit({ items: Array.from({ length: 1500 }, (_, i) => ({ op: "create", kind: "doc", id: `d${from + i}`, record: {} })) });
 	const r = g.undo(1);
 	return { refused: r.ok === false, equal: port.position() === g.position() };
@@ -237,7 +325,7 @@ for (const mutant of MUTANTS) {
 			fs.writeFileSync(file, text);
 			const mod = await import(pathToFileURL(path.join(dir, "index.js")).href);
 			const { createEntityGraph } = mod;
-			const found = mutant.check ? mutant.check(createEntityGraph, mod) : checkExactness(createEntityGraph, { seed: 3, streams: 10, steps: 30 });
+			const found = mutant.check ? await mutant.check(createEntityGraph, mod, dir) : checkExactness(createEntityGraph, { seed: 3, streams: 10, steps: 30 });
 			assert.notEqual(found, null, `${mutant.name} was not caught`);
 		} finally {
 			fs.rmSync(dir, { recursive: true, force: true });

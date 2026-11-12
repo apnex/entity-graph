@@ -15,10 +15,9 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", ".
 const pkg = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
 const map = JSON.parse(fs.readFileSync(path.join(root, "export-map.json"), "utf8"));
 const publicName = (p) => (p === "." ? pkg.name : `${pkg.name}/${p.slice(2)}`);
-// RESTATED at M4 (docs/DECISIONS.md D26) and M5 (D32): reversible-history is served, and positioned-graph-sync deferred, under
-// D32, to M6
-const SERVED = ["dated-graph-view", "graph-declaration", "plan-graph-change", "reversible-history"];
-const DEFERRED = { "positioned-graph-sync": "D32" };
+// RESTATED at M4 (docs/DECISIONS.md D26), M5 (D32) and M6 (D40): every row is served, nothing deferred
+const SERVED = ["dated-graph-view", "graph-declaration", "plan-graph-change", "positioned-graph-sync", "reversible-history"];
+const DEFERRED = {};
 
 const contractRows = () => {
 	const lines = fs.readFileSync(path.join(root, "CONTRACT.md"), "utf8").split("\n");
@@ -44,7 +43,7 @@ for (const [p, entry] of Object.entries(map.paths)) {
 	});
 }
 
-test("every contract row is served or deferred with a ruling, never both; the served rows are M1's, M4's and M5's", () => {
+test("every contract row is served or deferred with a ruling, never both; every row is served, from M6", () => {
 	const rows = contractRows();
 	const served = new Set(Object.values(map.paths).flatMap((e) => Object.values(e.exports)).flatMap((x) => x.serves));
 	assert.deepEqual([...served].sort(), SERVED);
@@ -56,6 +55,9 @@ test("every contract row is served or deferred with a ruling, never both; the se
 
 const sources = (dir) => fs.readdirSync(dir, { withFileTypes: true }).flatMap((d) => (d.isDirectory() ? sources(path.join(dir, d.name)) : [path.join(dir, d.name)]));
 const code = (text) => text.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/.*$/gm, "$1");
+// entity-store is a development dependency: the ./entity-store adapter takes a store as an argument and imports only its types,
+// erased at build, so its built module imports nothing of it (docs/DECISIONS.md D43)
+const typeOnly = (text, s) => s === "@apnex/entity-store" && [...text.matchAll(/\bimport\s+(type\s+)?[^;]*?\bfrom\s*["']@apnex\/entity-store["']/g)].every((m) => m[1] !== undefined);
 const specifiers = (text) => [...text.matchAll(/\b(?:import|export)\s+(?:type\s+)?[^;]*?\bfrom\s*["']([^"']+)["']|\bimport\s*\(\s*["']([^"']+)["']/g)].map((m) => m[1] ?? m[2]);
 
 test("no source imports a module particular to one runtime, names one's global, or reads a clock or randomness", () => {
@@ -65,10 +67,17 @@ test("no source imports a module particular to one runtime, names one's global, 
 	for (const f of files) {
 		const text = code(fs.readFileSync(f, "utf8"));
 		for (const s of specifiers(text)) {
-			assert.ok(s.startsWith("./") || s === "@apnex/shape-check", `${path.relative(root, f)} imports ${s}`);
+			assert.ok(s.startsWith("./") || s === "@apnex/shape-check" || typeOnly(text, s), `${path.relative(root, f)} imports ${s}`);
 			assert.ok(!builtin.has(s), `${path.relative(root, f)} imports the runtime module ${s}`);
 		}
 		assert.doesNotMatch(text, /\b(?:process|Buffer|require|window|document|globalThis|self|__dirname)\b/, `${path.relative(root, f)} names a global particular to one runtime`);
 		assert.doesNotMatch(text, /\b(?:Date|Math\.random|performance|crypto)\b/, `${path.relative(root, f)} reads a clock or randomness`);
 	}
+});
+
+test("the built ./entity-store adapter imports nothing of entity-store, a development dependency alone (D43)", () => {
+	const built = fs.readFileSync(path.join(root, "dist", "entity-store-port.js"), "utf8");
+	assert.doesNotMatch(built, /@apnex\/entity-store/);
+	assert.equal(pkg.dependencies["@apnex/entity-store"], undefined);
+	assert.match(pkg.devDependencies["@apnex/entity-store"], /^https:\/\/github\.com\/apnex\/entity-store\/releases\/download\/v0\.2\.0\/apnex-entity-store-0\.2\.0\.tgz$/);
 });

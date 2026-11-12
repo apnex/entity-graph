@@ -17,26 +17,28 @@ import { isObject, type GraphRecord } from "./view.js";
 /** One entity a change writes: its kind and identity, and its record before and after the change, null where absent. */
 export type RecordedEntity = readonly [kind: string, id: string, before: GraphRecord | null, after: GraphRecord | null];
 
-/** An undo record as read from a note. */
+/** An undo record as read from a note: what it records, of which edits, by which writer (D42), and the entities it wrote. */
 export interface UndoRecord {
 	readonly act: "edit" | "undo" | "redo";
 	readonly of: readonly number[];
+	readonly by?: string;
 	readonly entities: readonly RecordedEntity[];
 }
 
 /** The note a change carries for an undo record. */
-export function noteOf(record: UndoRecord): { "entity-graph": { v: 1; act: string; of: readonly number[]; entities: readonly RecordedEntity[] } } {
-	return { "entity-graph": { v: 1, act: record.act, of: record.of, entities: record.entities } };
+export function noteOf(record: UndoRecord): { "entity-graph": { v: 1; act: string; of: readonly number[]; by?: string; entities: readonly RecordedEntity[] } } {
+	return { "entity-graph": { v: 1, act: record.act, of: record.of, ...(record.by === undefined ? {} : { by: record.by }), entities: record.entities } };
 }
 
 /** The undo record a note holds, or null where it holds none this component can read. */
 export function recordOf(note: unknown): UndoRecord | null {
 	if (!isObject(note) || !isObject(note["entity-graph"])) return null;
-	const { v, act, of, entities } = note["entity-graph"];
+	const { v, act, of, by, entities } = note["entity-graph"];
+	if (by !== undefined && typeof by !== "string") return null;
 	if (v !== 1 || (act !== "edit" && act !== "undo" && act !== "redo") || !Array.isArray(of) || !of.every((p) => Number.isSafeInteger(p)) || !Array.isArray(entities)) return null;
 	const record = (x: unknown) => x === null || isObject(x);
 	if (!entities.every((e) => Array.isArray(e) && e.length === 4 && typeof e[0] === "string" && typeof e[1] === "string" && record(e[2]) && record(e[3]))) return null;
-	return { act, of: of as number[], entities: entities as RecordedEntity[] };
+	return { act, of: of as number[], ...(by === undefined ? {} : { by }), entities: entities as RecordedEntity[] };
 }
 
 /** The history's bounds as the application states them (D35). */
@@ -93,6 +95,14 @@ export class History {
 	/** The undone edit a redo replays: the earliest of the latest undo's edits, so after an undo of several the oldest goes first. */
 	toRedo(): HistoryEdit | null {
 		return this.cursor < this.edits.length ? this.edits[this.cursor]! : null;
+	}
+
+	/** Undo records read back from the store (D42): the latest held edits undone while their positions are those `of` names. */
+	undoneAt(of: readonly number[]): void {
+		for (const position of of) {
+			if (this.cursor === 0 || this.edits[this.cursor - 1]!.position !== position) return;
+			this.cursor -= 1;
+		}
 	}
 
 	/** One edit redone, held again, and the oldest evicted as the bounds say. */

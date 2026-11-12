@@ -13,8 +13,8 @@ related: [C0, C1, C3, C4, C5, C6, C11, C12, C13, C14, P4, E5, A1, A2, A3]
 
 The contract of record for entity-graph: what a consumer can depend on, scaffolded as a candidate component under zorg's `D35` and `BL33` (`zorg/docs/BACKLOG.md`) and registered as `C15` (`status: draft`) in `mission-kit/components/C15-entity-graph.md`; its vision is ratified (`D7`), and its contract is a draft whose design is owed.\
 It also carries the fields of its mission-kit registry entry (`C15`).\
-Each row states what a consumer will depend on at the level `VISION.md` commits to; how each is achieved is owed by the design effort (`D2`), which began with the build plan (`docs/BUILD-PLAN.md`) and has built its first five milestones, the dated view, planning with the reference rules, the application's phases, held writes, conditions and shapes, intent resolvers and the edit context, and undo and redo (`D10`, `D15`, `D20`, `D26`, `D32`); what it still owes is listed under *Design owed*.\
-The terms under *Terms of the rows* carry the requirements its first candidate consumer, `drawv2`, records under mission-kit's `0117`, drafted with zorg's agreement and ruled by the director (`D8`, `D9`); the reference rules, the consequences and the stopping rule, the holding of consequence writes, intent resolvers, the edit context, judging, and undo and redo are built, and the other terms are not yet (`D15`, `D20`, `D26`, `D32`).
+Each row states what a consumer will depend on at the level `VISION.md` commits to; how each is achieved is owed by the design effort (`D2`), which began with the build plan (`docs/BUILD-PLAN.md`) and has built its first six milestones, the dated view, planning with the reference rules, the application's phases, held writes, conditions and shapes, intent resolvers and the edit context, undo and redo, and the store port with its entity-store adapter (`D10`, `D15`, `D20`, `D26`, `D32`, `D40`); what it still owes is listed under *Design owed*.\
+The terms under *Terms of the rows* carry the requirements its first candidate consumer, `drawv2`, records under mission-kit's `0117`, drafted with zorg's agreement and ruled by the director (`D8`, `D9`); the reference rules, the consequences and the stopping rule, the holding of consequence writes, intent resolvers, the edit context, judging, undo and redo, and the store port are built (`D15`, `D20`, `D26`, `D32`, `D40`).
 
 ---
 
@@ -130,7 +130,6 @@ Each is a question, and any answer keeps every commitment in `VISION.md` and in 
 **Open by the director's rulings, with the answer this draft proposes.**
 
 - Whether this scope stays one component or splits into a change planner, an entity view and change undo (`D5`; zorg's `D32` and `D35`). Proposed: one component, since recording each reversal and recording what an edit changed are one step, and both consumers agree (`D9`).
-- How a host lands an edit whole (`D3`); the `entity-store` definition (`C4`) declares a multi-item `change` that `entity-store`'s implementation does not yet serve, which is a defect in that implementation (`D4`). Proposed: through the store port's change of one or more writes, which `entity-store` designs under its own `D4`.
 - How an entity's identity survives undoing its deletion, given that the `entity-store` definition forms each identity from the position that created it (`D6`). Proposed for an application naming its own entities under *Identity across undo*; open otherwise.
 - How concurrent conflicting edits are resolved, including an edit and a change that lands while it is being planned, and an undo and a change that landed after the edit it reverses (`D6`). Proposed: the expected position refuses the later edit, and its caller may plan it again; whether two edits may ever be combined stays open.
 
@@ -173,9 +172,9 @@ Each is a question, and any answer keeps every commitment in `VISION.md` and in 
 ## Reference
 
 This repository, `apnex/entity-graph`.\
-Its first five milestones are built, serving `dated-graph-view`, `graph-declaration`, `plan-graph-change` and `reversible-history`, the last over a store port, `positioned-graph-sync` deferred (`D10`, `D15`, `D20`, `D26`, `D32`); the rest is built milestone by milestone under `docs/BUILD-PLAN.md`.\
+Its first six milestones are built, serving every row, `reversible-history` and `positioned-graph-sync` over a store port, entity-store's through the `./entity-store` adapter (`D10`, `D15`, `D20`, `D26`, `D32`, `D40`); the first release is built under `docs/BUILD-PLAN.md`.\
 `positioned-graph-sync` takes a store port shaped by the `entity-store` capabilities it requires, with `entity-store` as the reference provider (*The store port*), and `reversible-history` keeps its undo records in the note `entity-store:change-provenance` carries.\
-Those `entity-store` capabilities are designed under `entity-store`'s own `D4` and not yet served: its multi-item `change`, the expected position on a change, and the note.
+Those `entity-store` capabilities, designed under `entity-store`'s own `D4`, are served from its `0.2.0`: its multi-item `change`, the expected position on a change, and the note.
 
 ---
 
