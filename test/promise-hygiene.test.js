@@ -139,7 +139,7 @@ test("what a refusal leaves unread is observed however large: a promise past the
 
 test("a commit, an undo or a redo refused, a store port or a pin throwing or answering a promise, observes it", async () => {
 	const { createMemoryGraphPort } = await import("../dist/index.js");
-	const open = (port, history) => createEntityGraph({ kinds: [{ kind: "note" }] }, { position: 0 }, { port, ...(history ? { history } : {}) }).graph;
+	const open = (port, history) => createEntityGraph({ kinds: [{ kind: "note" }] }, { position: 0 }, { writer: "w", port, ...(history ? { history } : {}) }).graph;
 	const graph = open(createMemoryGraphPort());
 	await answered(() => graph.commit({ items: [leaky()] }, { context: () => 1 }), "invalid-context", "a commit's context");
 	await answered(() => graph.undo(rejected()), "undo-target-unknown", "an undo's target");
@@ -155,7 +155,7 @@ test("a commit, an undo or a redo refused, a store port or a pin throwing or ans
 	assert.equal(seen.length, 0);
 	const second = await settled(() => open(createMemoryGraphPort(), { pin: () => rejected() }).commit({ items: [{ op: "create", kind: "note", id: "a", record: {} }] }));
 	assert.deepEqual([second.answer.ok, second.seen.length], [true, 0], "a pin answering a promise pins nothing");
-	await answered(() => createEntityGraph({ kinds: [{ kind: "note" }] }, undefined, { port: createMemoryGraphPort(), history: { count: rejected() } }), "invalid-options", "history bounds");
+	await answered(() => createEntityGraph({ kinds: [{ kind: "note" }] }, undefined, { writer: "w", port: createMemoryGraphPort(), history: { count: rejected() } }), "invalid-options", "history bounds");
 });
 
 // --- M6's paths (docs/DECISIONS.md D41, D42) ---
@@ -163,14 +163,42 @@ test("a commit, an undo or a redo refused, a store port or a pin throwing or ans
 test("a sync refused, or a store port's snapshot or changes throwing or answering a promise, observes it", async () => {
 	const { createMemoryGraphPort } = await import("../dist/index.js");
 	const declaration = { kinds: [{ kind: "note" }] };
-	const graph = createEntityGraph(declaration, undefined, { port: createMemoryGraphPort() }).graph;
+	const graph = createEntityGraph(declaration, undefined, { writer: "w", port: createMemoryGraphPort() }).graph;
 	await answered(() => graph.sync(rejected()), "invalid-query", "a sync's limit");
 	const port = (members) => ({ noteBound: 1000, position: () => 0, change: () => ({ ok: true, position: 1 }), changes: () => ({ position: 0, changes: [] }), snapshot: () => ({ position: 0, entities: [] }), ...members });
-	await answered(() => createEntityGraph(declaration, undefined, { port: port({ snapshot: () => { throw { held: rejected() }; } }) }), "store-failed", "a snapshot that throws");
-	const later = createEntityGraph(declaration, undefined, { port: port({}) }).graph;
-	const promising = createEntityGraph(declaration, undefined, { port: port({ changes: () => rejected() }) });
+	await answered(() => createEntityGraph(declaration, undefined, { writer: "w", port: port({ snapshot: () => { throw { held: rejected() }; } }) }), "store-failed", "a snapshot that throws");
+	const later = createEntityGraph(declaration, undefined, { writer: "w", port: port({}) }).graph;
+	const promising = createEntityGraph(declaration, undefined, { writer: "w", port: port({ changes: () => rejected() }) });
 	assert.equal(promising.ok, true);
 	await answered(() => promising.graph.sync(), "store-failed", "changes answering a promise");
-	await answered(() => createEntityGraph(declaration, undefined, { port: port({ snapshot: () => rejected() }) }), "store-failed", "a snapshot answering a promise");
+	await answered(() => createEntityGraph(declaration, undefined, { writer: "w", port: port({ snapshot: () => rejected() }) }), "store-failed", "a snapshot answering a promise");
 	assert.equal(later.position(), 0);
+});
+
+// --- the ./entity-store adapter (the independent check of 6e9ce7e; docs/DECISIONS.md D43) ---
+
+test("an entity-store whose read, find, change, changes or historyBound answers a rejected promise: the graph refuses, and the promise is observed", async () => {
+	const { createMemoryStoragePort, openEntityStore } = await import("@apnex/entity-store");
+	const { createEntityStorePort } = await import("../dist/entity-store-port.js");
+	const shape = { $schema: "urn:apnex:shape-check:dialect:1", type: "object" };
+	const declaration = { kinds: [{ kind: "note" }] };
+	const wrapped = (overrides) => {
+		const real = openEntityStore({ storage: createMemoryStoragePort(), clock: { now: () => 1_700_000_000_000 }, historyMs: 3_600_000, maxEntityBytes: 65536, kinds: { note: shape } }).store;
+		const store = { read: (i) => real.read(i), find: (i) => real.find(i), change: (i, c) => real.change(i, c), changes: (i) => real.changes(i), historyBound: () => real.historyBound() };
+		return { real, store, port: createEntityStorePort(Object.assign(store, overrides), { writer: "w" }) };
+	};
+	const made = (port) => createEntityGraph(declaration, undefined, { port, writer: "w" });
+	await answered(() => made(wrapped({ find: () => rejected() }).port), "store-failed", "find");
+	await answered(() => made(wrapped({ historyBound: () => rejected() }).port), "store-failed", "historyBound");
+	for (const method of ["read", "change"]) {
+		const failing = wrapped({ [method]: () => rejected() });
+		const over = made(failing.port).graph;
+		await answered(() => over.commit({ items: [{ op: "create", kind: "note", id: "a", record: {} }] }), "store-failed", method);
+		assert.equal(over.position(), 0);
+	}
+	const changing = wrapped({});
+	const graph = made(changing.port).graph;
+	changing.real.create({ kind: "note", name: "b", tags: [], body: {} }, { writer: "x", writeId: "x1" });
+	changing.store.changes = () => rejected();
+	await answered(() => graph.sync(), "store-failed", "changes");
 });

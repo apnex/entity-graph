@@ -130,7 +130,6 @@ Each is a question, and any answer keeps every commitment in `VISION.md` and in 
 **Open by the director's rulings, with the answer this draft proposes.**
 
 - Whether this scope stays one component or splits into a change planner, an entity view and change undo (`D5`; zorg's `D32` and `D35`). Proposed: one component, since recording each reversal and recording what an edit changed are one step, and both consumers agree (`D9`).
-- How a host lands an edit whole (`D3`); the `entity-store` definition (`C4`) declares a multi-item `change` that `entity-store`'s implementation does not yet serve, which is a defect in that implementation (`D4`). Proposed: through the store port's change of one or more writes, which `entity-store` designs under its own `D4`.
 - How an entity's identity survives undoing its deletion, given that the `entity-store` definition forms each identity from the position that created it (`D6`). Proposed for an application naming its own entities under *Identity across undo*; open otherwise.
 - How concurrent conflicting edits are resolved, including an edit and a change that lands while it is being planned, and an undo and a change that landed after the edit it reverses (`D6`). Proposed: the expected position refuses the later edit, and its caller may plan it again; whether two edits may ever be combined stays open.
 

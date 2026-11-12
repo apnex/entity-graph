@@ -111,7 +111,7 @@ const contextToCondition = (createEntityGraph) => {
 };
 // M5's scenarios: an undo runs no consequence and restores the state before the edit; a pinned oldest edit holds below the hard
 // limit; an undo record past the note's bound is refused by the graph, before the store sees it
-const overPort = (mod, declaration, entities, options = {}) => mod.createEntityGraph(declaration, { position: 0, entities }, { port: mod.createMemoryGraphPort(options.port ?? {}), ...(options.history ? { history: options.history } : {}) }).graph;
+const overPort = (mod, declaration, entities, options = {}) => mod.createEntityGraph(declaration, { position: 0, entities }, { writer: "w", port: mod.createMemoryGraphPort(options.port ?? {}), ...(options.history ? { history: options.history } : {}) }).graph;
 const undoRunsNothing = (createEntityGraph, mod) => {
 	let ran = 0;
 	const count = { id: "count", phase: "first", trigger: [{ created: ["item"] }, { deleted: ["item"] }], run: () => (ran++, []) };
@@ -140,26 +140,26 @@ const noteBoundChecked = (createEntityGraph, mod) => {
 // a restart reads the history back; an undo record nesting past the store's bound is refused by the graph, before the store sees it
 const staleRefused = (createEntityGraph, mod) => {
 	const port = mod.createMemoryGraphPort();
-	const g = createEntityGraph({ kinds: [{ kind: "item" }] }, undefined, { port }).graph;
+	const g = createEntityGraph({ kinds: [{ kind: "item" }] }, undefined, { writer: "w", port }).graph;
 	port.change({ writes: [{ kind: "item", id: "theirs", record: {} }], expectedPosition: 0 });
 	const r = g.commit({ items: [{ op: "create", kind: "item", id: "mine", record: {} }] });
 	return r.ok === false && r.refusal.code === "store-moved" && port.position() === 1 ? null : { what: "a stale commit was let through", got: r };
 };
 const takenInOnce = (createEntityGraph, mod) => {
 	const port = mod.createMemoryGraphPort();
-	const g = createEntityGraph({ kinds: [{ kind: "item" }] }, undefined, { port }).graph;
+	const g = createEntityGraph({ kinds: [{ kind: "item" }] }, undefined, { writer: "w", port }).graph;
 	g.commit({ items: [{ op: "create", kind: "item", id: "a", record: {} }] });
 	const r = g.sync();
 	return r.ok && r.position === 1 ? null : { what: "a change this graph committed was taken in again", got: r };
 };
 const historyRestarts = (createEntityGraph, mod) => {
 	const port = mod.createMemoryGraphPort();
-	createEntityGraph({ kinds: [{ kind: "item" }] }, undefined, { port }).graph.commit({ items: [{ op: "create", kind: "item", id: "a", record: {} }] });
-	const r = createEntityGraph({ kinds: [{ kind: "item" }] }, undefined, { port }).graph.undo();
+	createEntityGraph({ kinds: [{ kind: "item" }] }, undefined, { writer: "w", port }).graph.commit({ items: [{ op: "create", kind: "item", id: "a", record: {} }] });
+	const r = createEntityGraph({ kinds: [{ kind: "item" }] }, undefined, { writer: "w", port }).graph.undo();
 	return r.ok && port.position() === 2 ? null : { what: "a restart lost the history", got: r };
 };
 const nestingChecked = (createEntityGraph, mod) => {
-	const g = createEntityGraph({ kinds: [{ kind: "item" }] }, undefined, { port: mod.createMemoryGraphPort({ noteDepth: 6 }) }).graph;
+	const g = createEntityGraph({ kinds: [{ kind: "item" }] }, undefined, { writer: "w", port: mod.createMemoryGraphPort({ noteDepth: 6 }) }).graph;
 	const r = g.commit({ items: [{ op: "create", kind: "item", id: "a", record: { b: { c: { d: 1 } } } }] });
 	return r.ok === false && r.refusal.code === "note-bound" && r.refusal.details.ruleKey === "note-depth" ? null : { what: "the note's nesting was not checked before the store", got: r };
 };
@@ -253,7 +253,7 @@ test("each scenario a mutant is caught by answers as the contract says on the bu
 // keeps the store and the view equal; and with both planted out, the store moves where the view cannot follow, as it did
 const crossKinds = (mod) => {
 	const port = mod.createMemoryGraphPort();
-	const g = mod.createEntityGraph({ kinds: [{ kind: "person" }, { kind: "tag" }] }, { position: 0, entities: [{ kind: "person", id: "x", record: {} }] }, { port }).graph;
+	const g = mod.createEntityGraph({ kinds: [{ kind: "person" }, { kind: "tag" }] }, { position: 0, entities: [{ kind: "person", id: "x", record: {} }] }, { writer: "w", port }).graph;
 	g.commit({ items: [{ op: "remove", kind: "person", id: "x" }] });
 	g.commit({ items: [{ op: "create", kind: "tag", id: "x", record: {} }] });
 	const r = g.undo(1);
@@ -276,7 +276,7 @@ const planted = async (edits) => {
 // B3 at 5d913da (D39): an undo of several edits past the net-write bound, refused by the replay and by land's check alike
 const overBound = (mod) => {
 	const port = mod.createMemoryGraphPort();
-	const g = mod.createEntityGraph({ kinds: [{ kind: "doc" }] }, { position: 0 }, { port }).graph;
+	const g = mod.createEntityGraph({ kinds: [{ kind: "doc" }] }, { position: 0 }, { writer: "w", port }).graph;
 	for (const from of [0, 1500]) g.commit({ items: Array.from({ length: 1500 }, (_, i) => ({ op: "create", kind: "doc", id: `d${from + i}`, record: {} })) });
 	const r = g.undo(1);
 	return { refused: r.ok === false, equal: port.position() === g.position() };

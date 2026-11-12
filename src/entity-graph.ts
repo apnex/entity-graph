@@ -5,7 +5,7 @@
  * entity refers to, which containers of a kind hold a member, and what can be reached from an entity by following references.
  * Asking changes nothing. A question naming a kind or a field the declaration does not hold is refused, not answered empty.
  */
-import { nestingDepth } from "@apnex/shape-check";
+import { firstUnsafeInteger, nestingDepth } from "@apnex/shape-check";
 import { type CompiledDeclaration, compileDeclaration, type GraphDeclaration } from "./declaration.js";
 import type { Referrer } from "./references.js";
 import { type GraphRefusal, refuse } from "./refusal.js";
@@ -64,7 +64,7 @@ export interface EntityGraph {
 	/** Redoes the latest undone edit (D33). */
 	redo(options?: { context?: unknown }): CommitAnswer;
 	/** Takes in every change the store holds after the view's position, up to `through` or its latest, in order (D41, D42). */
-	sync(through?: number): { ok: true; position: number } | { ok: false; refusal: GraphRefusal };
+	sync(through?: number): SyncAnswer;
 	/** What the history holds: each edit by the position it landed at, oldest first, whether undone, and how many it evicted (D35). */
 	history(): { edits: { position: number; bytes: number; pinned: boolean; undone: boolean }[]; evicted: number };
 }
@@ -89,10 +89,20 @@ function readFilter(input: unknown, declaration: CompiledDeclaration): { filter:
 }
 
 /** A graph's options: the store port it lands edits through, and the bounds of the history it keeps for undo (D33, D35). */
+/**
+ * What `sync` answers: the position its view then states; where the store no longer held the view's position, `refilled` and
+ * `historyReplaced`, since the view was filled again at the store's latest position, which may pass `through`, and the history
+ * read back again from the notes the store still holds (D42).
+ */
+export type SyncAnswer = { ok: true; position: number; refilled?: true; historyReplaced?: true } | { ok: false; refusal: GraphRefusal };
+
 export interface GraphOptions {
 	port?: GraphStorePort;
 	history?: HistoryBounds;
-	/** The name this graph's undo records carry, so a restart reads back its own history alone (D42); `entity-graph` when not given. */
+	/**
+	 * The name this graph's undo records carry, so a restart reads back its own history alone (D42): 1 to 1,024 characters, and
+	 * required with a port, so no two graphs over one store share a name by default.
+	 */
 	writer?: string;
 }
 
@@ -142,13 +152,14 @@ function readCallOptions(options: unknown, unread: unknown): { ok: true; context
 /** The graph's options read once: the port's members and the history's bounds, or the refusal naming the part (D33, D35). */
 function readGraphOptions(options: unknown): { ok: true; port: GraphStorePort | undefined; bounds: HistoryBounds; writer: string } | { ok: false; refusal: GraphRefusal } {
 	const bad = (subject: string) => ({ ok: false as const, refusal: refuse("invalid-options", subject) });
-	if (options === undefined) return { ok: true, port: undefined, bounds: {}, writer: "entity-graph" };
+	if (options === undefined) return { ok: true, port: undefined, bounds: {}, writer: "" };
 	const given = membersOf(options);
 	if (given === null) return bad("options: invalid");
 	const stray = Object.keys(given).find((k) => k !== "port" && k !== "history" && k !== "writer");
 	if (stray !== undefined) return bad(`${stray}: unknown`);
-	const writer = given["writer"] ?? "entity-graph";
-	if (typeof writer !== "string" || writer === "" || writer.length > 1024) return bad("writer: invalid");
+	const writer = given["writer"];
+	if (writer === undefined && given["port"] !== undefined) return bad("writer: required with a port");
+	if (writer !== undefined && (typeof writer !== "string" || writer === "" || writer.length > 1024)) return bad("writer: invalid");
 	let port: GraphStorePort | undefined;
 	const p = given["port"];
 	if (p !== undefined) {
@@ -172,7 +183,7 @@ function readGraphOptions(options: unknown): { ok: true; port: GraphStorePort | 
 			return bad("port: invalid");
 		}
 	}
-	if (given["history"] === undefined) return { ok: true, port, bounds: {}, writer };
+	if (given["history"] === undefined) return { ok: true, port, bounds: {}, writer: writer ?? "" };
 	const h = membersOf(given["history"]);
 	if (h === null) return bad("history: invalid");
 	const extra = Object.keys(h).find((k) => !["count", "bytes", "hardCount", "hardBytes", "pin"].includes(k));
@@ -185,7 +196,7 @@ function readGraphOptions(options: unknown): { ok: true; port: GraphStorePort | 
 	if (n("hardCount") !== undefined && n("count") !== undefined && n("hardCount")! < n("count")!) return bad("history.hardCount: invalid");
 	if (n("hardBytes") !== undefined && n("bytes") !== undefined && n("hardBytes")! < n("bytes")!) return bad("history.hardBytes: invalid");
 	if (h["pin"] !== undefined && typeof h["pin"] !== "function") return bad("history.pin: invalid");
-	return { ok: true, port, bounds: h as HistoryBounds, writer };
+	return { ok: true, port, bounds: h as HistoryBounds, writer: writer ?? "" };
 }
 
 /** A view filled from the opening, D12's first fill; over a port, the opening stands at the port's position (D33). */
@@ -463,7 +474,7 @@ export function createEntityGraph(declaration: GraphDeclaration, opening?: Graph
 	 * D41). Where the store no longer holds the view's position, the view is filled again from the store's entities at its latest
 	 * position and the history read again from the notes it still holds (D42).
 	 */
-	function syncFrom(port: GraphStorePort, through: number | undefined): { ok: true; position: number } | { ok: false; refusal: GraphRefusal } {
+	function syncFrom(port: GraphStorePort, through: number | undefined): SyncAnswer {
 		for (;;) {
 			if (through !== undefined && view.position() >= through) break;
 			const answer = callPort(() => port.changes(view.position()));
@@ -473,7 +484,7 @@ export function createEntityGraph(declaration: GraphDeclaration, opening?: Graph
 				if (!filled.ok) return filled;
 				view = filled.view;
 				rebuildHistory(port);
-				break;
+				return { ok: true, position: view.position(), refilled: true, historyReplaced: true };
 			}
 			const page = answer["changes"] as unknown[];
 			if (page.length === 0) break;
@@ -522,7 +533,7 @@ export function createEntityGraph(declaration: GraphDeclaration, opening?: Graph
 			for (const change of page) {
 				if (!isObject(change) || typeof change["position"] !== "number" || change["position"] > view.position()) return;
 				const record = recordOf(change["note"]);
-				if (record === null || (record.by ?? "entity-graph") !== writer) continue;
+				if (record === null || record.by !== writer) continue;
 				const position = change["position"];
 				if (record.act === "edit") {
 					const writes: GraphStep[] = record.entities.map(([kind, id, , after]) => (after === null ? { op: "del", kind, id } : { op: "put", kind, id, record: after }));
@@ -577,6 +588,9 @@ export function createEntityGraph(declaration: GraphDeclaration, opening?: Graph
 		// the store's bound on a note's nesting, where it has one, checked as entity-store counts it (D34, D43)
 		const depth = port.noteDepth === undefined ? 0 : nestingDepth(note as never);
 		if (port.noteDepth !== undefined && depth > port.noteDepth) return { ok: false, refusal: { ...refuse("note-bound", "note"), details: { ...refuse("note-bound", "note").details, ruleKey: "note-depth", measure: depth } } };
+		// no integer more than 9,007,199,254,740,991 from zero, which entity-store refuses in a note, and other runtimes cannot carry
+		const unsafe = firstUnsafeInteger(note as never);
+		if (unsafe !== null) return { ok: false, refusal: { ...refuse("note-bound", "note"), details: { ...refuse("note-bound", "note").details, ruleKey: "note-unsafe-number", measure: Math.abs(unsafe.value as number) } } };
 		const items = writes.map((w) => (w.op === "del" ? { kind: w.kind, id: w.id, deleted: true as const } : { kind: w.kind, id: w.id, record: w.record }));
 		// a change the view would not take is never sent, so the store and the view cannot part (D38)
 		const unfit = view.checkItems(items);

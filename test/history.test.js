@@ -13,7 +13,7 @@ const set = (kind, id, patch) => ({ op: "set", kind, id, patch });
 const remove = (kind, id) => ({ op: "remove", kind, id });
 const open = (declaration, { entities = [], position = 0, history, noteBound } = {}) => {
 	const port = createMemoryGraphPort({ position, ...(noteBound === undefined ? {} : { noteBound }) });
-	const made = createEntityGraph(declaration, { position, entities }, { port, ...(history === undefined ? {} : { history }) });
+	const made = createEntityGraph(declaration, { position, entities }, { writer: "w", port, ...(history === undefined ? {} : { history }) });
 	assert.equal(made.ok, true, JSON.stringify(made.refusal));
 	return { graph: made.graph, port };
 };
@@ -42,7 +42,7 @@ test("an edit is committed through the port as one change at the position it was
 	assert.equal(landed.length, 1);
 	assert.deepEqual(landed[0].writes, [{ kind: "shelf", id: "s", deleted: true }, { kind: "book", id: "b", deleted: true }]);
 	// RESTATED at M6 (docs/DECISIONS.md D42): the record names the writer whose history it is
-	assert.deepEqual(landed[0].note, { "entity-graph": { v: 1, act: "edit", of: [], by: "entity-graph", entities: [["shelf", "s", {}, null], ["book", "b", { shelf: "s" }, null]] } }, "each entity as it was before and as the edit leaves it");
+	assert.deepEqual(landed[0].note, { "entity-graph": { v: 1, act: "edit", of: [], by: "w", entities: [["shelf", "s", {}, null], ["book", "b", { shelf: "s" }, null]] } }, "each entity as it was before and as the edit leaves it");
 	const nothing = ok(graph.commit({ items: [create("shelf", "s"), remove("shelf", "s")] }));
 	// RESTATED (docs/DECISIONS.md D38): a commit that lands nothing answers so, with no position to file it under
 	assert.deepEqual([nothing.landed, nothing.writes, port.position(), graph.history().edits.length], [false, [], 5, 1], "a plan that changes nothing lands nothing, and holds no place in the history");
@@ -155,8 +155,8 @@ test("the history is bounded by a count, a size and a pin, each yielding at its 
 	ok(sized.commit({ items: [create("note", "a")] }));
 	ok(sized.commit({ items: [create("note", "b")] }));
 	assert.deepEqual(sized.history().edits.map((e) => e.position), [2], "never the newest, however large");
-	assert.deepEqual(Object.values(no(createEntityGraph(notes, undefined, { port: createMemoryGraphPort(), history: { count: 5, hardCount: 2 } }))).slice(1, 2), ["invalid-options"]);
-	assert.equal(no(createEntityGraph(notes, undefined, { port: createMemoryGraphPort(), history: { count: 5, hardCount: 2 } })).details.subject, "history.hardCount: invalid");
+	assert.deepEqual(Object.values(no(createEntityGraph(notes, undefined, { writer: "w", port: createMemoryGraphPort(), history: { count: 5, hardCount: 2 } }))).slice(1, 2), ["invalid-options"]);
+	assert.equal(no(createEntityGraph(notes, undefined, { writer: "w", port: createMemoryGraphPort(), history: { count: 5, hardCount: 2 } })).details.subject, "history.hardCount: invalid");
 });
 
 test("a plan taking more steps than the step limit is refused before its record is built", () => {
@@ -213,7 +213,7 @@ test("an undo reads one page of the store's changes from the edit, however many 
 	const port = createMemoryGraphPort({ position: 0 });
 	let read = 0;
 	const counted = { ...port, noteBound: port.noteBound, position: () => port.position(), change: (input) => port.change(input), changes: (since) => { const answer = port.changes(since); read = Math.max(read, answer.changes.length); return answer; } };
-	const graph = createEntityGraph({ kinds: [{ kind: "doc" }] }, { position: 0 }, { port: counted }).graph;
+	const graph = createEntityGraph({ kinds: [{ kind: "doc" }] }, { position: 0 }, { writer: "w", port: counted }).graph;
 	ok(graph.commit({ items: [create("doc", "d")] }));
 	for (let i = 0; i < 250; i++) port.change({ writes: [{ kind: "doc", id: `other${i}`, record: {} }], expectedPosition: port.position() });
 	for (let since = graph.position(); since < port.position();) {

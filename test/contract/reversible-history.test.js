@@ -18,7 +18,7 @@ const WORLD = {
 const open = (history) => {
 	const port = createMemoryGraphPort({ position: 10 });
 	const entities = [{ kind: "folder", id: "d", record: { name: "docs" } }, { kind: "file", id: "f1", record: { in: "d", text: "ab", size: 2 } }];
-	const made = createEntityGraph(WORLD, { position: 10, entities }, { port, ...(history ? { history } : {}) });
+	const made = createEntityGraph(WORLD, { position: 10, entities }, { writer: "w", port, ...(history ? { history } : {}) });
 	assert.equal(made.ok, true, JSON.stringify(made.refusal));
 	return { graph: made.graph, port };
 };

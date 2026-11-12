@@ -44,7 +44,7 @@ test("over 20 random graphs and 30 edits each: an undo restores the state before
 		const rand = seeded(29000 + s);
 		const port = createMemoryGraphPort();
 		const opening = [{ kind: "folder", id: "folder0", record: { parent: null } }, { kind: "folder", id: "folder1", record: { parent: "folder0" } }, { kind: "tag", id: "tag0", record: {} }];
-		const made = createEntityGraph(WORLD, { position: 0, entities: opening }, { port });
+		const made = createEntityGraph(WORLD, { position: 0, entities: opening }, { writer: "w", port });
 		assert.equal(made.ok, true, JSON.stringify(made.refusal));
 		const g = made.graph;
 		let changes = 0;

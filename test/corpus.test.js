@@ -168,7 +168,7 @@ function runAccepted(c, mode, storeName) {
 	const store = c.batch >= 5 ? storeFor(storeName, { position: first.start.position, entities: fixed(c, first.start.entities), noteBound: c.port?.noteBound, kinds: declare.kinds.map((k) => k.kind) }) : undefined;
 	const history = historyOf(c);
 	const overStore = () => {
-		const made = createEntityGraph(declare, undefined, { port: store.port, ...(history === undefined ? {} : { history }) });
+		const made = createEntityGraph(declare, undefined, { writer: "w", port: store.port, ...(history === undefined ? {} : { history }) });
 		assert.equal(made.ok, true, `refused: ${JSON.stringify(made.refusal)}`);
 		return made.graph;
 	};

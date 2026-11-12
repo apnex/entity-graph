@@ -16,4 +16,4 @@ export type { GraphEdit, GraphEditItem, GraphPlan } from "./planner.js";
 export type { GraphStep } from "./scratch.js";
 export { createMemoryGraphPort, type GraphStoreChange, type GraphStoreEntity, type GraphStorePort, type MemoryGraphPort } from "./port.js";
 export type { HistoryBounds } from "./history.js";
-export type { CommitAnswer, GraphOptions } from "./entity-graph.js";
+export type { CommitAnswer, GraphOptions, SyncAnswer } from "./entity-graph.js";

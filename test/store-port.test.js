@@ -25,7 +25,7 @@ const no = (r) => {
 };
 const NOTES = { kinds: [{ kind: "note" }, { kind: "tag" }] };
 const over = (port, options = {}) => {
-	const made = createEntityGraph(NOTES, undefined, { port, ...options });
+	const made = createEntityGraph(NOTES, undefined, { writer: "w", port, ...options });
 	assert.equal(made.ok, true, JSON.stringify(made.refusal));
 	return made.graph;
 };
@@ -79,7 +79,9 @@ test("a store that no longer holds the view's position: sync refills the view fr
 	ok(other.commit({ items: [create("note", "c")] }));
 	port.forget(3);
 	ok(other.commit({ items: [set("note", "c", { t: 2 })] }));
-	assert.deepEqual(ok(g.sync()), { ok: true, position: 4 });
+	// RESTATED after the independent check of 6e9ce7e (docs/DECISIONS.md D42): the answer says the view was filled again and the
+	// history replaced
+	assert.deepEqual(ok(g.sync()), { ok: true, position: 4, refilled: true, historyReplaced: true });
 	assert.deepEqual(records(g), { a: {}, b: {}, c: { t: 2 } });
 	assert.deepEqual(g.history().edits.map((e) => e.position), [], "the notes of its edits are forgotten with their changes");
 	assert.equal(no(g.undo()).code, "nothing-to-undo");
@@ -92,9 +94,9 @@ const withoutSnapshot = (port) => ({ noteBound: port.noteBound, position: () => 
 test("a port without a snapshot serves a graph given an opening; a graph made over it with none is refused, naming the snapshot", () => {
 	const inner = createMemoryGraphPort({ position: 2, entities: [{ kind: "note", id: "a", record: {} }] });
 	const port = withoutSnapshot(inner);
-	const refused = createEntityGraph(NOTES, undefined, { port });
+	const refused = createEntityGraph(NOTES, undefined, { writer: "w", port });
 	assert.deepEqual([refused.ok, refused.refusal?.code, refused.refusal?.details.subject.startsWith("port.snapshot")], [false, "invalid-options", true]);
-	const made = createEntityGraph(NOTES, { position: 2, entities: [{ kind: "note", id: "a", record: {} }] }, { port });
+	const made = createEntityGraph(NOTES, { position: 2, entities: [{ kind: "note", id: "a", record: {} }] }, { writer: "w", port });
 	assert.equal(made.ok, true, JSON.stringify(made.refusal));
 	const g = made.graph;
 	assert.equal(ok(g.commit({ items: [create("note", "b")] })).position, 3);
@@ -106,7 +108,7 @@ test("a port without a snapshot serves a graph given an opening; a graph made ov
 
 test("a store that no longer holds the view's position, over a port without a snapshot: sync refused, the view as it was", () => {
 	const inner = createMemoryGraphPort();
-	const g = createEntityGraph(NOTES, { position: 0 }, { port: withoutSnapshot(inner) }).graph;
+	const g = createEntityGraph(NOTES, { position: 0 }, { writer: "w", port: withoutSnapshot(inner) }).graph;
 	ok(g.commit({ items: [create("note", "a")] }));
 	inner.change({ writes: [{ kind: "note", id: "b", record: {} }], expectedPosition: 1 });
 	inner.change({ writes: [{ kind: "note", id: "c", record: {} }], expectedPosition: 2 });
@@ -206,7 +208,7 @@ test("sync refused: with no store, for a limit that is not a whole number, and w
 	};
 	graph = over(port, {});
 	assert.deepEqual([no(graph.sync(1.5)).code, no(graph.sync("2")).code], ["invalid-query", "invalid-query"]);
-	const calling = createEntityGraph({ phases: ["after"], kinds: [{ kind: "note", consequences: [{ id: "c", phase: "after", trigger: { created: ["note"] }, run }] }, { kind: "tag" }] }, undefined, { port });
+	const calling = createEntityGraph({ phases: ["after"], kinds: [{ kind: "note", consequences: [{ id: "c", phase: "after", trigger: { created: ["note"] }, run }] }, { kind: "tag" }] }, undefined, { writer: "w", port });
 	assert.equal(calling.ok, true, JSON.stringify(calling.refusal));
 	graph = calling.graph;
 	port.change({ writes: [{ kind: "tag", id: "t", record: {} }], expectedPosition: 0 });
@@ -259,7 +261,7 @@ test("over entity-store, a view's position past the store's history window is re
 	assert.equal(theirs.change({ writes: [{ kind: "note", id: "c", record: {} }], expectedPosition: 2 }).ok, true);
 	assert.equal(theirs.changes(1).held, false, "the adapter answers that position 1 is no longer held");
 	const r = ok(g.sync());
-	assert.equal(r.position, 3);
+	assert.deepEqual(r, { ok: true, position: 3, refilled: true, historyReplaced: true });
 	assert.deepEqual(Object.keys(records(g)), ["a", "b", "c"]);
 });
 
@@ -273,4 +275,34 @@ test("a restart after the store forgot its changes through 1, 3, 5 or 6 reads ba
 		const want = Array.from({ length: 8 - forgotten }, (_, i) => forgotten + 1 + i);
 		assert.deepEqual(again.history().edits.map((e) => e.position), want, `forgotten through ${forgotten}`);
 	}
+});
+
+test("a refill can pass the position sync was asked to stop at, and its answer says so: the view filled again and the history replaced", () => {
+	const port = createMemoryGraphPort();
+	const g = over(port, { writer: "w" });
+	ok(g.commit({ items: [create("note", "a")] }));
+	const other = over(port, { writer: "other" });
+	for (const id of ["b", "c", "d", "e", "f"]) ok(other.commit({ items: [create("note", id)] }));
+	port.forget(4);
+	assert.deepEqual(ok(g.sync(3)), { ok: true, position: 6, refilled: true, historyReplaced: true });
+	assert.deepEqual(ok(g.sync(6)), { ok: true, position: 6 }, "an ordinary sync answers no refill");
+});
+
+test("a graph made over a store names its writer, so no two graphs left on a default read each other's edits as their own", () => {
+	const port = createMemoryGraphPort();
+	const r = no(createEntityGraph(NOTES, undefined, { port }));
+	assert.deepEqual([r.code, r.details.subject], ["invalid-options", "writer: required with a port"]);
+	assert.equal(createEntityGraph(NOTES).ok, true, "a graph with no store needs none");
+});
+
+test("an undo record holding an integer more than 9,007,199,254,740,991 from zero is refused before it lands, as the note's other bounds are", () => {
+	const port = createMemoryGraphPort();
+	const g = over(port, { writer: "w" });
+	const r = no(g.commit({ items: [create("note", "big", { list: [1, -(2 ** 60)] })] }));
+	assert.deepEqual([r.code, r.details.ruleKey, r.details.subject, r.details.measure, r.details.opIndex], ["note-bound", "note-unsafe-number", "note", 2 ** 60, -1]);
+	assert.equal(port.position(), 0);
+	assert.equal(ok(g.commit({ items: [create("note", "safe", { n: 2 ** 53 - 1 })] })).position, 1);
+	const store = openStore(createMemoryStoragePort());
+	const r2 = no(over(createEntityStorePort(store, { writer: "w" }), { writer: "w" }).commit({ items: [create("note", "big", { n: 2 ** 60 })] }));
+	assert.deepEqual([r2.code, r2.details.ruleKey], ["note-bound", "note-unsafe-number"], "refused by the graph, before entity-store sees it");
 });

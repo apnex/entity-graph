@@ -11,9 +11,11 @@
  * `store-moved`, as does a write identity already used, which only a change this writer landed at that position can have taken.
  * `changes` is read a page at a time, each page's items grouped into changes by their position, the note on a change's first item;
  * a position the store no longer holds answers `held: false`. A snapshot reads every entity of each kind as of the store's
- * latest position, page by page.
+ * latest position, page by page. Every answer of the store is read once as plain data, and one that is not is a fault, every
+ * promise in it observed (D30).
  */
-import type { ChangeItem, ChangeWrite, EntityStore } from "@apnex/entity-store";
+import type { ChangeAnswer, ChangeItem, ChangesAnswer, ChangeWrite, EntityStore, FindAnswer, HistoryBoundAnswer, ReadAnswer, StoreOutcome } from "@apnex/entity-store";
+import { readPlain } from "./plain-members.js";
 import type { GraphStoreChange, GraphStoreEntity, GraphStorePort } from "./port.js";
 import type { GraphChangeItem } from "./view.js";
 
@@ -22,11 +24,21 @@ export interface EntityStorePortOptions {
 	writer?: string;
 }
 
+/**
+ * What the store answered, read once as plain data (D30, D43); an answer that is not - a promise, a getter, a value holding one -
+ * has every promise in it observed and is thrown as a fault, which the graph refuses as `store-failed`.
+ */
+function ask<A>(call: () => StoreOutcome<A>): StoreOutcome<A> {
+	const read = readPlain(call());
+	if (!read.ok) throw new TypeError("entity-store answered with what is not plain data");
+	return read.value as unknown as StoreOutcome<A>;
+}
+
 /** Makes a store port over an opened entity-store store. */
 export function createEntityStorePort(store: EntityStore, options: EntityStorePortOptions = {}): GraphStorePort {
 	const writer = options.writer ?? "entity-graph";
 	const latest = (): number => {
-		const answer = store.historyBound();
+		const answer = ask<HistoryBoundAnswer>(() => store.historyBound());
 		return answer.outcome === "answered" ? answer.answer.position : -1;
 	};
 	return Object.freeze({
@@ -42,17 +54,17 @@ export function createEntityStorePort(store: EntityStore, options: EntityStorePo
 					continue;
 				}
 				const record = (w as { record: unknown }).record as never;
-				const held = store.read({ target });
+				const held = ask<ReadAnswer>(() => store.read({ target }));
 				const present = held.outcome === "answered" && held.answer.entity !== null;
 				writes.push(present ? { operation: "update", input: { target, body: record } } : { operation: "create", input: { kind: w.kind, name: w.id, tags: [], body: record } });
 			}
-			const answer = store.change({ writes, expectedPosition: input.expectedPosition, ...(input.note === undefined ? {} : { note: input.note as never }) }, { writer, writeId: `${writer}@${input.expectedPosition}` });
+			const answer = ask<ChangeAnswer>(() => store.change({ writes, expectedPosition: input.expectedPosition, ...(input.note === undefined ? {} : { note: input.note as never }) }, { writer, writeId: `${writer}@${input.expectedPosition}` }));
 			if (answer.outcome === "answered") return { ok: true as const, position: answer.answer.position };
 			const code = answer.refusal.code;
 			return { ok: false as const, code: code === "position-moved" || code === "identity-reused" ? "store-moved" : code, position: latest() };
 		},
 		changes(since: number) {
-			const answer = store.changes({ since });
+			const answer = ask<ChangesAnswer>(() => store.changes({ since }));
 			if (answer.outcome === "refused") return { position: latest(), changes: [], next: null, held: answer.refusal.code !== "position-not-held" };
 			const changes: { position: number; writes: GraphChangeItem[]; note?: unknown }[] = [];
 			for (const item of answer.answer.changes as ChangeItem[]) {
@@ -69,7 +81,7 @@ export function createEntityStorePort(store: EntityStore, options: EntityStorePo
 			const entities: GraphStoreEntity[] = [];
 			for (const kind of kinds) {
 				for (let after: string | undefined; ;) {
-					const answer = store.find({ kind, asOf: position, ...(after === undefined ? {} : { after }) });
+					const answer = ask<FindAnswer>(() => store.find({ kind, asOf: position, ...(after === undefined ? {} : { after }) }));
 					if (answer.outcome === "refused") break; // a kind the store does not hold has no entity in it
 					for (const e of answer.answer.entries) entities.push({ kind: e.kind, id: e.name, record: e.body });
 					if (answer.answer.next === null) break;
