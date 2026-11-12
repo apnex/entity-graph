@@ -1,0 +1,37 @@
+{
+  "case": "b6-07-stale-undo-refused",
+  "batch": 6,
+  "summary": "An undo planned from a position the store has since left is refused by its expected position, view and store unchanged, and lands once the other writer's change is taken in.",
+  "covers": ["reversible-history", "positioned-graph-sync", "The store port", "Undo and redo"],
+  "readings": ["R1", "R2", "R14", "R15", "R39", "R40", "R41", "R42", "R44"],
+  "world": "document",
+  "variant": "base",
+  "verdict": "accepted",
+  "steps": [
+    { "start": { "position": 0, "entities": [
+      { "kind": "section", "id": "s1", "record": { "heading": "Intro", "parent": null, "cites": [] } },
+      { "kind": "section", "id": "s2", "record": { "heading": "Method", "parent": null, "cites": [] } }
+    ] } },
+    { "commit": { "position": 0, "edit": [
+      { "op": "change", "kind": "section", "id": "s2", "record": { "heading": "Methods", "parent": null, "cites": [] } }
+    ], "outcome": "landed", "landedAt": 1, "writes": [
+      { "op": "put", "kind": "section", "id": "s2", "record": { "heading": "Methods", "parent": null, "cites": [] } }
+    ] } },
+    { "other": { "position": 2, "writes": [
+      { "op": "put", "kind": "section", "id": "s3", "record": { "heading": "Notes", "parent": null, "cites": [] } }
+    ] } },
+    { "undo": { "position": 1, "outcome": "refused", "storePosition": 2, "refusal": { "part": "entity-graph", "code": "store-moved", "ruleKey": "store-moved", "subject": "position", "measure": 1, "opIndex": -1 } } },
+    { "ask": { "position": 1, "questions": [
+      { "q": "get", "kind": "section", "id": "s2", "answer": { "heading": "Methods", "parent": null, "cites": [] } },
+      { "q": "all", "kind": "section", "answer": ["s1", "s2"] }
+    ] } },
+    { "sync": { "position": 2 } },
+    { "undo": { "position": 2, "outcome": "landed", "landedAt": 3, "writes": [
+      { "op": "put", "kind": "section", "id": "s2", "record": { "heading": "Method", "parent": null, "cites": [] } }
+    ] } },
+    { "ask": { "position": 3, "questions": [
+      { "q": "all", "kind": "section", "answer": ["s1", "s2", "s3"] },
+      { "q": "get", "kind": "section", "id": "s2", "answer": { "heading": "Method", "parent": null, "cites": [] } }
+    ] } }
+  ]
+}

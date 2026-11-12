@@ -432,6 +432,36 @@ export const captionResolving = {
   kinds: resolving.kinds.map((k) => (k.kind === "caption" ? { ...k, intentResolver: attachCaption } : k)),
 };
 
+// Wave C: an edit is pinned against eviction when it deletes an entity.
+function pinDeletions({ writes }) {
+  return writes.some((w) => w.op === "del");
+}
+
+// The base world, its history holding two edits, or up to four while the oldest is pinned.
+export const countBounded = {
+  ...base,
+  history: { count: 2, bytes: 4194304, hardCount: 4, hardBytes: 8388608, pin: pinDeletions },
+};
+
+// The base world, its history holding 2,048 bytes of undo records, or up to 1 MiB while the oldest is pinned.
+export const bytesBounded = {
+  ...base,
+  history: { count: 100, bytes: 2048, hardCount: 200, hardBytes: 1048576, pin: pinDeletions },
+};
+
+// The base world, its history holding 2,048 bytes of undo records, or up to 3,072 while the oldest is pinned.
+export const bytesHard = {
+  ...base,
+  history: { count: 100, bytes: 2048, hardCount: 200, hardBytes: 3072, pin: pinDeletions },
+};
+
+// Values too long to state in a case file, each named by a case as { "$fixture": name }.
+export const fixtures = {
+  longHeading() {
+    return "Long ".repeat(800);
+  },
+};
+
 // Contexts no JSON file can state, each a value plain JSON cannot hold.
 export const contexts = {
   withFunction() {

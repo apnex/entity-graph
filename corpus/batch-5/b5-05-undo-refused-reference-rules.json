@@ -1,0 +1,55 @@
+{
+  "case": "b5-05-undo-refused-reference-rules",
+  "batch": 5,
+  "summary": "An undo is judged as any edit: restoring a caption is refused for exclusivity once another writer has captioned its figure, and lands once that caption is gone; restoring another caption is refused for targets once another writer has deleted its figure.",
+  "covers": ["reversible-history", "Undo and redo", "Reference rules", "Judging and refusals", "positioned-graph-sync"],
+  "readings": ["R1", "R2", "R3", "R14", "R15", "R18", "R19", "R39", "R40", "R42", "R44"],
+  "world": "document",
+  "variant": "base",
+  "verdict": "accepted",
+  "steps": [
+    { "start": { "position": 0, "entities": [
+      { "kind": "section", "id": "s1", "record": { "heading": "Intro", "parent": null, "cites": [] } },
+      { "kind": "section", "id": "s2", "record": { "heading": "Method", "parent": null, "cites": [] } },
+      { "kind": "figure", "id": "f1", "record": { "title": "Map", "section": "s1", "number": 1 } },
+      { "kind": "figure", "id": "f2", "record": { "title": "Chart", "section": "s1", "number": 2 } },
+      { "kind": "caption", "id": "c1", "record": { "body": "Figure 1: Map", "figure": "f1" } },
+      { "kind": "caption", "id": "c2", "record": { "body": "Figure 2: Chart", "figure": "f2" } }
+    ] } },
+    { "commit": { "position": 0, "edit": [
+      { "op": "remove", "kind": "caption", "id": "c2" }
+    ], "outcome": "landed", "landedAt": 1, "writes": [
+      { "op": "del", "kind": "caption", "id": "c2" }
+    ] } },
+    { "other": { "position": 2, "writes": [
+      { "op": "put", "kind": "caption", "id": "c9", "record": { "body": "Chart notes", "figure": "f2" } }
+    ] } },
+    { "sync": { "position": 2 } },
+    { "undo": { "position": 2, "outcome": "refused", "storePosition": 2, "refusal": { "part": "entity-graph", "code": "reference-rule", "ruleKey": "caption.figure.exclusivity", "subject": "f2", "measure": 1, "opIndex": -1 } } },
+    { "ask": { "position": 2, "questions": [
+      { "q": "referrersOf", "id": "f2", "answer": [ { "kind": "caption", "id": "c9", "field": "figure" } ] },
+      { "q": "get", "kind": "caption", "id": "c2", "answer": null }
+    ] } },
+    { "other": { "position": 3, "writes": [
+      { "op": "del", "kind": "caption", "id": "c9" }
+    ] } },
+    { "sync": { "position": 3 } },
+    { "undo": { "position": 3, "outcome": "landed", "landedAt": 4, "writes": [
+      { "op": "put", "kind": "caption", "id": "c2", "record": { "body": "Figure 2: Chart", "figure": "f2" } }
+    ] } },
+    { "commit": { "position": 4, "edit": [
+      { "op": "remove", "kind": "caption", "id": "c1" }
+    ], "outcome": "landed", "landedAt": 5, "writes": [
+      { "op": "del", "kind": "caption", "id": "c1" }
+    ] } },
+    { "other": { "position": 6, "writes": [
+      { "op": "del", "kind": "figure", "id": "f1" }
+    ] } },
+    { "sync": { "position": 6 } },
+    { "undo": { "position": 6, "outcome": "refused", "storePosition": 6, "refusal": { "part": "entity-graph", "code": "reference-rule", "ruleKey": "caption.figure.targets", "subject": "c1", "measure": 1, "opIndex": -1 } } },
+    { "ask": { "position": 6, "questions": [
+      { "q": "all", "kind": "caption", "answer": ["c2"] },
+      { "q": "get", "kind": "figure", "id": "f1", "answer": null }
+    ] } }
+  ]
+}

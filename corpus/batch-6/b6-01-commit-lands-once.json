@@ -1,0 +1,48 @@
+{
+  "case": "b6-01-commit-lands-once",
+  "batch": 6,
+  "summary": "A committed edit lands as one change of three writes at the store's next position, the view moving there as it lands; taking the store's changes in afterwards does not take it a second time, and another writer's later change is seen only once taken in.",
+  "covers": ["positioned-graph-sync", "The store port", "dated-graph-view"],
+  "readings": ["R1", "R2", "R14", "R15", "R25", "R27", "R28", "R39", "R40", "R42"],
+  "world": "document",
+  "variant": "base",
+  "verdict": "accepted",
+  "steps": [
+    { "start": { "position": 0, "entities": [
+      { "kind": "section", "id": "s1", "record": { "heading": "Intro", "parent": null, "cites": [] } },
+      { "kind": "section", "id": "s2", "record": { "heading": "Method", "parent": null, "cites": [] } },
+      { "kind": "figure", "id": "f1", "record": { "title": "Map", "section": "s1", "number": 1 } },
+      { "kind": "figure", "id": "f2", "record": { "title": "Chart", "section": "s1", "number": 2 } },
+      { "kind": "caption", "id": "c1", "record": { "body": "Figure 1: Map", "figure": "f1" } },
+      { "kind": "caption", "id": "c2", "record": { "body": "Figure 2: Chart", "figure": "f2" } }
+    ] } },
+    { "commit": { "position": 0, "edit": [
+      { "op": "create", "kind": "figure", "id": "f3", "record": { "title": "Plot", "section": "s2", "number": 1 } },
+      { "op": "change", "kind": "section", "id": "s2", "record": { "heading": "Methods", "parent": null, "cites": [] } }
+    ], "outcome": "landed", "landedAt": 1, "writes": [
+      { "op": "put", "kind": "figure", "id": "f3", "record": { "title": "Plot", "section": "s2", "number": 1 } },
+      { "op": "put", "kind": "caption", "id": "cap-f3", "record": { "body": "Figure 1: Plot", "figure": "f3" } },
+      { "op": "put", "kind": "section", "id": "s2", "record": { "heading": "Methods", "parent": null, "cites": [] } }
+    ] } },
+    { "ask": { "position": 1, "questions": [
+      { "q": "get", "kind": "section", "id": "s2", "answer": { "heading": "Methods", "parent": null, "cites": [] } },
+      { "q": "referrersOf", "id": "f3", "answer": [ { "kind": "caption", "id": "cap-f3", "field": "figure" } ] }
+    ] } },
+    { "sync": { "position": 1 } },
+    { "ask": { "position": 1, "questions": [
+      { "q": "all", "kind": "caption", "answer": ["c1", "c2", "cap-f3"] },
+      { "q": "referrersOf", "id": "s2", "answer": [ { "kind": "figure", "id": "f3", "field": "section" } ] }
+    ] } },
+    { "other": { "position": 2, "writes": [
+      { "op": "put", "kind": "section", "id": "s3", "record": { "heading": "Notes", "parent": null, "cites": [] } }
+    ] } },
+    { "ask": { "position": 1, "questions": [
+      { "q": "all", "kind": "section", "answer": ["s1", "s2"] }
+    ] } },
+    { "sync": { "position": 2 } },
+    { "ask": { "position": 2, "questions": [
+      { "q": "all", "kind": "section", "answer": ["s1", "s2", "s3"] },
+      { "q": "all", "kind": "caption", "answer": ["c1", "c2", "cap-f3"] }
+    ] } }
+  ]
+}

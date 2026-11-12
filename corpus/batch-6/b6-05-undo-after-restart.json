@@ -1,0 +1,49 @@
+{
+  "case": "b6-05-undo-after-restart",
+  "batch": 6,
+  "summary": "A graph made again over the port reads the undo records back from the notes on the store's changes, so both edits landed before the restart undo in turn, the figure restored under its identity with its caption and its neighbour's number.",
+  "covers": ["reversible-history", "positioned-graph-sync", "The store port", "Undo and redo", "Identity across undo"],
+  "readings": ["R1", "R2", "R14", "R15", "R17", "R25", "R26", "R27", "R28", "R39", "R40", "R43", "R44", "R46", "R49"],
+  "world": "document",
+  "variant": "base",
+  "verdict": "accepted",
+  "steps": [
+    { "start": { "position": 0, "entities": [
+      { "kind": "section", "id": "s1", "record": { "heading": "Intro", "parent": null, "cites": [] } },
+      { "kind": "section", "id": "s2", "record": { "heading": "Method", "parent": null, "cites": [] } },
+      { "kind": "figure", "id": "f1", "record": { "title": "Map", "section": "s1", "number": 1 } },
+      { "kind": "figure", "id": "f2", "record": { "title": "Chart", "section": "s1", "number": 2 } },
+      { "kind": "caption", "id": "c1", "record": { "body": "Figure 1: Map", "figure": "f1" } },
+      { "kind": "caption", "id": "c2", "record": { "body": "Figure 2: Chart", "figure": "f2" } }
+    ] } },
+    { "commit": { "position": 0, "edit": [
+      { "op": "remove", "kind": "figure", "id": "f1" }
+    ], "outcome": "landed", "landedAt": 1, "writes": [
+      { "op": "del", "kind": "figure", "id": "f1" },
+      { "op": "del", "kind": "caption", "id": "c1" },
+      { "op": "put", "kind": "figure", "id": "f2", "record": { "title": "Chart", "section": "s1", "number": 1 } },
+      { "op": "put", "kind": "caption", "id": "c2", "record": { "body": "Figure 1: Chart", "figure": "f2" } }
+    ] } },
+    { "commit": { "position": 1, "edit": [
+      { "op": "create", "kind": "section", "id": "s3", "record": { "heading": "Notes", "parent": null, "cites": [] } }
+    ], "outcome": "landed", "landedAt": 2, "writes": [
+      { "op": "put", "kind": "section", "id": "s3", "record": { "heading": "Notes", "parent": null, "cites": [] } }
+    ] } },
+    { "restart": { "position": 2 } },
+    { "undo": { "position": 2, "outcome": "landed", "landedAt": 3, "writes": [
+      { "op": "del", "kind": "section", "id": "s3" }
+    ] } },
+    { "undo": { "position": 3, "outcome": "landed", "landedAt": 4, "writes": [
+      { "op": "put", "kind": "figure", "id": "f1", "record": { "title": "Map", "section": "s1", "number": 1 } },
+      { "op": "put", "kind": "caption", "id": "c1", "record": { "body": "Figure 1: Map", "figure": "f1" } },
+      { "op": "put", "kind": "figure", "id": "f2", "record": { "title": "Chart", "section": "s1", "number": 2 } },
+      { "op": "put", "kind": "caption", "id": "c2", "record": { "body": "Figure 2: Chart", "figure": "f2" } }
+    ] } },
+    { "undo": { "position": 4, "outcome": "refused", "storePosition": 4, "refusal": { "part": "entity-graph", "code": "nothing-to-undo", "ruleKey": "nothing-to-undo", "subject": "history", "measure": 1, "opIndex": -1 } } },
+    { "ask": { "position": 4, "questions": [
+      { "q": "all", "kind": "caption", "answer": ["c1", "c2"] },
+      { "q": "referrersOf", "id": "f1", "answer": [ { "kind": "caption", "id": "c1", "field": "figure" } ] },
+      { "q": "all", "kind": "section", "answer": ["s1", "s2"] }
+    ] } }
+  ]
+}

@@ -1,0 +1,53 @@
+{
+  "case": "b6-04-restart-refills-view",
+  "batch": 6,
+  "summary": "After a commit and another writer's change, a graph made again over the same port fills its view from the store and answers as the graph before it did; restarted again past a change not taken in, it answers at the store's latest position.",
+  "covers": ["positioned-graph-sync", "The store port", "dated-graph-view"],
+  "readings": ["R1", "R2", "R14", "R15", "R17", "R25", "R26", "R27", "R28", "R39", "R40", "R42", "R43"],
+  "world": "document",
+  "variant": "base",
+  "verdict": "accepted",
+  "steps": [
+    { "start": { "position": 0, "entities": [
+      { "kind": "section", "id": "s1", "record": { "heading": "Intro", "parent": null, "cites": [] } },
+      { "kind": "section", "id": "s2", "record": { "heading": "Method", "parent": null, "cites": [] } },
+      { "kind": "figure", "id": "f1", "record": { "title": "Map", "section": "s1", "number": 1 } },
+      { "kind": "figure", "id": "f2", "record": { "title": "Chart", "section": "s1", "number": 2 } },
+      { "kind": "caption", "id": "c1", "record": { "body": "Figure 1: Map", "figure": "f1" } },
+      { "kind": "caption", "id": "c2", "record": { "body": "Figure 2: Chart", "figure": "f2" } }
+    ] } },
+    { "commit": { "position": 0, "edit": [
+      { "op": "remove", "kind": "figure", "id": "f1" }
+    ], "outcome": "landed", "landedAt": 1, "writes": [
+      { "op": "del", "kind": "figure", "id": "f1" },
+      { "op": "del", "kind": "caption", "id": "c1" },
+      { "op": "put", "kind": "figure", "id": "f2", "record": { "title": "Chart", "section": "s1", "number": 1 } },
+      { "op": "put", "kind": "caption", "id": "c2", "record": { "body": "Figure 1: Chart", "figure": "f2" } }
+    ] } },
+    { "other": { "position": 2, "writes": [
+      { "op": "put", "kind": "section", "id": "s3", "record": { "heading": "Notes", "parent": null, "cites": [] } }
+    ] } },
+    { "sync": { "position": 2 } },
+    { "ask": { "position": 2, "questions": [
+      { "q": "all", "kind": "figure", "answer": ["f2"] },
+      { "q": "get", "kind": "figure", "id": "f2", "answer": { "title": "Chart", "section": "s1", "number": 1 } },
+      { "q": "all", "kind": "section", "answer": ["s1", "s2", "s3"] },
+      { "q": "referrersOf", "id": "f2", "answer": [ { "kind": "caption", "id": "c2", "field": "figure" } ] }
+    ] } },
+    { "restart": { "position": 2 } },
+    { "ask": { "position": 2, "questions": [
+      { "q": "all", "kind": "figure", "answer": ["f2"] },
+      { "q": "get", "kind": "figure", "id": "f2", "answer": { "title": "Chart", "section": "s1", "number": 1 } },
+      { "q": "all", "kind": "section", "answer": ["s1", "s2", "s3"] },
+      { "q": "referrersOf", "id": "f2", "answer": [ { "kind": "caption", "id": "c2", "field": "figure" } ] }
+    ] } },
+    { "other": { "position": 3, "writes": [
+      { "op": "del", "kind": "section", "id": "s3" }
+    ] } },
+    { "restart": { "position": 3 } },
+    { "ask": { "position": 3, "questions": [
+      { "q": "all", "kind": "section", "answer": ["s1", "s2"] },
+      { "q": "all", "kind": "caption", "answer": ["c2"] }
+    ] } }
+  ]
+}

@@ -15,9 +15,10 @@ A case the implementer believes wrong goes back to its author, and any change to
 | 2 | `batch-2/` | Milestone M2: planning an edit with every declared reference rule, to a fixed point, judged on the state it would leave, refused with the facts the contract names, and changing no answer |
 | 3 | `batch-3/` | Milestone M3: application consequences in declared phases under the stopping rule, the conflict fault, consequence writes held to request rules, conditions over the whole set, and shape misfits |
 | 4 | `batch-4/` | Milestone M4: intent resolvers and the edit context |
+| 5 | `batch-5/` | Milestone M5: undo and redo, judged as any edit, the history's bounds and the note's bound |
+| 6 | `batch-6/` | Milestone M6: the store port, an edit landing at its expected position, a store that has moved, other writers, and a restart |
 
-Batches 3 and 4 share the world modules in `worlds/`.\
-Undo and the store port belong to later batches.
+Batches 3 to 6 share the world modules in `worlds/`.
 
 ---
 
@@ -309,6 +310,75 @@ The variants are `indexed`, adding a second phase, `index`, an `index` kind and 
 
 ---
 
+## The store port, undo and redo (batches 5 and 6)
+
+Every batch 5 and 6 case runs a graph over a store port, an in-memory store the harness supplies.\
+They name a world and variant as batches 3 and 4 do, and keep every step form above.
+
+### The port
+
+A case may carry `port`, `{ "noteBound": <bytes> }`, the store's bound on the note a change carries; without it the bound is 524,288 bytes, the reference store's 512 KiB.\
+The port takes a change of one or more writes whole or not at all, refuses one whose expected position is not its latest, keeps the note each change carries, and answers every change after a position, in order.\
+It numbers its changes one after another from the `start` step's position, whoever writes them.
+
+### Steps
+
+In batches 5 and 6 the `start` step states what the store holds at its position, and the graph is made over the port, filling its view from it (`R39`).\
+These steps are added:
+
+- `{ "commit": { "position": <integer>, "edit": [ <item>, ... ], "outcome": ..., ... } }`: the graph plans the edit from its view, at `position`, and lands it on the port with `position` as its expected position (`R40`).
+  A `commit` may carry `context` or `contextFrom` as a `plan` step does.
+- `{ "undo": { "position": <integer>, "outcome": ..., ... } }`: the graph undoes the latest landed edit not yet undone; with `"to": <integer>`, every such edit down to the one that landed at that position, as one change (`R44`).
+- `{ "redo": { "position": <integer>, "outcome": ..., ... } }`: the graph redoes the latest undone edit (`R45`).
+- `{ "other": { "position": <integer>, "writes": [ <write>, ... ] } }`: another writer lands one change on the port at `position`, the store's next; the graph does not see it until a `sync`.
+- `{ "sync": { "position": <integer> } }`: the graph takes in, in order, every change the port holds after its view's position, up to and including `position`, which its view then states (`R42`).
+- `{ "restart": { "position": <integer> } }`: the graph is set aside and a new one made over the same port and the same variant, filling its view from the store, whose latest position is `position` (`R43`).
+
+In `commit`, `undo` and `redo`, `position` is the view's position, which the step must state it was planned from, and `outcome` is `"landed"` or `"refused"`:
+
+- A landed step carries `landedAt`, the position the port gave its change, and `writes`, the change's net writes in batch 2's form; the view then states `landedAt`.
+- A refused step carries `storePosition`, the port's latest position after it, and `refusal`; the view and the store are as they were before it.
+
+### Refusals in batches 5 and 6
+
+A refusal may carry `measureAbove` in place of `measure`: the refusal's measure is greater than it, its exact value resting on how the implementation encodes an undo record.\
+An undo or redo has no requested items, so every refusal of one has `opIndex` -1.
+
+The new codes are:
+
+| `code` | Refused for | `ruleKey` | `subject` |
+|---|---|---|---|
+| `store-moved` | a change whose expected position is not the store's latest | `store-moved` | `"position"` |
+| `note-bound` | an edit whose undo record would not fit the port's bound on a note | `note-bound` | `"note"` |
+| `nothing-to-undo` | an undo when the history holds no landed edit not yet undone | `nothing-to-undo` | `"history"` |
+| `nothing-to-redo` | a redo when the history holds no undone edit | `nothing-to-redo` | `"history"` |
+
+Each has a measure of 1 except `note-bound`, whose measure is the record's size in bytes, and each has `opIndex` -1.
+
+### History bounds
+
+A variant may carry `history`, the bounds the application states for the history the graph keeps for undo (`R47`):
+
+- `count` and `bytes`: the edits held, and the bytes of their undo records, the history keeps to.
+- `hardCount` and `hardBytes`: the limits at which those bounds override the pin.
+- `pin({ position, writes })`: a pure function of a landed edit, `position` where it landed and `writes` its net writes, answering whether it is pinned against eviction.
+
+A harness hands these to the implementation in whatever form it takes them.\
+A variant without `history` holds every edit a case lands, and no such case commits more than five edits.
+
+### Fixtures
+
+A value `{ "$fixture": <name> }` anywhere in a record stands for the value the world module's `fixtures[<name>]()` returns, so a case can state a record too long for a case file (`R50`).\
+No record holds an object with the member `$fixture` for any other reason.
+
+### The document world in wave C
+
+The variants `countBounded`, `bytesBounded` and `bytesHard` are the base world with history bounds, each pinning an edit that deletes an entity.\
+`countBounded` keeps two edits, or up to four while the oldest is pinned; `bytesBounded` keeps 2,048 bytes of undo records, or up to 1,048,576 while the oldest is pinned; and `bytesHard` keeps 2,048, or up to 3,072.\
+The fixture `longHeading` is a heading of 4,000 characters.
+
+---
+
 ## Readings
 
 Where the contract leaves a question open, the corpus takes one reading and says so here.\
@@ -414,6 +484,33 @@ They rely on five questions *Design owed* lists, each with the answer the contra
   Under `onTargetDelete: "refuse"` that write is the deletion of the target, so `writers` names the consequence that deleted the target, and `subject` is the referrer still holding it, which no consequence wrote.
   Under `exclusivity` that write made the new holder hold the target, and `subject` is the target (`b3-15`).
 
+Readings `R39` onwards are batches 5 and 6's.\
+They rely on these questions *Design owed* lists: how the view is first filled (`R39`, as `D12` reads it); what a commit returns when the store refuses it, and whether the edit is planned again (`R41`, as *The store port* proposes); whether a change this component committed is taken in a second time from the stream (`R40`, owed at M6); which entities an edit's guards cover (`R41`, the expected position covering every entity, as proposed); how concurrent conflicting edits are resolved (`R41`, the later refused, as proposed); and identity across undo for an application naming its own entities (`R49`, as *Identity across undo* states).
+
+- **R39. The port and the first fill.** The harness supplies the port, an in-memory store that numbers its changes one after another from the `start` step's position, takes each change whole or not at all, and keeps its note.
+  The graph is made over the port and fills its view from the store's entities at its latest position.
+- **R40. A commit, and its change taken in once.** A commit plans the edit from the view's position and lands its net writes as one change, with that position as its expected position and the edit's undo record as its note.
+  The view moves to the change's position as it lands, and a later `sync` does not take that change in a second time, since it is not after the view's position; this answers the decision owed at M6.
+- **R41. A store that has moved.** A commit, undo or redo whose expected position is not the port's latest is refused by the port, and the graph answers `store-moved`, keyed by the code, with `"position"` as `subject`, a measure of 1 and `opIndex` -1.
+  The view and the store are left as they were, and the edit is not planned again by the graph; the caller takes the store's changes in and commits again.
+  The expected position covers every entity, read or written, so any change by another writer since the view's position refuses the commit.
+- **R42. Other writers.** Another writer's change lands on the port at the store's next position, and the view takes it in only at a `sync`, one change at a time and in order, applying no rule, as `R3` reads, each answer dated to the change it follows.
+- **R43. A restart.** A graph made over a port that already holds changes fills its view from the store at its latest position, so it answers as the graph before it did at that position.
+  It reads the undo records back from the notes on the store's changes, so undo and redo go on as they would have before the restart.
+- **R44. Undo.** An undo applies the recorded reversal of the latest landed edit not yet undone, or of every such edit down to the one that landed at `to`, as one edit and one change.
+  It restores each entity those edits changed to its state before the earliest of them that changed it, runs no consequence and expands no rule, since the recorded reversal already holds them, and so overwrites any later change another writer made to such an entity.
+  It is judged as any edit is, by shapes, the reference rules and the conditions, against the state it finds, refused only for a breach it introduces or raises, and by its expected position.
+- **R45. Redo.** A redo applies again the recorded writes of the latest undone edit, one edit per redo, so after an undo of several edits the oldest of them is redone first; it is judged as an undo is.
+  A commit that lands discards every undone edit, so a redo after it has nothing to redo; an undo or a redo is not itself an edit the history holds.
+- **R46. Nothing to undo or redo.** An undo when the history holds no landed edit not yet undone, an evicted edit counting as not held, is refused as `nothing-to-undo`; a redo with no undone edit, as `nothing-to-redo`; each with `"history"` as `subject`, a measure of 1 and `opIndex` -1.
+- **R47. The history's bounds.** The history holds landed edits not yet undone, and after each commit or redo lands it evicts, oldest first, while it holds more than `count` edits or more than `bytes` of undo records: an unpinned oldest edit is evicted; a pinned one is evicted only while more than `hardCount` edits or `hardBytes` bytes are held, and otherwise eviction stops; and the edit just landed is never evicted by its own landing.
+  The contract's pin "while a younger edit is held" is read so: a pinned oldest edit holds back the eviction of every edit after it, so the history stays a run of edits that can each be undone in turn.
+  A record's size is its size in the implementation's encoding, so the cases rely only on sizes far from each bound: the record of an edit of a small record well under 1,024 bytes, and of the removal of the 4,000-character heading well over 2,048.
+- **R48. The note's bound.** An edit whose undo record would not fit the port's bound on a note is refused before it lands, as `note-bound`, keyed by the code, with `"note"` as `subject`, the record's size as `measure` and `opIndex` -1, the store left as it was.
+  The bound is the store's, so a case states a smaller one for its port rather than a record of 512 KiB.
+- **R49. Identity across undo.** The document world names its own entities, so undoing a deletion recreates the entity under the same identity, and the references to it hold again.
+- **R50. Fixtures.** A `$fixture` value stands for what the world module's fixture function returns, so a case can name a record of thousands of characters without stating it.
+
 ---
 
 ## Checking the files
@@ -424,4 +521,5 @@ It checks that an accepted case starts with one `start` step, keeps positions st
 It checks that no answer repeats an element, every reading and label a case names is listed here, every file is plain ASCII under 16 KiB, and no case uses a drawing's words.\
 For batch 2 it also checks that each `plan` step states the view's position, carries the keys of its outcome, and writes each entity at most once, and that the items of an accepted plan name only declared kinds and keep ids unique across kinds.\
 For batches 3 and 4 it also checks that each case names a module and an export the module's text declares, that each refusal's code, key and members are of the forms above, and that each world module passes `node --check`; no module was imported or run.\
+For batches 5 and 6 it also checks that the port's positions run one after another, that each step states the view's position as the steps before it leave it, that a landed step carries `landedAt` and `writes` and a refused one `storePosition` and `refusal`, and that each `$fixture` names a fixture the module's text declares.\
 Every expected answer was worked out by hand from the contract text and the world modules' code, in every batch.

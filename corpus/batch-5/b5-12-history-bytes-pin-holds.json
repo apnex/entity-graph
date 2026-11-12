@@ -1,0 +1,45 @@
+{
+  "case": "b5-12-history-bytes-pin-holds",
+  "batch": 5,
+  "summary": "Past its 2,048-byte bound, a history whose oldest edit, a deletion, is pinned keeps every edit while under its hard limit of 1 MiB, so all three undo in turn.",
+  "covers": ["reversible-history", "Undo and redo", "Identity across undo"],
+  "readings": ["R1", "R2", "R14", "R15", "R39", "R40", "R44", "R46", "R47", "R49", "R50"],
+  "world": "document",
+  "variant": "bytesBounded",
+  "verdict": "accepted",
+  "steps": [
+    { "start": { "position": 0, "entities": [
+      { "kind": "section", "id": "s1", "record": { "heading": "Intro", "parent": null, "cites": [] } },
+      { "kind": "section", "id": "s2", "record": { "heading": "Method", "parent": null, "cites": [] } },
+      { "kind": "section", "id": "s9", "record": { "heading": { "$fixture": "longHeading" }, "parent": null, "cites": [] } }
+    ] } },
+    { "commit": { "position": 0, "edit": [
+      { "op": "remove", "kind": "section", "id": "s2" }
+    ], "outcome": "landed", "landedAt": 1, "writes": [
+      { "op": "del", "kind": "section", "id": "s2" }
+    ] } },
+    { "commit": { "position": 1, "edit": [
+      { "op": "create", "kind": "section", "id": "s3", "record": { "heading": "Notes", "parent": null, "cites": [] } }
+    ], "outcome": "landed", "landedAt": 2, "writes": [
+      { "op": "put", "kind": "section", "id": "s3", "record": { "heading": "Notes", "parent": null, "cites": [] } }
+    ] } },
+    { "commit": { "position": 2, "edit": [
+      { "op": "remove", "kind": "section", "id": "s9" }
+    ], "outcome": "landed", "landedAt": 3, "writes": [
+      { "op": "del", "kind": "section", "id": "s9" }
+    ] } },
+    { "undo": { "position": 3, "outcome": "landed", "landedAt": 4, "writes": [
+      { "op": "put", "kind": "section", "id": "s9", "record": { "heading": { "$fixture": "longHeading" }, "parent": null, "cites": [] } }
+    ] } },
+    { "undo": { "position": 4, "outcome": "landed", "landedAt": 5, "writes": [
+      { "op": "del", "kind": "section", "id": "s3" }
+    ] } },
+    { "undo": { "position": 5, "outcome": "landed", "landedAt": 6, "writes": [
+      { "op": "put", "kind": "section", "id": "s2", "record": { "heading": "Method", "parent": null, "cites": [] } }
+    ] } },
+    { "undo": { "position": 6, "outcome": "refused", "storePosition": 6, "refusal": { "part": "entity-graph", "code": "nothing-to-undo", "ruleKey": "nothing-to-undo", "subject": "history", "measure": 1, "opIndex": -1 } } },
+    { "ask": { "position": 6, "questions": [
+      { "q": "all", "kind": "section", "answer": ["s1", "s2", "s9"] }
+    ] } }
+  ]
+}
