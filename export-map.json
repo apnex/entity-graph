@@ -3,15 +3,13 @@
   "paths": {
     ".": {
       "exports": {
-        "createEntityGraph": { "part": "entity-graph", "serves": ["dated-graph-view"] },
+        "createEntityGraph": { "part": "entity-graph", "serves": ["dated-graph-view", "graph-declaration", "plan-graph-change"] },
         "GRAPH_LIMITS": { "part": "entity-graph", "serves": ["dated-graph-view"] }
       }
     }
   },
   "deferred": {
-    "graph-declaration": "D20",
-    "plan-graph-change": "D20",
-    "reversible-history": "D10",
-    "positioned-graph-sync": "D10"
+    "reversible-history": "D26",
+    "positioned-graph-sync": "D26"
   }
 }

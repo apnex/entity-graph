@@ -26,10 +26,18 @@ const REFS = Object.fromEntries(KINDS.map((k) => [k.kind, k.references ?? []]));
 // n is at most 8, by a dialect 2 shape; and a box holding more than two items breaks a condition
 const count = { id: "count", phase: "first", trigger: [{ created: ["box"] }, { changed: { kind: "box", fields: ["items", "count"] } }], run: ({ matches }) => matches.filter((m) => m.after !== null).map((m) => ({ op: "set", kind: "box", id: m.id, patch: { count: (m.after.items ?? []).length } })) };
 const mark = { id: "mark", phase: "second", trigger: { deleted: ["item"] }, run: ({ matches, graph }) => matches.map((m) => ({ op: graph.get("lid", `mark-${m.id}`) ? "change" : "create", kind: "lid", id: `mark-${m.id}`, record: { n: 0 } })) };
-const few = { id: "few", check: (graph) => graph.all("box").filter((b) => (b.record.items ?? []).length > 2).map((b) => ({ subject: b.id, measure: b.record.items.length - 2, sentence: `box ${b.id} holds more than two items` })) };
+// M4's: a box holds at most the context's limit of items, two without one; a label created without an identity is named by its
+// resolver, and a removal of a label already gone resolves to nothing
+const limitOf = (context) => context?.limit ?? 2;
+const few = { id: "few", check: ({ graph, context }) => graph.all("box").filter((b) => (b.record.items ?? []).length > limitOf(context)).map((b) => ({ subject: b.id, measure: b.record.items.length - limitOf(context), sentence: `box ${b.id} holds more than ${limitOf(context)} items` })) };
+const nameLabel = ({ item, graph }) => {
+	if (item.op === "create" && item.id === undefined) return [{ ...item, id: `label-new${graph.all("label").filter((x) => x.id.startsWith("label-new")).length + 1}` }];
+	if (item.op === "remove" && graph.get("label", item.id) === null) return [];
+	return [item];
+};
 const PHASED = {
 	phases: ["first", "second"],
-	kinds: KINDS.map((k) => (k.kind === "box" ? { ...k, consequences: [count], conditions: [few] } : k.kind === "item" ? { ...k, consequences: [mark] } : k.kind === "label" ? { ...k, shape: { $schema: "urn:apnex:shape-check:dialect:2", type: "object", properties: { n: { type: "integer", maximum: 8 } } } } : k)),
+	kinds: KINDS.map((k) => (k.kind === "box" ? { ...k, consequences: [count], conditions: [few] } : k.kind === "item" ? { ...k, consequences: [mark] } : k.kind === "label" ? { ...k, intentResolver: nameLabel, shape: { $schema: "urn:apnex:shape-check:dialect:2", type: "object", properties: { n: { type: "integer", maximum: 8 } } } } : k)),
 };
 const NAMES = KINDS.map((k) => k.kind);
 const POOL = 7;
@@ -47,7 +55,7 @@ function randomRecord(rand, kind, pick) {
 	return record;
 }
 
-function randomEdit(rand, entities) {
+function randomEdit(rand, entities, phased = false) {
 	const pick = (list) => list[Math.floor(rand() * list.length)];
 	const items = [];
 	const shared = pick(SHARED);
@@ -62,6 +70,10 @@ function randomEdit(rand, entities) {
 		else if (held) items.push({ op: "change", kind, id, record: randomRecord(rand, kind, pick) });
 		else items.push({ op: "create", kind, id, record: randomRecord(rand, kind, pick) });
 	}
+	// M4: a label created unnamed, and a removal of one already gone, which resolves to nothing
+	if (phased && rand() < 0.2) items.push({ op: "create", kind: "label", record: { n: Math.floor(rand() * 10) } });
+	if (phased && rand() < 0.1) items.push({ op: "remove", kind: "label", id: "label-gone" });
+	if (phased && rand() < 0.05) items.splice(0, items.length, { op: "remove", kind: "label", id: "label-gone" });
 	return { items };
 }
 
@@ -74,13 +86,13 @@ const applySteps = (start, steps) => {
 const sameEntities = (a, b) => JSON.stringify([...a].sort()) === JSON.stringify([...b].sort());
 // every breach a state holds, read over the whole graph from the entities alone (the corpus's R18; D19), measure by key:
 // `found` is the state the edit found, against which a target the edit deleted is told from one that was never there
-function breaches(state, found, phased) {
+function breaches(state, found, phased, context) {
 	const out = new Map();
 	const holders = new Map();
 	const add = (key, measure) => measure > 0 && out.set(key, measure);
 	for (const [id, { kind, record }] of state) {
 		if (phased && kind === "label") add(`label.shape@${id}`, Number.isInteger(record.n) && record.n <= 8 ? 0 : 1);
-		if (phased && kind === "box") add(`box.few@${id}`, (record.items ?? []).length - 2);
+		if (phased && kind === "box") add(`box.few@${id}`, (record.items ?? []).length - limitOf(context));
 		for (const r of REFS[kind]) {
 			const value = record[r.field];
 			const held = value == null ? [] : r.holds === "one" ? [value] : value;
@@ -111,20 +123,24 @@ function streams(declaration, seedBase, inStep = () => null) {
 		let entities = new Map(opening.map((x) => [x.id, { kind: x.kind, record: x.record }]));
 		const universe = [...NAMES.flatMap((k) => Array.from({ length: POOL }, (_, i) => `${k}${i}`)), ...SHARED, "ghost"];
 		for (let step = 0; step < 25; step++) {
-			const edit = randomEdit(rand, entities);
+			const edit = randomEdit(rand, entities, phased);
+			const context = phased ? [undefined, { limit: 2 }, { limit: 3 }][Math.floor(rand() * 3)] : undefined;
+			const options = context === undefined ? undefined : { context };
 			const before = snapshot(g, universe);
-			const r = g.plan(edit);
+			const r = g.plan(edit, options);
 			assert.equal(snapshot(g, universe), before, `stream ${s} step ${step}: planning changed an answer`);
-			assert.deepEqual(g.plan(edit), r, `stream ${s} step ${step}: the same edit answered differently`);
+			assert.deepEqual(g.plan(edit, options), r, `stream ${s} step ${step}: the same edit answered differently`);
+			// Q8: an edit whose every item resolves to nothing changes nothing, and is answered so
+			if (edit.items.every((x) => x.op === "remove" && x.id === "label-gone")) assert.deepEqual(r, { ok: true, position: g.position(), steps: [], inverse: [], writes: [] }, `stream ${s} step ${step}: nothing to do`);
 			if (!r.ok) { refused++; continue; }
 			accepted++;
 			// every plan ends: each rule step deletes an entity or removes at least one target
 			const removable = [...entities.values()].reduce((n, x) => n + 1 + Object.values(x.record).flat().length, 0);
 			assert.ok(r.steps.length <= edit.items.length * 2 + removable * 2 + 10, `stream ${s} step ${step}: ${r.steps.length} steps`);
 			const after = applySteps(entities, r.writes);
-			const was = breaches(entities, entities, phased);
+			const was = breaches(entities, entities, phased, context);
 			for (const w of r.writes) assert.equal(inStep(w), null, `stream ${s} step ${step}: ${w.kind} ${w.id} out of step`);
-			for (const [key, measure] of breaches(after, entities, phased)) assert.ok(measure <= (was.get(key) ?? 0), `stream ${s} step ${step}: accepted with ${key} at ${measure}, ${was.get(key) ?? 0} before`);
+			for (const [key, measure] of breaches(after, entities, phased, context)) assert.ok(measure <= (was.get(key) ?? 0), `stream ${s} step ${step}: accepted with ${key} at ${measure}, ${was.get(key) ?? 0} before`);
 			assert.ok(sameEntities(applySteps(entities, r.steps), after), "the steps describe what the net writes do");
 			assert.ok(sameEntities(applySteps(after, r.inverse), entities), "the reversal restores the start");
 			if (r.writes.length === 0) continue;
@@ -147,7 +163,7 @@ test("over 30 random graphs and 25 edits each: no answer changed by planning, on
 	assert.ok(accepted > 100 && refused > 20, `both kinds of answer exercised: ${accepted} accepted, ${refused} refused`);
 });
 
-test("the same over 30 more, with consequences in two phases, a shape and a condition: each box written keeps its count in step", () => {
+test("the same over 30 more, with consequences in two phases, a shape, a condition reading the context and a resolver: each box written keeps its count in step", () => {
 	const inStep = (w) => (w.op === "put" && w.kind === "box" && w.record.count !== (w.record.items ?? []).length ? w.record : null);
 	const { accepted, refused } = streams(PHASED, 19000, inStep);
 	assert.ok(accepted > 100 && refused > 20, `both kinds of answer exercised: ${accepted} accepted, ${refused} refused`);

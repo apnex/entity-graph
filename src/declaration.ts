@@ -1,12 +1,11 @@
 /**
  * The declaration (CONTRACT.md `graph-declaration`, *Reference rules*, *Consequences and the stopping rule*; docs/DECISIONS.md
- * D10, D11, D20, D21): a list of kinds, each with the list of references its records hold, each naming its field, the declared
- * kinds it may target, how many targets it holds and what becomes of the referrer when a target is deleted, with the other rule
- * options as the contract allows them; the shape of its records, prepared through shape-check; its consequences, each a
- * function with a trigger stated as data and one of the phases the declaration lists; and its conditions over the whole set.
- * A bad declaration is refused at creation, its subject naming the kind, the member and the part at fault. The index from each
- * kind to the consequences of each phase listening to it is built here, once. An intent resolver is accepted and not yet read
- * (M4).
+ * D10, D11, D20, D21, D26): a list of kinds, each with the list of references its records hold, each naming its field, the
+ * declared kinds it may target, how many targets it holds and what becomes of the referrer when a target is deleted, with the
+ * other rule options as the contract allows them; the shape of its records, prepared through shape-check; its consequences, each a
+ * function with a trigger stated as data and one of the phases the declaration lists; its conditions over the whole set; and its
+ * intent resolver (D26). A bad declaration is refused at creation, its subject naming the kind, the member and the part at fault.
+ * The index from each kind to the consequences of each phase listening to it is built here, once.
  */
 import { type PreparedShape, prepareShapeDocument, readPlainJson } from "@apnex/shape-check";
 import { itemsOf, membersOf } from "./plain-members.js";
@@ -56,7 +55,7 @@ export interface ConsequenceDeclaration {
 	id: string;
 	phase: string;
 	trigger: TriggerClause | readonly TriggerClause[];
-	run: (input: { readonly matches: readonly GraphChangeHeard[]; readonly graph: GraphReader }) => unknown;
+	run: (input: { readonly matches: readonly GraphChangeHeard[]; readonly graph: GraphReader; readonly context: unknown }) => unknown;
 }
 
 /** One breach a condition reports: the entity or thing concerned, how much, and the application's own sentence (D21). */
@@ -69,17 +68,20 @@ export interface ConditionBreach {
 /** A condition over the whole set that a shape cannot state (D21). */
 export interface ConditionDeclaration {
 	id: string;
-	check: (graph: GraphReader) => unknown;
+	check: (input: { readonly graph: GraphReader; readonly context: unknown }) => unknown;
 }
 
-/** One kind: its records' shape, the references they hold, its consequences and conditions, and its intent resolver (M4). */
+/** An intent resolver: a pure function rewriting one requested item of its kind into the writes it stands for (D26). */
+export type IntentResolver = (input: { readonly item: unknown; readonly graph: GraphReader; readonly context: unknown }) => unknown;
+
+/** One kind: its records' shape, the references they hold, its consequences and conditions, and its intent resolver. */
 export interface KindDeclaration {
 	kind: string;
 	references?: readonly ReferenceDeclaration[];
 	shape?: unknown;
 	conditions?: readonly ConditionDeclaration[];
 	consequences?: readonly ConsequenceDeclaration[];
-	intentResolver?: unknown;
+	intentResolver?: IntentResolver;
 }
 
 /** The application's declaration: its kinds, and the phases its consequences run in, in order. */
@@ -131,6 +133,7 @@ export interface CompiledDeclaration {
 	readonly consequences: readonly CompiledConsequence[];
 	readonly listening: ReadonlyMap<string, ReadonlyMap<string, readonly CompiledConsequence[]>>;
 	readonly conditions: readonly CompiledCondition[];
+	readonly resolvers: ReadonlyMap<string, IntentResolver>;
 }
 
 const TOP = new Set(["kinds", "phases"]);
@@ -195,6 +198,7 @@ export function compileDeclaration(input: unknown): { ok: true; declaration: Com
 	const shapes = new Map<string, PreparedShape & { accepted: true }>();
 	const consequences: CompiledConsequence[] = [];
 	const conditions: CompiledCondition[] = [];
+	const resolvers = new Map<string, IntentResolver>();
 	for (const declared of entries) {
 		const kind = declared["kind"] as string;
 		const unknown = firstUnknown(declared, KIND);
@@ -259,6 +263,9 @@ export function compileDeclaration(input: unknown): { ok: true; declaration: Com
 		const checks = compileConditions(kind, declared["conditions"]);
 		if (!checks.ok) return bad(checks.path, checks.fault);
 		conditions.push(...checks.list);
+		const resolver = declared["intentResolver"];
+		if (resolver !== undefined && typeof resolver !== "function") return bad(`${kind}.intentResolver`, "invalid");
+		if (resolver !== undefined) resolvers.set(kind, resolver as IntentResolver);
 	}
 	const stray = firstUnknown(top, TOP);
 	if (stray !== undefined) return bad(stray, "unknown");
@@ -271,7 +278,7 @@ export function compileDeclaration(input: unknown): { ok: true; declaration: Com
 			index.get(k)!.push(c);
 		}
 	}
-	return { ok: true, declaration: { kinds: compiled, fields, shapes, phases, consequences, listening, conditions } };
+	return { ok: true, declaration: { kinds: compiled, fields, shapes, phases, consequences, listening, conditions, resolvers } };
 }
 
 type Compiled<T> = { ok: true; list: T[] } | { ok: false; path: string; fault: string };

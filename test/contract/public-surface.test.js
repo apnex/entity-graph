@@ -15,10 +15,10 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", ".
 const pkg = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
 const map = JSON.parse(fs.readFileSync(path.join(root, "export-map.json"), "utf8"));
 const publicName = (p) => (p === "." ? pkg.name : `${pkg.name}/${p.slice(2)}`);
-const SERVED = ["dated-graph-view"];
-// RESTATED at M2 (docs/DECISIONS.md D15) and at M3 (D20): graph-declaration and plan-graph-change stay deferred, under D20, for
-// the intent resolvers and the edit context M4 builds
-const DEFERRED = { "graph-declaration": "D20", "plan-graph-change": "D20", "reversible-history": "D10", "positioned-graph-sync": "D10" };
+// RESTATED at M4 (docs/DECISIONS.md D26): graph-declaration and plan-graph-change are served, and reversible-history and
+// positioned-graph-sync deferred, under D26, to M5 and M6
+const SERVED = ["dated-graph-view", "graph-declaration", "plan-graph-change"];
+const DEFERRED = { "reversible-history": "D26", "positioned-graph-sync": "D26" };
 
 const contractRows = () => {
 	const lines = fs.readFileSync(path.join(root, "CONTRACT.md"), "utf8").split("\n");
@@ -44,7 +44,7 @@ for (const [p, entry] of Object.entries(map.paths)) {
 	});
 }
 
-test("every contract row is served or deferred with a ruling, never both; the served rows are M1's", () => {
+test("every contract row is served or deferred with a ruling, never both; the served rows are M1's and M4's", () => {
 	const rows = contractRows();
 	const served = new Set(Object.values(map.paths).flatMap((e) => Object.values(e.exports)).flatMap((x) => x.serves));
 	assert.deepEqual([...served].sort(), SERVED);

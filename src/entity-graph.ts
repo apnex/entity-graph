@@ -5,7 +5,7 @@
  * entity refers to, which containers of a kind hold a member, and what can be reached from an entity by following references.
  * Asking changes nothing. A question naming a kind or a field the declaration does not hold is refused, not answered empty.
  */
-import { readPlainJson } from "@apnex/shape-check";
+import { readPlainJson, toCanonicalJson } from "@apnex/shape-check";
 import { type CompiledDeclaration, compileDeclaration, type GraphDeclaration } from "./declaration.js";
 import type { Referrer } from "./references.js";
 import { type GraphRefusal, refuse } from "./refusal.js";
@@ -48,9 +48,9 @@ export interface EntityGraph {
 	reachable(fromId: string, filter?: ReferenceFilter): Dated<{ reached: { kind: string | null; id: string }[] }>;
 	applyChange(change: GraphChange): { ok: true; position: number } | { ok: false; refusal: GraphRefusal };
 	/**
-	 * Plans an edit with the declared reference rules, phases, shapes and conditions (D15, D20 to D24): the steps, their reversal
-	 * and the net writes, or a refusal; changes no answer. `options.context` is read as plain JSON and not yet used: M4 hands it
-	 * to consequences, conditions and resolvers.
+	 * Plans an edit with the kinds' intent resolvers, the declared reference rules, phases, shapes and conditions (D15, D20 to D28):
+	 * the steps, their reversal and the net writes, or a refusal; changes no answer. `options.context` is read once as plain JSON
+	 * and handed to consequences, conditions and resolvers, never interpreted.
 	 */
 	plan(edit: GraphEdit, options?: { context?: unknown }): GraphPlan;
 }
@@ -98,12 +98,13 @@ export function createEntityGraph(declaration: GraphDeclaration, opening?: Graph
 	const query = (subject: string) => ({ ok: false as const, refusal: refuse("invalid-query", subject) });
 	const isId = (value: unknown): value is string => typeof value === "string";
 	const at = () => view.position();
-	// whether a plan is running, so a consequence or condition calling back in is refused (D22); and the conditions' breaches as
-	// the view stands, read once per position (D21)
+	// whether a plan is running, so a consequence, condition or resolver calling back in is refused (D22); and the conditions'
+	// breaches as the view stands, read once per position and context (D21, D28)
 	let planning = false;
-	let held: { position: number; reading: ReturnType<ConditionsBefore> } | null = null;
-	const conditionsBefore: ConditionsBefore = () => {
-		if (held === null || held.position !== view.position()) held = { position: view.position(), reading: readConditions(d, viewState(view)) };
+	let held: { key: string; reading: ReturnType<ConditionsBefore> } | null = null;
+	const conditionsBefore: ConditionsBefore = (context) => {
+		const key = `${view.position()} ${context === undefined ? "" : toCanonicalJson(context as never)}`;
+		if (held === null || held.key !== key) held = { key, reading: readConditions(d, viewState(view), context) };
 		return held.reading;
 	};
 
@@ -174,17 +175,23 @@ export function createEntityGraph(declaration: GraphDeclaration, opening?: Graph
 			return view.take(change);
 		},
 		plan(edit, options) {
+			// the context read once as plain JSON before any item, refused of the edit as a whole if it is not (the corpus's R34; D28)
+			let context: unknown;
 			if (options !== undefined) {
 				const given = membersOf(options);
 				if (given === null) return { ok: false, refusal: refuse("invalid-edit", "options") };
 				const stray = Object.keys(given).find((k) => k !== "context");
 				if (stray !== undefined) return { ok: false, refusal: refuse("invalid-edit", `options.${stray}`) };
-				if (given["context"] !== undefined && !readPlainJson(given["context"]).ok) return { ok: false, refusal: refuse("not-plain", "options.context") };
+				if (given["context"] !== undefined) {
+					const read = readPlainJson(given["context"]);
+					if (!read.ok) return { ok: false, refusal: refuse("invalid-context", "context") };
+					context = read.value;
+				}
 			}
 			if (planning) return { ok: false, refusal: refuse("reentrant", "plan") };
 			planning = true;
 			try {
-				return planEdit(view, d, edit, conditionsBefore);
+				return planEdit(view, d, edit, context, conditionsBefore);
 			} finally {
 				planning = false;
 			}

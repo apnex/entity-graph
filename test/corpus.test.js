@@ -19,9 +19,8 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { createEntityGraph } from "../dist/index.js";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const BATCHES = ["batch-1", "batch-2", "batch-3"];
-// the corpus's batches this milestone leaves to the next, by name (draw's H31-EG-M3)
-const LATER = ["batch-4"];
+// every batch directory the corpus holds, none left out (draw's H31-EG-M4)
+const BATCHES = fs.readdirSync(path.join(root, "corpus")).filter((f) => /^batch-\d+$/.test(f)).sort((a, b) => Number(a.slice(6)) - Number(b.slice(6)));
 const filesOf = (batch) => fs.readdirSync(path.join(root, "corpus", batch)).filter((f) => f.endsWith(".json")).sort().map((f) => path.join(root, "corpus", batch, f));
 const CASES = BATCHES.flatMap(filesOf).map((f) => JSON.parse(fs.readFileSync(f, "utf8")));
 
@@ -61,6 +60,8 @@ const PLAN_CODES = {
 	"entity-absent": "entity-absent", "entity-present": "entity-present", "identity-taken": "identity-taken", "undeclared-kind": "undeclared-kind",
 	// batch 3's
 	"shape-misfit": "shape-misfit", "condition": "condition-broken", "consequence-conflict": "consequence-conflict",
+	// batch 4's
+	"invalid-context": "invalid-context",
 };
 
 /** The world modules batches 3 and 4 name, each read once. */
@@ -77,14 +78,14 @@ function adapt(variant) {
 			kind: k.kind,
 			...(k.references !== undefined ? { references: k.references } : {}),
 			...(k.shape !== undefined ? { shape: { $schema: DIALECT, ...k.shape } } : {}),
-			...(k.conditions !== undefined ? { conditions: k.conditions.map((c) => ({ id: c.key.startsWith(`${k.kind}.`) ? c.key.slice(k.kind.length + 1) : c.key, check: (graph) => c.check({ view: viewOf(graph), context: undefined }) })) } : {}),
+			...(k.conditions !== undefined ? { conditions: k.conditions.map((c) => ({ id: c.key.startsWith(`${k.kind}.`) ? c.key.slice(k.kind.length + 1) : c.key, check: ({ graph, context }) => c.check({ view: viewOf(graph), context }) })) } : {}),
 			...(k.consequences !== undefined ? {
 				consequences: k.consequences.map((q) => ({
 					id: q.name, phase: q.phase, trigger: q.trigger,
-					run: ({ matches, graph }) => q.run({ changes: matches.map(({ kind, id, before, after }) => ({ kind, id, before, after })), view: viewOf(graph), context: undefined }),
+					run: ({ matches, graph, context }) => q.run({ changes: matches.map(({ kind, id, before, after }) => ({ kind, id, before, after })), view: viewOf(graph), context }),
 				})),
 			} : {}),
-			...(k.intentResolver !== undefined ? { intentResolver: k.intentResolver } : {}),
+			...(k.intentResolver !== undefined ? { intentResolver: ({ item, graph, context }) => k.intentResolver({ item, view: viewOf(graph), context }) } : {}),
 		})),
 	};
 }
@@ -145,7 +146,9 @@ function runAccepted(c, mode) {
 			const kinds = declare.kinds.map((k) => k.kind);
 			const before = held(graph, kinds);
 			assert.equal(graph.position(), step.plan.position, `step ${i + 1}: the position planned from`);
-			const r = graph.plan({ items: step.plan.edit });
+			// a plan's context, as the case states it or as the world module's function builds what no file can state (batch 4)
+			const options = Object.hasOwn(step.plan, "context") ? { context: step.plan.context } : Object.hasOwn(step.plan, "contextFrom") ? { context: WORLDS[c.world].contexts[step.plan.contextFrom]() } : undefined;
+			const r = graph.plan({ items: step.plan.edit }, options);
 			assert.equal(held(graph, kinds), before, `step ${i + 1}: the plan changed what the view holds`);
 			if (step.plan.outcome === "accepted") {
 				assert.equal(r.ok, true, `step ${i + 1}: refused: ${JSON.stringify(r.refusal)}`);
@@ -204,11 +207,11 @@ for (const c of CASES) {
 	});
 }
 
-test("the corpus is read whole: batch 1's 38 cases, batch 2's 32 and batch 3's 18, each named for its file; batch 4 is M4's", () => {
-	assert.deepEqual(BATCHES.map((b) => filesOf(b).length), [38, 32, 18]);
-	assert.deepEqual(fs.readdirSync(path.join(root, "corpus")).filter((f) => f.startsWith("batch-")).sort(), [...BATCHES, ...LATER], "every batch is run here or left to a later milestone by name");
+test("the corpus is read whole: batch 1's 38 cases, batch 2's 32, batch 3's 18 and batch 4's 5, each named for its file", () => {
+	assert.deepEqual(BATCHES.map((b) => filesOf(b).length), [38, 32, 18, 5]);
+	assert.deepEqual(BATCHES, ["batch-1", "batch-2", "batch-3", "batch-4"], "every batch directory, run");
 	for (const f of BATCHES.flatMap(filesOf)) assert.equal(JSON.parse(fs.readFileSync(f, "utf8")).case, path.basename(f, ".json"));
 	const counted = (batch) => CASES.filter((c) => c.batch === batch).flatMap((c) => (c.steps ?? []).filter((st) => st.plan)).map((st) => st.plan.outcome);
 	const tally = (batch) => [counted(batch).filter((o) => o === "accepted").length, counted(batch).filter((o) => o === "refused").length];
-	assert.deepEqual([tally(2), tally(3)], [[62, 26], [33, 14]], "batch 2's 88 plans, 62 accepted and 26 refused; batch 3's 47, 33 and 14");
+	assert.deepEqual([tally(2), tally(3), tally(4)], [[62, 26], [33, 14], [10, 6]], "batch 2's 88 plans, 62 accepted and 26 refused; batch 3's 47, 33 and 14; batch 4's 16, 10 and 6");
 });

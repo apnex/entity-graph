@@ -61,7 +61,7 @@ const heldWriteJudged = (createEntityGraph) => {
 	return r.ok === false && r.refusal.code === "shape-misfit" && r.refusal.details.writers?.[0] === "task.spoil" ? null : { what: "a consequence's write was not held to its kind's shape", got: r };
 };
 const conditionWorseningRefused = (createEntityGraph) => {
-	const crowded = { id: "crowded", check: (graph) => (graph.all("task").length > 1 ? [{ subject: "all", measure: graph.all("task").length - 1, sentence: "too many" }] : []) };
+	const crowded = { id: "crowded", check: ({ graph }) => (graph.all("task").length > 1 ? [{ subject: "all", measure: graph.all("task").length - 1, sentence: "too many" }] : []) };
 	const g = createEntityGraph({ kinds: [{ kind: "task", conditions: [crowded] }] }, { position: 1, entities: [{ kind: "task", id: "a", record: {} }, { kind: "task", id: "b", record: {} }] }).graph;
 	const r = g.plan({ items: [{ op: "create", kind: "task", id: "c", record: {} }] });
 	return r.ok === false && r.refusal.code === "condition-broken" ? null : { what: "a condition's worsened breach was let through", got: r };

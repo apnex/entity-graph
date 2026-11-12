@@ -1,7 +1,7 @@
 // phases - application consequences in declared phases under the stopping rule, the conflict fault, consequence and rule
 // writes held to request rules, conditions over the whole set, and shapes judged through shape-check (CONTRACT.md
 // *Consequences and the stopping rule*, *Consequence writes held to request rules*, *Judging and refusals*; docs/DECISIONS.md
-// D20 to D24).
+// D20 to D24). RESTATED at M4 (D28): a condition is handed `{ graph, context }`, as a consequence and a resolver are.
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createEntityGraph } from "../dist/index.js";
@@ -164,7 +164,7 @@ test("a consequence's write is held to the rules a requested write of it would m
 	assert.deepEqual(facts(refused(dangling.plan({ items: [set("task", "a", { n: 3 })] }))), { code: "rule-broken", ruleKey: "task.owner.targets", subject: "a", measure: 1, opIndex: 0, sentence: null, writers: ["task.fill"] });
 	const otherwise = make(kinds(() => [set("task", "old", { title: "", n: "many" })]), opening);
 	assert.equal(accepted(otherwise.plan({ items: [set("task", "a", { n: 3 })] })).ok, true, "a shape is fitted or misfitted, a breach of measure 1, so old misfitting otherwise is no worse (the corpus's R30)");
-	const condition = { id: "titled", check: (graph) => graph.all("task").filter((t) => t.record.title === "X").map((t) => ({ subject: t.id, measure: 1, sentence: `task ${t.id} is titled X` })) };
+	const condition = { id: "titled", check: ({ graph }) => graph.all("task").filter((t) => t.record.title === "X").map((t) => ({ subject: t.id, measure: 1, sentence: `task ${t.id} is titled X` })) };
 	const named = make(kinds(({ matches }) => matches.map((m) => set("task", m.id, { title: "X" })), { conditions: [condition] }), opening);
 	assert.deepEqual(facts(refused(named.plan({ items: [set("task", "a", { n: 3 })] }))), { code: "condition-broken", ruleKey: "task.titled", subject: "a", measure: 1, opIndex: -1, sentence: "task a is titled X", writers: ["task.fill"] });
 	const absent = make(kinds(() => [set("task", "ghost", { n: 1 })]), opening);
@@ -207,7 +207,7 @@ test("a requested write whose record misfits its kind's shape is refused at its 
 test("a condition over the whole set is judged by key and measure, its sentence carried verbatim, a standing breach and a partial repair allowed", () => {
 	const unique = {
 		id: "unique-label",
-		check: (graph) => {
+		check: ({ graph }) => {
 			const by = new Map();
 			for (const t of graph.all("tag")) by.set(t.record.label, (by.get(t.record.label) ?? 0) + 1);
 			return [...by].filter(([, n]) => n > 1).map(([label, n]) => ({ subject: label, measure: n - 1, sentence: `${n} tags are labelled ${label}` }));

@@ -9,16 +9,23 @@
  * entity and the item that led there. The view is only read. Intent resolvers and the edit context are M4's.
  */
 import type { CompiledDeclaration } from "./declaration.js";
-import { applyItem } from "./items.js";
+import { applyItem, type ItemFault } from "./items.js";
 import { itemsOf, membersOf } from "./plain-members.js";
 import { type PhaseFault, readConditions, runPhase } from "./phases.js";
 import { type ConditionReading, judge, RuleExpander } from "./reference-rules.js";
 import { type GraphRefusal, type GraphRefusalCode, refuse } from "./refusal.js";
+import { resolveItem } from "./resolvers.js";
 import { type GraphStep, Scratch } from "./scratch.js";
-import { type EntityView, type GraphRecord, readEachPlain } from "./view.js";
+import { type EntityView, type GraphRecord, isObject, readEachPlain } from "./view.js";
 
-/** The conditions' breaches in the state the edit found, read once per position (D21), or the condition that failed to answer. */
-export type ConditionsBefore = () => { ok: true; breaches: ReadonlyMap<string, ConditionReading> } | { ok: false; fault: PhaseFault };
+/**
+ * The conditions' breaches in the state the edit found, read with the plan's context once per position and context (D21, D28), or
+ * the condition that failed to answer.
+ */
+export type ConditionsBefore = (context: unknown) => { ok: true; breaches: ReadonlyMap<string, ConditionReading> } | { ok: false; fault: PhaseFault };
+
+/** The faults of a resolver's write that are the resolver's own: a write that is no item, or names no declared kind (D27). */
+const RESOLVER_FAULTS: ReadonlySet<GraphRefusalCode> = new Set(["invalid-edit", "unknown-operation", "undeclared-kind", "not-plain"]);
 
 /** The bounds of a plan (D17): at most this many requested items, and this many net writes after the rules. */
 export const PLAN_LIMITS = Object.freeze({ maxEditItems: 2000, maxNetWrites: 2000 });
@@ -46,8 +53,8 @@ const withFacts = (r: GraphRefusal, ruleKey: string, measure: number): GraphPlan
 /** A refusal carrying the facts named: any of its rule key, measure, sentence and writers. */
 const withDetails = (r: GraphRefusal, details: Partial<GraphRefusal["details"]>): GraphPlan => ({ ok: false, refusal: { ...r, details: { ...r.details, ...details } } });
 
-/** Plans an edit over the view; reads the view and changes nothing of it. */
-export function planEdit(view: EntityView, d: CompiledDeclaration, input: unknown, conditionsBefore: ConditionsBefore): GraphPlan {
+/** Plans an edit over the view, with the context already read as plain JSON; reads the view and changes nothing of it. */
+export function planEdit(view: EntityView, d: CompiledDeclaration, input: unknown, context: unknown, conditionsBefore: ConditionsBefore): GraphPlan {
 	const no = (code: GraphRefusalCode, subject: string, opIndex = -1): GraphPlan => ({ ok: false, refusal: refuse(code, subject, opIndex) });
 	const edit = membersOf(input);
 	if (edit === null) return no("invalid-edit", "edit");
@@ -60,13 +67,29 @@ export function planEdit(view: EntityView, d: CompiledDeclaration, input: unknow
 	const read = readEachPlain(listed);
 	if (!read.ok) return no("not-plain", `items[${read.at}]`, read.at);
 
-	// 1. each requested item applied, a fault refused at the first item that faults (the corpus's R22)
+	// 1. each requested item, after its kind's resolver, applied; a fault refused at the first item that faults (the corpus's R22)
 	const s = new Scratch(view, d);
+	const itemFault = (fault: ItemFault, i: number): GraphPlan =>
+		fault.code === "invalid-edit" || fault.code === "not-plain" ? no(fault.code, fault.subject, i) : withFacts(refuse(fault.code, fault.subject, i), fault.ruleKey ?? fault.code, 1);
 	for (const [i, item] of read.items.entries()) {
-		const fault = applyItem(s, d, item, `items[${i}]`, i, null);
-		if (fault === null) continue;
-		if (fault.code === "invalid-edit" || fault.code === "not-plain") return no(fault.code, fault.subject, i);
-		return withFacts(refuse(fault.code, fault.subject, i), fault.ruleKey ?? fault.code, 1);
+		const kind = isObject(item) && typeof item["kind"] === "string" ? item["kind"] : undefined;
+		const resolver = kind === undefined ? undefined : d.resolvers.get(kind);
+		if (resolver === undefined) {
+			const fault = applyItem(s, d, item, `items[${i}]`, i, null);
+			if (fault !== null) return itemFault(fault, i);
+			continue;
+		}
+		// the resolver sees the edit as the items before it left it, and its writes stand in the item's place, carrying its index
+		// (the corpus's R35; D27)
+		const writes = resolveItem(s, d, resolver, item, context);
+		const named = isObject(item) && typeof item["id"] === "string" && item["id"] !== "" ? item["id"] : `items[${i}]`;
+		if (writes === null) return withFacts(refuse("resolver-failed", named, i), `${kind}.intentResolver`, 1);
+		for (const [j, write] of writes.entries()) {
+			const fault = applyItem(s, d, write, `items[${i}].writes[${j}]`, i, null);
+			if (fault === null) continue;
+			if (RESOLVER_FAULTS.has(fault.code)) return withFacts(refuse(fault.code, fault.subject, i), `${kind}.intentResolver`, 1);
+			return itemFault(fault, i);
+		}
 	}
 	// the rules expanded to a fixed point; 2. each phase once, in declared order, the rules expanded after each; 3. none again.
 	// Only the last expansion may stop at the bound: before it, a later phase's consequence may still write back what a rule
@@ -76,7 +99,7 @@ export function planEdit(view: EntityView, d: CompiledDeclaration, input: unknow
 	const stopAt = (last: boolean) => (last ? PLAN_LIMITS.maxNetWrites : Number.POSITIVE_INFINITY);
 	if (!expander.run(stopAt(d.phases.length === 0))) return bound(s.certainWrites());
 	for (const [p, phase] of d.phases.entries()) {
-		const fault = runPhase(s, d, phase);
+		const fault = runPhase(s, d, phase, context);
 		if (fault !== null) return withDetails(refuse(fault.code, fault.subject, fault.opIndex), { ruleKey: fault.ruleKey, measure: fault.measure, ...(fault.writers ? { writers: fault.writers } : {}) });
 		if (!expander.run(stopAt(p === d.phases.length - 1))) return bound(s.certainWrites());
 	}
@@ -86,9 +109,9 @@ export function planEdit(view: EntityView, d: CompiledDeclaration, input: unknow
 	let before: ReadonlyMap<string, ConditionReading> = new Map();
 	let after: ReadonlyMap<string, ConditionReading> = new Map();
 	if (d.conditions.length > 0) {
-		const was = conditionsBefore();
+		const was = conditionsBefore(context);
 		if (!was.ok) return withFacts(refuse(was.fault.code, was.fault.subject, was.fault.opIndex), was.fault.ruleKey, 1);
-		const now = readConditions(d, s);
+		const now = readConditions(d, s, context);
 		if (!now.ok) return withFacts(refuse(now.fault.code, now.fault.subject, now.fault.opIndex), now.fault.ruleKey, 1);
 		before = was.breaches;
 		after = now.breaches;
