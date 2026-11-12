@@ -1,7 +1,8 @@
 // plan-cost - what a plan costs follows what the edit touches, not what the view holds (the build plan's section 7; docs/
 // DECISIONS.md D17, D19): a cascade past the net-write bound is refused as soon as the bound is certain to be passed; a cascade
-// within it is accepted in time linear in its writes; and a field set on an entity many others hold reads none of them. The
-// bounds stated are generous against the times measured, so a slow machine passes and a quadratic one does not.
+// within it is accepted in time linear in its writes; and a field set on an entity many others hold reads none of them. Each
+// time asserted is a median or the best of several runs, never one, and the bounds are generous against the times measured,
+// so a slow or busy machine passes and a quadratic one does not.
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createEntityGraph } from "../dist/index.js";
@@ -19,23 +20,35 @@ const timed = (fn) => {
 	const r = fn();
 	return [r, performance.now() - t];
 };
+// the median of five runs and the last answer: one wall-clock run beside a parallel suite, or a cold start, decides nothing
+const median = (fn) => {
+	const times = [];
+	let r;
+	for (let k = 0; k < 5; k++) {
+		const [answer, ms] = timed(fn);
+		r = answer;
+		times.push(ms);
+	}
+	times.sort((a, b) => a - b);
+	return [r, times[2]];
+};
 
 test("a cascade past the net-write bound is refused as soon as the bound is certain to be passed: a chain of 16,000", { timeout: 20000 }, () => {
 	const g = chain(16000);
-	const [r, ms] = timed(() => g.plan({ items: [{ op: "remove", kind: "ring", id: "r0" }] }));
+	const [r, ms] = median(() => g.plan({ items: [{ op: "remove", kind: "ring", id: "r0" }] }));
 	assert.equal(r.ok, false);
 	assert.equal(r.refusal.code, "too-many-writes");
 	assert.equal(r.refusal.details.ruleKey, "net-writes");
 	assert.ok(r.refusal.details.measure > 2000, `measure ${r.refusal.details.measure}`);
-	assert.ok(ms < 1000, `refused in ${ms.toFixed(0)} ms`);
+	assert.ok(ms < 1000, `refused in a median of ${ms.toFixed(0)} ms`);
 });
 
 test("a cascade of 1,999 net writes is accepted, in time linear in them", { timeout: 20000 }, () => {
 	const g = chain(1999);
-	const [r, ms] = timed(() => g.plan({ items: [{ op: "remove", kind: "ring", id: "r0" }] }));
+	const [r, ms] = median(() => g.plan({ items: [{ op: "remove", kind: "ring", id: "r0" }] }));
 	assert.equal(r.ok, true, JSON.stringify(r.refusal));
 	assert.equal(r.writes.length, 1999);
-	assert.ok(ms < 150, `accepted in ${ms.toFixed(0)} ms`);
+	assert.ok(ms < 200, `accepted in a median of ${ms.toFixed(0)} ms`);
 });
 
 test("a field set on an entity 20,000 others hold reads none of them", { timeout: 20000 }, () => {

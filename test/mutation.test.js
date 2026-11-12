@@ -66,6 +66,14 @@ const conditionWorseningRefused = (createEntityGraph) => {
 	const r = g.plan({ items: [{ op: "create", kind: "task", id: "c", record: {} }] });
 	return r.ok === false && r.refusal.code === "condition-broken" ? null : { what: "a condition's worsened breach was let through", got: r };
 };
+// a shared match list refreshed after a write: a consequence sharing an earlier one's trigger hears what that one created
+const sharedRefreshed = (createEntityGraph) => {
+	const copy = { id: "copy", phase: "first", trigger: { created: ["note"] }, run: ({ matches }) => matches.filter((m) => !m.id.startsWith("copy-")).map((m) => ({ op: "create", kind: "note", id: `copy-${m.id}`, record: {} })) };
+	const seen = { id: "seen", phase: "first", trigger: { created: ["note"] }, run: ({ matches }) => [{ op: "change", kind: "tally", id: "t", record: { seen: matches.map((m) => m.id) } }] };
+	const g = createEntityGraph({ phases: ["first"], kinds: [{ kind: "note", consequences: [copy, seen] }, { kind: "tally" }] }, { position: 1, entities: [{ kind: "tally", id: "t", record: {} }] }).graph;
+	const r = g.plan({ items: [{ op: "create", kind: "note", id: "a", record: {} }] });
+	return r.ok && JSON.stringify(r.writes.find((w) => w.id === "t")?.record.seen) === JSON.stringify(["a", "copy-a"]) ? null : { what: "a shared match list was kept after a write", got: r };
+};
 const MUTANTS = [
 	{ name: "a stale reverse entry", file: "references.js", needle: "this.drop(id); // the references it held before this change" },
 	{ name: "a missed delete", file: "references.js", needle: "this.drop(id); // a deleted entity refers to nothing" },
@@ -76,6 +84,7 @@ const MUTANTS = [
 	{ name: "a phase re-entered: each phase run twice", file: "planner.js", needle: "for (const [p, phase] of d.phases.entries()) {", replacement: "for (const [p, phase] of [...d.phases, ...d.phases].entries()) {", check: phaseOnce },
 	{ name: "the conflict let through", file: "phases.js", needle: "if (holder !== undefined && holder !== c.key)", replacement: "if (false)", check: conflictReported },
 	{ name: "a held write not judged: a consequence's writes spared their shape", file: "reference-rules.js", needle: "touched.has(id) ? shapeBreach(d, entity) : null", replacement: "touched.has(id) && s.lastWrite.get(id)?.by === null ? shapeBreach(d, entity) : null", check: heldWriteJudged },
+	{ name: "a shared match list kept after a write", file: "phases.js", needle: "if (found === undefined || found.steps !== s.steps.length)", replacement: "if (found === undefined)", check: sharedRefreshed },
 	{ name: "a condition's worsening let through: only a new breach refuses", file: "reference-rules.js", needle: "if (c.measure <= (conditionsBefore.get(key)?.measure ?? 0))", replacement: "if (conditionsBefore.has(key))", check: conditionWorseningRefused },
 ];
 

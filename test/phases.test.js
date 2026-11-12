@@ -78,6 +78,16 @@ test("within a phase the consequences that hear a change run in declared order, 
 	assert.deepEqual(putOf(accepted(tallyFirst.plan({ items: [create("task", "a")] })), "t"), { seen: [null] }, "declared first, count ran first");
 });
 
+test("consequences with one trigger share what it hears only while nothing is written: a later one hears what an earlier one created (D25)", () => {
+	const copy = consequence("copy", "first", { created: ["note"] }, ({ matches }) => matches.filter((m) => !m.id.startsWith("copy-")).map((m) => create("note", `copy-${m.id}`)));
+	const seen = consequence("seen", "first", { created: ["note"] }, ({ matches }) => [change("tally", "t", { seen: matches.map((m) => m.id) })]);
+	const g = make({ phases: ["first"], kinds: [{ kind: "note", consequences: [copy, seen] }, { kind: "tally" }] }, [e("tally", "t")]);
+	assert.deepEqual(putOf(accepted(g.plan({ items: [create("note", "a")] })), "t"), { seen: ["a", "copy-a"] }, "seen, sharing copy's trigger, heard the note copy created");
+	const quiet = consequence("quiet", "first", { created: ["note"] }, () => []);
+	const h = make({ phases: ["first"], kinds: [{ kind: "note", consequences: [quiet, seen] }, { kind: "tally" }] }, [e("tally", "t")]);
+	assert.deepEqual(putOf(accepted(h.plan({ items: [create("note", "a")] })), "t"), { seen: ["a"] }, "and shared what it heard where nothing was written between");
+});
+
 test("each phase runs once, in declared order, and a completed phase is never entered again", () => {
 	const calls = [];
 	const echo = consequence("echo", "first", { changed: { kind: "task", fields: ["v"] } }, () => (calls.push("echo"), []));

@@ -555,7 +555,10 @@ A rule's write records its key, `<kind>.<field>.<option>` of the reference decla
 For a breach of a reference rule or a shape, `details.writers` names the consequence or rule whose write the breach follows from, as its `opIndex` is read (`R38`; `D19`), and is absent where that write was a requested item's; for a condition's breach, which no one write can be read from, it names every consequence and rule that wrote its subject, consequences first, each in declared order.\
 Each entity's change over the edit is worked out once per write of it and frozen, and handed as it is to every consequence that hears it; consequences with one trigger share what it hears while nothing has been written since; and what a trigger hears, and the write it follows from, are read in one pass.\
 Measured with a Node timing, the best of three or median of five plans, 2,000 entities of a kind each set in one edit: 300 consequences listening with one trigger add about 1 ms to the 19 ms of planning the edit with none, where they cost about 730 ms; 300 with distinct triggers take about 165 ms, each handed all 2,000 of its changes.\
-The corpus's three cases of a consequence's write breaking a per-entity rule (`e9e0707`, `b3-16` to `b3-18`, merged unedited) pass with the rest of batch 3.
+The corpus's three cases of a consequence's write breaking a per-entity rule (`e9e0707`, `b3-16` to `b3-18`, merged unedited) pass with the rest of batch 3.\
+The cost of this: an expansion before a phase is bounded only by what the edit sets off, and what it writes is held until the final count refuses it.\
+Measured by the builder with a Node timing of one plan each, a hub whose spokes cascade-delete, one phase declared after: 100,000 spokes are refused `too-many-writes` in about 0.46 s, the heap about 138 MB larger by the answer, and 300,000 in about 1.4 s and 481 MB; the independent check of `d234633` measured 0.67 s and 168 MB, and 2.2 s and 590 MB.\
+M5's bound on an edit's undo record will need a limit on the steps a plan takes as well, so such an edit is refused before it costs this; that limit is owed to M5.
 
 **Why.**\
 An edit that changes nothing cannot write too much; and the contract asks a refusal to name the consequence or rule, so a rule that wrote the entity is named as a consequence is.
