@@ -19,6 +19,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./entity-store": {
+      "types": "./dist/entity-store-port.d.ts",
+      "default": "./dist/entity-store-port.js"
     }
   },
   "files": [
@@ -34,6 +38,7 @@
     "@apnex/shape-check": "https://github.com/apnex/shape-check/releases/download/v0.2.0/apnex-shape-check-0.2.0.tgz"
   },
   "devDependencies": {
+    "@apnex/entity-store": "https://github.com/apnex/entity-store/releases/download/v0.2.0/apnex-entity-store-0.2.0.tgz",
     "@types/node": "^24.0.0",
     "typescript": "5.9.3"
   }

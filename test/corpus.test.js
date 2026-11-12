@@ -16,12 +16,14 @@ import fs from "node:fs";
 import path from "node:path";
 import { test } from "node:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { createEntityGraph, createMemoryGraphPort } from "../dist/index.js";
+import { toCanonicalJson } from "@apnex/shape-check";
+import { createEntityGraph } from "../dist/index.js";
+import { STORES, storeFor } from "./support/store-ports.js";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 // every batch directory the corpus holds, none left out (draw's H31-EG-M4)
 // every batch directory the corpus holds but those a later milestone builds for, left to it by name (draw's H31-EG-M5)
-const LATER = ["batch-6"];
+const LATER = [];
 const DIRECTORIES = fs.readdirSync(path.join(root, "corpus")).filter((f) => /^batch-\d+$/.test(f)).sort((a, b) => Number(a.slice(6)) - Number(b.slice(6)));
 const BATCHES = DIRECTORIES.filter((b) => !LATER.includes(b));
 const filesOf = (batch) => fs.readdirSync(path.join(root, "corpus", batch)).filter((f) => f.endsWith(".json")).sort().map((f) => path.join(root, "corpus", batch, f));
@@ -125,7 +127,9 @@ function adapt(variant) {
 /** The declaration a case names: its own, or its world's variant, adapted. */
 const declarationOf = (c) => (c.world === undefined ? c.declare : adapt(WORLDS[c.world][c.variant ?? "base"]));
 
-const sorted = (list) => [...list].map((x) => JSON.stringify(x)).sort();
+// a collection compared without regard to its order, each member by its canonical JSON, so an object's keys in any order are one
+// object, as JSON has them: entity-store keeps a note in canonical form, so a record an undo restores from it comes back key-sorted
+const sorted = (list) => [...list].map((x) => toCanonicalJson(x)).sort();
 // everything the view holds, to show a plan changed none of it (corpus/README.md, *Planning changes no answer*)
 const held = (graph, kinds) => JSON.stringify([graph.position(), ...kinds.map((k) => graph.all(k))]);
 const item = (w) => (w.op === "put" ? { kind: w.kind, id: w.id, record: w.record } : w.op === "del" ? { kind: w.kind, id: w.id, deleted: true } : assert.fail(`no write op ${w.op}`));
@@ -154,18 +158,24 @@ function answer(graph, q) {
 	}
 }
 
-function runAccepted(c, mode) {
+function runAccepted(c, mode, storeName) {
 	const declare = declarationOf(c);
 	const [first, ...rest] = c.steps;
 	assert.ok(first?.start, "the first step is a start");
 	let graph;
-	// batches 5 and 6 run over an in-memory store port, its note bound the case's or the reference store's (R39)
-	const port = c.batch >= 5 ? createMemoryGraphPort({ position: first.start.position, ...(c.port?.noteBound === undefined ? {} : { noteBound: c.port.noteBound }) }) : undefined;
-	if (port !== undefined) {
-		const history = historyOf(c);
-		const made = createEntityGraph(declare, { position: first.start.position, entities: fixed(c, first.start.entities) }, { port, ...(history === undefined ? {} : { history }) });
+	// batches 5 and 6 run over a store holding the start's entities at its position, the graph made over its port, filling its
+	// view from the store (R39), on each of the stores the support module makes
+	const store = c.batch >= 5 ? storeFor(storeName, { position: first.start.position, entities: fixed(c, first.start.entities), noteBound: c.port?.noteBound, kinds: declare.kinds.map((k) => k.kind) }) : undefined;
+	const history = historyOf(c);
+	const overStore = () => {
+		const made = createEntityGraph(declare, undefined, { port: store.port, ...(history === undefined ? {} : { history }) });
 		assert.equal(made.ok, true, `refused: ${JSON.stringify(made.refusal)}`);
-		graph = made.graph;
+		return made.graph;
+	};
+	try {
+	if (store !== undefined) {
+		graph = overStore();
+		assert.equal(graph.position(), first.start.position, "the view filled from the store at its position");
 	} else if (mode === "fill") {
 		const made = createEntityGraph(declare, { position: first.start.position, entities: first.start.entities });
 		assert.equal(made.ok, true, `refused: ${JSON.stringify(made.refusal)}`);
@@ -224,25 +234,22 @@ function runAccepted(c, mode) {
 				assert.equal(s.outcome, "refused");
 				assert.equal(r.ok, false, `${where}: landed: ${JSON.stringify(r.writes)}`);
 				compareRefusal(where, r.refusal, s.refusal);
-				assert.equal(port.position(), s.storePosition, `${where}: the store's position`);
+				assert.equal(store.port.position(), s.storePosition, `${where}: the store's position`);
 				assert.equal(held(graph, kinds), before, `${where}: the view as it was`);
 			}
 		} else if (step.other) {
 			// another writer's change, landed on the port at its next position; the graph does not see it until a sync (R42)
-			const landed = port.change({ writes: fixed(c, step.other.writes).map(item), expectedPosition: port.position() });
+			const other = store.other();
+			const landed = other.change({ writes: fixed(c, step.other.writes).map(item), expectedPosition: other.position() });
 			assert.deepEqual(landed, { ok: true, position: step.other.position }, `step ${i + 1}: the other writer's change`);
 		} else if (step.sync) {
-			// page by page, as the port answers them, up to the step's position
-			for (let since = graph.position(); since < step.sync.position;) {
-				const page = port.changes(since).changes.filter((ch) => ch.position <= step.sync.position);
-				assert.ok(page.length > 0, `step ${i + 1}: the port holds no change after ${since}`);
-				for (const change of page) {
-					const r = graph.applyChange({ position: change.position, items: change.writes });
-					assert.equal(r.ok, true, `step ${i + 1}: the change at ${change.position}: ${JSON.stringify(r.refusal)}`);
-				}
-				since = graph.position();
-			}
-			assert.equal(graph.position(), step.sync.position, `step ${i + 1}: synced to`);
+			// the graph takes in every change after its view's position, up to the step's (R42)
+			assert.deepEqual(graph.sync(step.sync.position), { ok: true, position: step.sync.position }, `step ${i + 1}: synced to`);
+		} else if (step.restart) {
+			// the graph set aside, and a new one made over the same store, filling its view and its history from it (R43)
+			store.reopen();
+			graph = overStore();
+			assert.equal(graph.position(), step.restart.position, `step ${i + 1}: restarted at`);
 		} else if (step.ask) {
 			assert.equal(graph.position(), step.ask.position, `step ${i + 1}: position()`);
 			for (const q of step.ask.questions) {
@@ -253,7 +260,10 @@ function runAccepted(c, mode) {
 				if (got.list) assert.deepEqual(sorted(got.value), sorted(want), where);
 				else assert.deepEqual(got.value, want, where);
 			}
-		} else assert.fail(`step ${i + 1} is neither take, plan, commit, undo, redo, other, sync nor ask`);
+		} else assert.fail(`step ${i + 1} is neither take, plan, commit, undo, redo, other, sync, restart nor ask`);
+	}
+	} finally {
+		store?.close();
 	}
 }
 
@@ -280,13 +290,15 @@ for (const c of CASES) {
 			return;
 		}
 		assert.equal(c.verdict, "accepted");
+		if (c.batch >= 5) return; // run below, once on each store
 		runAccepted(c, "fill");
-		if (c.batch < 5 && c.steps[0].start.position > 0 && c.steps[0].start.entities.length > 0) runAccepted(c, "land");
+		if (c.steps[0].start.position > 0 && c.steps[0].start.entities.length > 0) runAccepted(c, "land");
 	});
+	if (c.batch >= 5) for (const name of STORES) test(`corpus ${c.case} on ${name}`, () => runAccepted(c, "fill", name));
 }
 
-test("the corpus is read whole: batch 1's 38 cases, batch 2's 32, batch 3's 18, batch 4's 7 and batch 5's 14, each named for its file; batch 6 is M6's", () => {
-	assert.deepEqual(BATCHES.map((b) => filesOf(b).length), [38, 32, 18, 7, 14]);
+test("the corpus is read whole: batch 1's 38 cases, batch 2's 32, batch 3's 18, batch 4's 7, batch 5's 14 and batch 6's 8, each named for its file", () => {
+	assert.deepEqual(BATCHES.map((b) => filesOf(b).length), [38, 32, 18, 7, 14, 8]);
 	assert.deepEqual(DIRECTORIES, [...BATCHES, ...LATER], "every batch directory, run here or left to a later milestone by name");
 	for (const f of BATCHES.flatMap(filesOf)) assert.equal(JSON.parse(fs.readFileSync(f, "utf8")).case, path.basename(f, ".json"));
 	const counted = (batch) => CASES.filter((c) => c.batch === batch).flatMap((c) => (c.steps ?? []).filter((st) => st.plan)).map((st) => st.plan.outcome);

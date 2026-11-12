@@ -746,7 +746,9 @@ Keeping the records in the graph - the contract keeps them in the store's notes,
 ## D34 - Proposed reading: the undo record, its encoding in the note, its size and its bound
 
 **Proposed by:** the builder of M5, 2026-11-12, for zorg's review, reading `CONTRACT.md`'s *Undo and redo*; it takes the corpus's readings `R43` (as far as reading records back), `R48` and `R49`.\
-**Affects:** `src/history.ts`, `src/entity-graph.ts`.
+**Affects:** `src/history.ts`, `src/entity-graph.ts`.\
+**Settled by `D43` (2026-11-12):** the store's bound on a note's nesting is checked before landing, where the port states one, as entity-store counts it.\
+**Restated by `D42` (2026-11-12):** the record also names the writer whose history it is, as `by` after `of`, which adds the writer's length and 8 bytes to each size below, 20 under the writer `entity-graph`.
 
 **Reading.**\
 An undo record is the note `{ "entity-graph": { v: 1, act, of, entities } }`: `act` is `edit`, `undo` or `redo`; `of` the positions of the edits an undo or a redo replays, latest first, empty for an edit; and `entities` one `[kind, id, before, after]` for each entity the change writes, its whole record before and after the change, null where it is absent.\
@@ -865,4 +867,92 @@ A commit's net writes are bounded by its plan, a replay's by nothing until now, 
 
 **Alternatives refuted.**\
 Leaving the bound to the store - entity-store refuses a change past 2,000 writes, but the in-memory port and any other port need not, and the graph must not depend on which it is given.
+
+---
+
+## D40 - M6 is built: the store port completed, the first fill, the restart and the entity-store adapter; every row served
+
+**Ruled by:** the build plan, approved by the director as draw's `H31-10` (2026-11-11, draw's `dev/DECISIONS.md`), on the contract co-signed by zorg (`zorg/docs/DECISIONS.md` `D76`); the as-built choices are the builder's of M6, proposed for zorg's review, as `D41` to `D43` are.\
+**Affects:** `src/port.ts`, `src/entity-graph.ts`, `src/history.ts`, `src/entity-store-port.ts`, `src/index.ts`, `package.json`, `export-map.json`, `test/`.
+
+**Ruling.**\
+The store port is completed as the contract states it (`D41`); a graph made over a store fills its view from it, takes in its changes in position order, and after a restart reads its history back from the notes (`D42`); and the `./entity-store` adapter lands, reads and restarts over entity-store (`D43`).\
+`positioned-graph-sync` is served, so every row is served and nothing is deferred.\
+entity-store `0.2.0` is a development dependency only, taken as its release file with its integrity; the adapter imports only its types, and the package installed without development dependencies imports every export, `./entity-store` included.\
+The neutral corpus passes whole, every batch directory run: batches 1 to 4 as before, and batches 5 and 6 each on the in-memory port, on entity-store over memory storage and on entity-store over a change log file - `b6-08` as restated under `H31-15` (`D37`).\
+entity-store's own contract suite runs against the stores the adapter is tested over, memory and file storage alike.\
+A client reaching the store only through entity-api lands no edit from this release, as the build plan proposes: entity-api does not yet carry `change`, the expected position or the note, and carries them later under its own contract.
+
+**Why.**\
+The plan's M6 completes the contract's last row against the reference store, so an application can land, undo and restart over entity-store or a port of its own.
+
+**Alternatives refuted.**\
+Taking entity-store as a dependency - an application supplying its own port would carry a store it never uses.
+
+---
+
+## D41 - Proposed reading: the store port completed, and a change this graph committed taken in once
+
+**Proposed by:** the builder of M6, 2026-11-12, for zorg's review, reading `CONTRACT.md`'s *The store port* and the decision owed at M6, whether a change this component committed is taken in again from the stream; it takes the corpus's readings `R40` to `R42`.\
+**Affects:** `src/port.ts`, `src/entity-graph.ts`.
+
+**Reading.**\
+The port `D33` gave is completed: `changes(since)` answers a page, or `held: false` with no changes where the store no longer holds `since`; and a port may state `noteDepth`, its bound on a note's nesting.\
+A port may also offer `snapshot(kinds)`, every entity of the named kinds the store holds at its latest position, with that position, for the first fill and the refill of `D42`.\
+It is optional because it is not among the capabilities *The store port* names: a port of those alone serves a graph given an opening, and a graph made over it with no opening is refused `invalid-options`, naming `port.snapshot`.\
+Over entity-store it is `find` with `asOf` (`find-by-kind-tags`), a capability `CONTRACT.md`'s *Edges* does not list; *Edges* is left as it is, and whether to list it is put to zorg.\
+`sync(through?)` takes in every change the store holds after the view's position, page by page and in position order, up to `through` or the store's latest, each as `applyChange` takes a change; it answers the position its view then states.\
+A change this graph committed is not taken in again: a commit, an undo or a redo moves the view to the change's position as it lands, and `sync` reads only after the view's position, so the change is never offered to it a second time (`R40`).\
+A commit, an undo or a redo planned from a position the store has left is refused by the port, `store-moved`, the view and the store as they were and nothing planned again (`R41`); the expected position covers every entity, read or written.
+
+**Why.**\
+Landing and taking in are one move for a change the graph makes, so reading the stream from the view's position keeps every answer true at the position it states without a ledger of what was committed.
+
+**Alternatives refuted.**\
+Taking a committed change in from the stream and not at landing - an answer between the landing and the next sync would not reflect the graph's own edit.
+
+---
+
+## D42 - Proposed reading: the first fill from the store, the restart, and a store that no longer holds the view's position
+
+**Proposed by:** the builder of M6, 2026-11-12, for zorg's review, reading `CONTRACT.md`'s *Design owed*, how the view is first filled and what it does when the store no longer holds the position it needs; it takes the corpus's readings `R39` and `R43`.\
+**Affects:** `src/entity-graph.ts`, `src/history.ts`.
+
+**Reading.**\
+A graph made over a port with no opening fills its view from the port's snapshot at the store's latest position (`R39`); one given an opening stands at the port's position (`D33`).\
+It then reads its history back from the notes on the store's changes, from the earliest change the store still holds - found by halving the positions between none and the view's - through the view's position: each edit as if it had just landed, the pin and the bounds applied as they were, each undo undoing the edits it names while they are the latest held, and each redo redoing the edit it names (`R43`).\
+A graph's options name its `writer`, `entity-graph` when not given; each undo record names it, and a graph reads back only the records its writer wrote, so two graphs over one store each undo their own edits; a record naming no writer is read as `entity-graph`'s.\
+Two graphs over one store are given distinct writers; two under one writer each read back the other's edits as their own.\
+Where `sync` finds the store no longer holding the view's position - its history bound has passed it - the view is filled again from the store's snapshot at its latest position, and the history read again from the notes the store still holds; an edit whose change is forgotten, its note with it, can no longer be undone.\
+Over a port with no snapshot, that `sync` is refused `store-failed`, naming the position, and the view stays as it was.
+
+**Why.**\
+A view filled from the store at a position is the fresh reading every answer must equal, and the notes are the only record of the history, so reading them back restores it whole.
+
+**Alternatives refuted.**\
+Filling the view by replaying the store's changes from position 0 - a store keeps its changes only to its history bound, and a snapshot reads what it holds whatever it has forgotten.\
+Refusing to go on where the store no longer holds the view's position - nothing a caller could do would make the store hold it again.
+
+---
+
+## D43 - Proposed reading: the entity-store adapter
+
+**Proposed by:** the builder of M6, 2026-11-12, for zorg's review, on the build plan's module 10 and `D34`'s note on the note's nesting.\
+**Affects:** `src/entity-store-port.ts`, `src/entity-graph.ts`, `package.json`, `export-map.json`.
+
+**Reading.**\
+`createEntityStorePort(store, { writer })`, at the subpath `./entity-store`, takes a store the application has opened, with its kinds, shapes, storage and history bound, and imports only entity-store's types.\
+Its built module imports nothing of entity-store; its declaration file names entity-store's types, which a TypeScript application using the subpath has, since it holds an entity-store store to pass.\
+A graph's net writes become one `change`: a deletion a `delete`, a whole record a `create` where the store holds no entity of that kind and name and an `update` where it does, the entity addressed by its kind and its identity as its name, so an identity must be a name entity-store accepts, `^[a-z0-9][a-z0-9-]{0,62}$`, or the store refuses the change and the graph answers `store-failed`, naming the store's code.\
+The change names the position the edit was planned from as its `expectedPosition`, carries the undo record as its `note`, and is written by the adapter's `writer` under the write identity `<writer>@<expected position>`, unique since every change takes a new position; `position-moved`, and `identity-reused`, which only a change this writer landed at that position can cause, answer `store-moved`.\
+entity-store decides a repeat before the position, so a change identical to the one this writer landed at that position answers that landing, which the view then takes in or refuses as any landing; it arises only for two adapters under one writer, which `D42` rules out.\
+The adapter states entity-store's note bounds, 524,288 bytes and 16 levels, and the graph checks both before landing, a record nesting deeper refused as `note-bound`, keyed `note-depth`, its depth as `measure` (`D34`).\
+`changes` is read a page at a time, each page's items grouped into changes by their position, the note on a change's first item, and a position the store no longer holds answers `held: false`; a snapshot reads every entity of each kind as of the store's latest position, page by page.\
+entity-store keeps a note in canonical form, its object keys sorted, so a record an undo restores from a note comes back with its keys in that order: the same plain JSON.
+
+**Why.**\
+The adapter maps the graph's writes onto entity-store's capabilities one for one, so the store's own guarantees - whole changes, the expected position, the note kept with its change - are the graph's.
+
+**Alternatives refuted.**\
+Asking the graph to say whether each write creates or updates - the store is the authority on what it holds, read in the same synchronous call that lands the change.
 

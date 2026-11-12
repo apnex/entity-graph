@@ -3,13 +3,16 @@
   "paths": {
     ".": {
       "exports": {
-        "createEntityGraph": { "part": "entity-graph", "serves": ["dated-graph-view", "graph-declaration", "plan-graph-change", "reversible-history"] },
-        "createMemoryGraphPort": { "part": "entity-graph", "serves": ["reversible-history"] },
+        "createEntityGraph": { "part": "entity-graph", "serves": ["dated-graph-view", "graph-declaration", "plan-graph-change", "reversible-history", "positioned-graph-sync"] },
+        "createMemoryGraphPort": { "part": "entity-graph", "serves": ["reversible-history", "positioned-graph-sync"] },
         "GRAPH_LIMITS": { "part": "entity-graph", "serves": ["dated-graph-view"] }
+      }
+    },
+    "./entity-store": {
+      "exports": {
+        "createEntityStorePort": { "part": "entity-graph", "serves": ["positioned-graph-sync"] }
       }
     }
   },
-  "deferred": {
-    "positioned-graph-sync": "D32"
-  }
+  "deferred": {}
 }

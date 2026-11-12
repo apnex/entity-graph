@@ -6,7 +6,9 @@
 // M3's: a phase re-entered, the conflict let through, a held write not judged, a condition's worsening let through.
 // M4's: a resolver called against the edit as it was found, its writes given the wrong index, the context not handed to a
 // resolver, a consequence or a condition. M5's: a consequence run on undo, a reversal recorded after its write, a pinned edit
-// evicted below the hard limit, the note's bound left unchecked. Each mutant must land, or its verdict would measure nothing.
+// evicted below the hard limit, the note's bound left unchecked. M6's: a stale commit let through, a committed change taken in
+// twice, a restart losing the history, the note's nesting left unchecked. Each mutant must land, or its verdict would measure
+// nothing.
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
@@ -132,6 +134,33 @@ const noteBoundChecked = (createEntityGraph, mod) => {
 	const r = g.commit({ items: [{ op: "create", kind: "item", id: "a", record: { text: "x".repeat(200) } }] });
 	return r.ok === false && r.refusal.code === "note-bound" ? null : { what: "the note's bound was not checked before the store", got: r };
 };
+// M6's scenarios: a commit planned before another writer landed is refused; a change this graph committed is not taken in again;
+// a restart reads the history back; an undo record nesting past the store's bound is refused by the graph, before the store sees it
+const staleRefused = (createEntityGraph, mod) => {
+	const port = mod.createMemoryGraphPort();
+	const g = createEntityGraph({ kinds: [{ kind: "item" }] }, undefined, { port }).graph;
+	port.change({ writes: [{ kind: "item", id: "theirs", record: {} }], expectedPosition: 0 });
+	const r = g.commit({ items: [{ op: "create", kind: "item", id: "mine", record: {} }] });
+	return r.ok === false && r.refusal.code === "store-moved" && port.position() === 1 ? null : { what: "a stale commit was let through", got: r };
+};
+const takenInOnce = (createEntityGraph, mod) => {
+	const port = mod.createMemoryGraphPort();
+	const g = createEntityGraph({ kinds: [{ kind: "item" }] }, undefined, { port }).graph;
+	g.commit({ items: [{ op: "create", kind: "item", id: "a", record: {} }] });
+	const r = g.sync();
+	return r.ok && r.position === 1 ? null : { what: "a change this graph committed was taken in again", got: r };
+};
+const historyRestarts = (createEntityGraph, mod) => {
+	const port = mod.createMemoryGraphPort();
+	createEntityGraph({ kinds: [{ kind: "item" }] }, undefined, { port }).graph.commit({ items: [{ op: "create", kind: "item", id: "a", record: {} }] });
+	const r = createEntityGraph({ kinds: [{ kind: "item" }] }, undefined, { port }).graph.undo();
+	return r.ok && port.position() === 2 ? null : { what: "a restart lost the history", got: r };
+};
+const nestingChecked = (createEntityGraph, mod) => {
+	const g = createEntityGraph({ kinds: [{ kind: "item" }] }, undefined, { port: mod.createMemoryGraphPort({ noteDepth: 6 }) }).graph;
+	const r = g.commit({ items: [{ op: "create", kind: "item", id: "a", record: { b: { c: { d: 1 } } } }] });
+	return r.ok === false && r.refusal.code === "note-bound" && r.refusal.details.ruleKey === "note-depth" ? null : { what: "the note's nesting was not checked before the store", got: r };
+};
 const MUTANTS = [
 	{ name: "a stale reverse entry", file: "references.js", needle: "this.drop(id); // the references it held before this change" },
 	{ name: "a missed delete", file: "references.js", needle: "this.drop(id); // a deleted entity refers to nothing" },
@@ -152,6 +181,10 @@ const MUTANTS = [
 	{ name: "a reversal recorded after its write", file: "entity-graph.js", needle: "[w.kind, w.id, view.get(w.id)?.record ?? null, w.op === \"put\" ? w.record : null]", replacement: "[w.kind, w.id, w.op === \"put\" ? w.record : null, w.op === \"put\" ? w.record : null]", check: undoRestoresBefore },
 	{ name: "a pinned edit evicted below the hard limit", file: "history.js", needle: "if (oldest.pinned && held <= hardCount && size <= hardBytes)", replacement: "if (false)", check: pinHolds },
 	{ name: "the note's bound left unchecked", file: "entity-graph.js", needle: "if (bytes > port.noteBound)", replacement: "if (false)", check: noteBoundChecked },
+	{ name: "a stale commit let through", file: "entity-graph.js", needle: "expectedPosition: view.position(), note", replacement: "expectedPosition: port.position(), note", check: staleRefused },
+	{ name: "a committed change taken in twice", file: "entity-graph.js", needle: "port.changes(view.position())", replacement: "port.changes(view.position() - 1)", check: takenInOnce },
+	{ name: "a restart losing the history", file: "entity-graph.js", needle: "if (port !== undefined)\n        rebuildHistory(port);", replacement: "", check: historyRestarts },
+	{ name: "the note's nesting left unchecked", file: "entity-graph.js", needle: "if (port.noteDepth !== undefined && depth > port.noteDepth)", replacement: "if (false)", check: nestingChecked },
 	{ name: "a condition's worsening let through: only a new breach refuses", file: "reference-rules.js", needle: "if (c.measure <= (conditionsBefore.get(key)?.measure ?? 0))", replacement: "if (conditionsBefore.has(key))", check: conditionWorseningRefused },
 ];
 

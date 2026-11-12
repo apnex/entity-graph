@@ -145,9 +145,9 @@ test("a commit, an undo or a redo refused, a store port or a pin throwing or ans
 	await answered(() => graph.undo(rejected()), "undo-target-unknown", "an undo's target");
 	await answered(() => graph.undo(1, { mode: { held: rejected() } }), "invalid-edit", "an undo's options");
 	await answered(() => graph.redo({ context: { f() {}, held: rejected() } }), "invalid-context", "a redo's context");
-	const throwing = { noteBound: 1000, position: () => 0, change: () => { throw { held: rejected() }; }, changes: () => ({ position: 0, changes: [] }) };
+	const throwing = { noteBound: 1000, position: () => 0, change: () => { throw { held: rejected() }; }, changes: () => ({ position: 0, changes: [] }), snapshot: () => ({ position: 0, entities: [] }) };
 	await answered(() => open(throwing).commit({ items: [{ op: "create", kind: "note", id: "a", record: {} }] }), "store-failed", "a port that throws");
-	const promising = { noteBound: 1000, position: () => 0, change: () => rejected(), changes: () => ({ position: 0, changes: [] }) };
+	const promising = { noteBound: 1000, position: () => 0, change: () => rejected(), changes: () => ({ position: 0, changes: [] }), snapshot: () => ({ position: 0, entities: [] }) };
 	await answered(() => open(promising).commit({ items: [{ op: "create", kind: "note", id: "a", record: {} }] }), "store-failed", "a port answering a promise");
 	const pinning = open(createMemoryGraphPort(), { pin: () => { throw { held: rejected() }; } });
 	const { answer, seen } = await settled(() => pinning.commit({ items: [{ op: "create", kind: "note", id: "a", record: {} }] }));
@@ -156,4 +156,21 @@ test("a commit, an undo or a redo refused, a store port or a pin throwing or ans
 	const second = await settled(() => open(createMemoryGraphPort(), { pin: () => rejected() }).commit({ items: [{ op: "create", kind: "note", id: "a", record: {} }] }));
 	assert.deepEqual([second.answer.ok, second.seen.length], [true, 0], "a pin answering a promise pins nothing");
 	await answered(() => createEntityGraph({ kinds: [{ kind: "note" }] }, undefined, { port: createMemoryGraphPort(), history: { count: rejected() } }), "invalid-options", "history bounds");
+});
+
+// --- M6's paths (docs/DECISIONS.md D41, D42) ---
+
+test("a sync refused, or a store port's snapshot or changes throwing or answering a promise, observes it", async () => {
+	const { createMemoryGraphPort } = await import("../dist/index.js");
+	const declaration = { kinds: [{ kind: "note" }] };
+	const graph = createEntityGraph(declaration, undefined, { port: createMemoryGraphPort() }).graph;
+	await answered(() => graph.sync(rejected()), "invalid-query", "a sync's limit");
+	const port = (members) => ({ noteBound: 1000, position: () => 0, change: () => ({ ok: true, position: 1 }), changes: () => ({ position: 0, changes: [] }), snapshot: () => ({ position: 0, entities: [] }), ...members });
+	await answered(() => createEntityGraph(declaration, undefined, { port: port({ snapshot: () => { throw { held: rejected() }; } }) }), "store-failed", "a snapshot that throws");
+	const later = createEntityGraph(declaration, undefined, { port: port({}) }).graph;
+	const promising = createEntityGraph(declaration, undefined, { port: port({ changes: () => rejected() }) });
+	assert.equal(promising.ok, true);
+	await answered(() => promising.graph.sync(), "store-failed", "changes answering a promise");
+	await answered(() => createEntityGraph(declaration, undefined, { port: port({ snapshot: () => rejected() }) }), "store-failed", "a snapshot answering a promise");
+	assert.equal(later.position(), 0);
 });

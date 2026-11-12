@@ -41,7 +41,8 @@ test("an edit is committed through the port as one change at the position it was
 	const landed = port.changes(4).changes;
 	assert.equal(landed.length, 1);
 	assert.deepEqual(landed[0].writes, [{ kind: "shelf", id: "s", deleted: true }, { kind: "book", id: "b", deleted: true }]);
-	assert.deepEqual(landed[0].note, { "entity-graph": { v: 1, act: "edit", of: [], entities: [["shelf", "s", {}, null], ["book", "b", { shelf: "s" }, null]] } }, "each entity as it was before and as the edit leaves it");
+	// RESTATED at M6 (docs/DECISIONS.md D42): the record names the writer whose history it is
+	assert.deepEqual(landed[0].note, { "entity-graph": { v: 1, act: "edit", of: [], by: "entity-graph", entities: [["shelf", "s", {}, null], ["book", "b", { shelf: "s" }, null]] } }, "each entity as it was before and as the edit leaves it");
 	const nothing = ok(graph.commit({ items: [create("shelf", "s"), remove("shelf", "s")] }));
 	// RESTATED (docs/DECISIONS.md D38): a commit that lands nothing answers so, with no position to file it under
 	assert.deepEqual([nothing.landed, nothing.writes, port.position(), graph.history().edits.length], [false, [], 5, 1], "a plan that changes nothing lands nothing, and holds no place in the history");
