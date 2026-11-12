@@ -1,0 +1,74 @@
+{
+  "case": "b2-31-planning-changes-no-answer",
+  "batch": 2,
+  "summary": "The view answers identically before and after an accepted plan and a refused one, at the same position, and only the plan's writes taken in from the store move its answers.",
+  "covers": ["plan-graph-change", "dated-graph-view", "positioned-graph-sync"],
+  "readings": ["R1", "R2", "R4", "R7", "R14", "R15", "R16", "R17", "R18", "R19", "R20", "R21", "R23", "R24"],
+  "declare": {
+    "kinds": [
+      { "kind": "person", "references": [] },
+      { "kind": "team", "references": [
+        { "field": "members", "targets": ["person"], "holds": "many", "onTargetDelete": "unlink", "exclusivity": "steal", "min": 2, "onBelowMin": "cascade-delete" }
+      ] },
+      { "kind": "committee", "references": [
+        { "field": "members", "targets": ["person"], "holds": "many", "onTargetDelete": "unlink", "exclusivity": "steal", "min": 2, "onBelowMin": "refuse" }
+      ] },
+      { "kind": "task", "references": [
+        { "field": "waitsOn", "targets": ["task"], "holds": "many", "onTargetDelete": "unlink" },
+        { "field": "assignee", "targets": ["team"], "holds": "one", "onTargetDelete": "unlink", "onUnreferenced": "keep" },
+        { "field": "owner", "targets": ["person"], "holds": "one", "onTargetDelete": "unlink", "exclusivity": "steal" }
+      ] }
+    ]
+  },
+  "verdict": "accepted",
+  "steps": [
+    { "start": { "position": 3, "entities": [
+      { "kind": "person", "id": "p1", "record": { "name": "Ada" } },
+      { "kind": "person", "id": "p2", "record": { "name": "Lin" } },
+      { "kind": "person", "id": "p3", "record": { "name": "Kim" } },
+      { "kind": "person", "id": "p4", "record": { "name": "Max" } },
+      { "kind": "team", "id": "tm1", "record": { "name": "Core", "members": ["p1", "p2"] } },
+      { "kind": "team", "id": "tm2", "record": { "name": "Docs", "members": ["p3", "p4"] } },
+      { "kind": "task", "id": "t1", "record": { "title": "Build", "waitsOn": [], "assignee": "tm1", "owner": "p1" } }
+    ] } },
+    { "ask": { "position": 3, "questions": [
+      { "q": "referrersOf", "id": "p1", "answer": [ { "kind": "team", "id": "tm1", "field": "members" }, { "kind": "task", "id": "t1", "field": "owner" } ] },
+      { "q": "referrersOf", "id": "tm1", "answer": [ { "kind": "task", "id": "t1", "field": "assignee" } ] },
+      { "q": "targetsOf", "id": "tm2", "answer": [ { "field": "members", "id": "p3" }, { "field": "members", "id": "p4" } ] },
+      { "q": "all", "kind": "team", "answer": ["tm1", "tm2"] }
+    ] } },
+    { "plan": { "position": 3, "edit": [
+      { "op": "change", "kind": "team", "id": "tm2", "record": { "name": "Docs", "members": ["p3", "p4", "p1"] } }
+    ], "outcome": "accepted", "writes": [
+      { "op": "put", "kind": "team", "id": "tm2", "record": { "name": "Docs", "members": ["p3", "p4", "p1"] } },
+      { "op": "del", "kind": "team", "id": "tm1" },
+      { "op": "put", "kind": "task", "id": "t1", "record": { "title": "Build", "waitsOn": [], "assignee": null, "owner": "p1" } }
+    ] } },
+    { "ask": { "position": 3, "questions": [
+      { "q": "referrersOf", "id": "p1", "answer": [ { "kind": "team", "id": "tm1", "field": "members" }, { "kind": "task", "id": "t1", "field": "owner" } ] },
+      { "q": "referrersOf", "id": "tm1", "answer": [ { "kind": "task", "id": "t1", "field": "assignee" } ] },
+      { "q": "targetsOf", "id": "tm2", "answer": [ { "field": "members", "id": "p3" }, { "field": "members", "id": "p4" } ] },
+      { "q": "all", "kind": "team", "answer": ["tm1", "tm2"] }
+    ] } },
+    { "plan": { "position": 3, "edit": [
+      { "op": "create", "kind": "task", "id": "t2", "record": { "title": "Test", "waitsOn": ["t1"], "assignee": "tm1", "owner": "p9" } }
+    ], "outcome": "refused", "refusal": { "part": "entity-graph", "code": "reference-rule", "ruleKey": "task.owner.targets", "subject": "t2", "measure": 1, "opIndex": 0 } } },
+    { "ask": { "position": 3, "questions": [
+      { "q": "referrersOf", "id": "p1", "answer": [ { "kind": "team", "id": "tm1", "field": "members" }, { "kind": "task", "id": "t1", "field": "owner" } ] },
+      { "q": "referrersOf", "id": "t1", "answer": [] },
+      { "q": "all", "kind": "task", "answer": ["t1"] }
+    ] } },
+    { "take": { "position": 4, "writes": [
+      { "op": "put", "kind": "team", "id": "tm2", "record": { "name": "Docs", "members": ["p3", "p4", "p1"] } },
+      { "op": "del", "kind": "team", "id": "tm1" },
+      { "op": "put", "kind": "task", "id": "t1", "record": { "title": "Build", "waitsOn": [], "assignee": null, "owner": "p1" } }
+    ] } },
+    { "ask": { "position": 4, "questions": [
+      { "q": "referrersOf", "id": "p1", "answer": [ { "kind": "team", "id": "tm2", "field": "members" }, { "kind": "task", "id": "t1", "field": "owner" } ] },
+      { "q": "referrersOf", "id": "tm1", "answer": [] },
+      { "q": "targetsOf", "id": "tm2", "answer": [ { "field": "members", "id": "p3" }, { "field": "members", "id": "p4" }, { "field": "members", "id": "p1" } ] },
+      { "q": "all", "kind": "team", "answer": ["tm2"] },
+      { "q": "get", "kind": "task", "id": "t1", "answer": { "title": "Build", "waitsOn": [], "assignee": null, "owner": "p1" } }
+    ] } }
+  ]
+}

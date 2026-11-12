@@ -1,0 +1,49 @@
+{
+  "case": "b2-05-unlink-list-and-one-target",
+  "batch": 2,
+  "summary": "Removing a target unlinks it from every list holding it, and removing the only target of a one-target reference leaves that reference null with its referrer kept.",
+  "covers": ["plan-graph-change", "Reference rules"],
+  "readings": ["R1", "R2", "R14", "R15", "R16", "R17", "R23"],
+  "declare": {
+    "kinds": [
+      { "kind": "shelf", "references": [
+        { "field": "featured", "targets": ["book"], "holds": "one", "onTargetDelete": "unlink" }
+      ] },
+      { "kind": "book", "references": [
+        { "field": "shelf", "targets": ["shelf"], "holds": "one", "onTargetDelete": "refuse" },
+        { "field": "tags", "targets": ["tag"], "holds": "many", "onTargetDelete": "unlink", "onUnreferenced": "delete" }
+      ] },
+      { "kind": "tag", "references": [] }
+    ]
+  },
+  "verdict": "accepted",
+  "steps": [
+    { "start": { "position": 0, "entities": [
+      { "kind": "shelf", "id": "s1", "record": { "title": "Fiction", "featured": "b1" } },
+      { "kind": "shelf", "id": "s2", "record": { "title": "Classics", "featured": "b2" } },
+      { "kind": "book", "id": "b1", "record": { "title": "Dune", "shelf": "s1", "tags": ["g1", "g2"] } },
+      { "kind": "book", "id": "b2", "record": { "title": "Emma", "shelf": "s1", "tags": ["g1"] } },
+      { "kind": "tag", "id": "g1", "record": { "title": "old" } },
+      { "kind": "tag", "id": "g2", "record": { "title": "new" } },
+      { "kind": "tag", "id": "g3", "record": { "title": "unused" } }
+    ] } },
+    { "plan": { "position": 0, "edit": [
+      { "op": "remove", "kind": "tag", "id": "g1" }
+    ], "outcome": "accepted", "writes": [
+      { "op": "del", "kind": "tag", "id": "g1" },
+      { "op": "put", "kind": "book", "id": "b1", "record": { "title": "Dune", "shelf": "s1", "tags": ["g2"] } },
+      { "op": "put", "kind": "book", "id": "b2", "record": { "title": "Emma", "shelf": "s1", "tags": [] } }
+    ] } },
+    { "plan": { "position": 0, "edit": [
+      { "op": "remove", "kind": "book", "id": "b2" }
+    ], "outcome": "accepted", "writes": [
+      { "op": "del", "kind": "book", "id": "b2" },
+      { "op": "put", "kind": "shelf", "id": "s2", "record": { "title": "Classics", "featured": null } }
+    ] } },
+    { "ask": { "position": 0, "questions": [
+      { "q": "referrersOf", "id": "b2", "answer": [ { "kind": "shelf", "id": "s2", "field": "featured" } ] },
+      { "q": "referrersOf", "id": "g1", "answer": [ { "kind": "book", "id": "b1", "field": "tags" }, { "kind": "book", "id": "b2", "field": "tags" } ] },
+      { "q": "get", "kind": "tag", "id": "g1", "answer": { "title": "old" } }
+    ] } }
+  ]
+}

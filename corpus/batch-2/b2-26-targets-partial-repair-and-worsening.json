@@ -1,0 +1,49 @@
+{
+  "case": "b2-26-targets-partial-repair-and-worsening",
+  "batch": 2,
+  "summary": "A book already holding two absent tags may drop one, keep both while gaining a present one, or have one created, but may not gain a third absent tag.",
+  "covers": ["plan-graph-change", "Reference rules", "Judging and refusals"],
+  "readings": ["R1", "R2", "R3", "R4", "R14", "R15", "R17", "R18", "R19", "R20", "R21", "R23", "R24"],
+  "declare": {
+    "kinds": [
+      { "kind": "shelf", "references": [
+        { "field": "featured", "targets": ["book"], "holds": "one", "onTargetDelete": "unlink" }
+      ] },
+      { "kind": "book", "references": [
+        { "field": "shelf", "targets": ["shelf"], "holds": "one", "onTargetDelete": "refuse" },
+        { "field": "tags", "targets": ["tag"], "holds": "many", "onTargetDelete": "unlink", "onUnreferenced": "delete" }
+      ] },
+      { "kind": "tag", "references": [] }
+    ]
+  },
+  "verdict": "accepted",
+  "steps": [
+    { "start": { "position": 0, "entities": [
+      { "kind": "shelf", "id": "s1", "record": { "title": "Fiction", "featured": null } },
+      { "kind": "book", "id": "b5", "record": { "title": "Notes", "shelf": "s1", "tags": ["g7", "g8"] } },
+      { "kind": "tag", "id": "g1", "record": { "title": "scifi" } }
+    ] } },
+    { "plan": { "position": 0, "edit": [
+      { "op": "change", "kind": "book", "id": "b5", "record": { "title": "Notes", "shelf": "s1", "tags": ["g8"] } }
+    ], "outcome": "accepted", "writes": [
+      { "op": "put", "kind": "book", "id": "b5", "record": { "title": "Notes", "shelf": "s1", "tags": ["g8"] } }
+    ] } },
+    { "plan": { "position": 0, "edit": [
+      { "op": "change", "kind": "book", "id": "b5", "record": { "title": "Notes", "shelf": "s1", "tags": ["g7", "g8", "g9"] } }
+    ], "outcome": "refused", "refusal": { "part": "entity-graph", "code": "reference-rule", "ruleKey": "book.tags.targets", "subject": "b5", "measure": 3, "opIndex": 0 } } },
+    { "plan": { "position": 0, "edit": [
+      { "op": "change", "kind": "book", "id": "b5", "record": { "title": "Notes", "shelf": "s1", "tags": ["g1", "g7", "g8"] } }
+    ], "outcome": "accepted", "writes": [
+      { "op": "put", "kind": "book", "id": "b5", "record": { "title": "Notes", "shelf": "s1", "tags": ["g1", "g7", "g8"] } }
+    ] } },
+    { "plan": { "position": 0, "edit": [
+      { "op": "create", "kind": "tag", "id": "g7", "record": { "title": "found" } }
+    ], "outcome": "accepted", "writes": [
+      { "op": "put", "kind": "tag", "id": "g7", "record": { "title": "found" } }
+    ] } },
+    { "ask": { "position": 0, "questions": [
+      { "q": "targetsOf", "id": "b5", "field": "tags", "answer": ["g7", "g8"] },
+      { "q": "get", "kind": "tag", "id": "g7", "answer": null }
+    ] } }
+  ]
+}

@@ -1,0 +1,43 @@
+{
+  "case": "b2-32-unlink-in-reference-cycle",
+  "batch": 2,
+  "summary": "Removing a task on a cycle of waiting tasks unlinks it from every task waiting on it and ends, leaving the rest of the cycle as it was.",
+  "covers": ["plan-graph-change", "Reference rules", "Consequences and the stopping rule"],
+  "readings": ["R1", "R2", "R5", "R5a", "R14", "R15", "R17", "R23"],
+  "declare": {
+    "kinds": [
+      { "kind": "person", "references": [] },
+      { "kind": "team", "references": [
+        { "field": "members", "targets": ["person"], "holds": "many", "onTargetDelete": "unlink", "exclusivity": "steal", "min": 2, "onBelowMin": "cascade-delete" }
+      ] },
+      { "kind": "committee", "references": [
+        { "field": "members", "targets": ["person"], "holds": "many", "onTargetDelete": "unlink", "exclusivity": "steal", "min": 2, "onBelowMin": "refuse" }
+      ] },
+      { "kind": "task", "references": [
+        { "field": "waitsOn", "targets": ["task"], "holds": "many", "onTargetDelete": "unlink" },
+        { "field": "assignee", "targets": ["team"], "holds": "one", "onTargetDelete": "unlink", "onUnreferenced": "keep" },
+        { "field": "owner", "targets": ["person"], "holds": "one", "onTargetDelete": "unlink", "exclusivity": "steal" }
+      ] }
+    ]
+  },
+  "verdict": "accepted",
+  "steps": [
+    { "start": { "position": 0, "entities": [
+      { "kind": "task", "id": "ta", "record": { "title": "Draft", "waitsOn": ["tb"], "assignee": null, "owner": null } },
+      { "kind": "task", "id": "tb", "record": { "title": "Review", "waitsOn": ["tc"], "assignee": null, "owner": null } },
+      { "kind": "task", "id": "tc", "record": { "title": "Approve", "waitsOn": ["ta"], "assignee": null, "owner": null } },
+      { "kind": "task", "id": "td", "record": { "title": "Print", "waitsOn": ["tb", "tc"], "assignee": null, "owner": null } }
+    ] } },
+    { "plan": { "position": 0, "edit": [
+      { "op": "remove", "kind": "task", "id": "tb" }
+    ], "outcome": "accepted", "writes": [
+      { "op": "del", "kind": "task", "id": "tb" },
+      { "op": "put", "kind": "task", "id": "ta", "record": { "title": "Draft", "waitsOn": [], "assignee": null, "owner": null } },
+      { "op": "put", "kind": "task", "id": "td", "record": { "title": "Print", "waitsOn": ["tc"], "assignee": null, "owner": null } }
+    ] } },
+    { "ask": { "position": 0, "questions": [
+      { "q": "referrersOf", "id": "tb", "answer": [ { "kind": "task", "id": "ta", "field": "waitsOn" }, { "kind": "task", "id": "td", "field": "waitsOn" } ] },
+      { "q": "reachable", "from": "td", "answer": ["ta", "tb", "tc"] }
+    ] } }
+  ]
+}

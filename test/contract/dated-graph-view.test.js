@@ -104,7 +104,7 @@ test("a change's items are checked: references held as declared, an identity in 
 	assert.equal(code([put("book", "b1", { tags: "t1" })]), "invalid-reference", "a many-reference holding a string");
 	assert.equal(code([put("book", "b1", { tags: ["t1", "t1"] })]), "invalid-reference", "a many-reference holding one target twice");
 	assert.equal(code([put("shelf", "t1")]), "identity-taken", "t1 is a tag");
-	assert.equal(code([del("book", "b9")]), "not-found");
+	assert.equal(code([del("book", "b9")]), "entity-absent", "RESTATED at M2 (D18): the code a plan uses too");
 	assert.equal(code([put("tag", "t2"), del("tag", "t2")]), "duplicate-item");
 	assert.equal(code([]), "empty-change");
 	assert.equal(code([put("book", "b1", [1, 2])]), "not-plain", "a record that is no object");

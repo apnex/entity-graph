@@ -1,0 +1,56 @@
+{
+  "case": "b2-12-unlink-into-min-refuse",
+  "batch": 2,
+  "summary": "Removing a person unlinks it from its committee, refused where that leaves the committee below its minimum, accepted where the committee keeps its minimum or the same edit gives it another member.",
+  "covers": ["plan-graph-change", "Reference rules", "Judging and refusals"],
+  "readings": ["R1", "R2", "R14", "R15", "R17", "R18", "R19", "R21", "R23", "R24"],
+  "declare": {
+    "kinds": [
+      { "kind": "person", "references": [] },
+      { "kind": "team", "references": [
+        { "field": "members", "targets": ["person"], "holds": "many", "onTargetDelete": "unlink", "exclusivity": "steal", "min": 2, "onBelowMin": "cascade-delete" }
+      ] },
+      { "kind": "committee", "references": [
+        { "field": "members", "targets": ["person"], "holds": "many", "onTargetDelete": "unlink", "exclusivity": "steal", "min": 2, "onBelowMin": "refuse" }
+      ] },
+      { "kind": "task", "references": [
+        { "field": "waitsOn", "targets": ["task"], "holds": "many", "onTargetDelete": "unlink" },
+        { "field": "assignee", "targets": ["team"], "holds": "one", "onTargetDelete": "unlink", "onUnreferenced": "keep" },
+        { "field": "owner", "targets": ["person"], "holds": "one", "onTargetDelete": "unlink", "exclusivity": "steal" }
+      ] }
+    ]
+  },
+  "verdict": "accepted",
+  "steps": [
+    { "start": { "position": 0, "entities": [
+      { "kind": "person", "id": "p1", "record": { "name": "Ada" } },
+      { "kind": "person", "id": "p2", "record": { "name": "Lin" } },
+      { "kind": "person", "id": "p3", "record": { "name": "Kim" } },
+      { "kind": "person", "id": "p4", "record": { "name": "Max" } },
+      { "kind": "person", "id": "p5", "record": { "name": "Sol" } },
+      { "kind": "committee", "id": "k1", "record": { "name": "Audit", "members": ["p1", "p2"] } },
+      { "kind": "committee", "id": "k2", "record": { "name": "Budget", "members": ["p3", "p4", "p5"] } }
+    ] } },
+    { "plan": { "position": 0, "edit": [
+      { "op": "remove", "kind": "person", "id": "p1" }
+    ], "outcome": "refused", "refusal": { "part": "entity-graph", "code": "reference-rule", "ruleKey": "committee.members.min", "subject": "k1", "measure": 1, "opIndex": 0 } } },
+    { "plan": { "position": 0, "edit": [
+      { "op": "remove", "kind": "person", "id": "p3" }
+    ], "outcome": "accepted", "writes": [
+      { "op": "del", "kind": "person", "id": "p3" },
+      { "op": "put", "kind": "committee", "id": "k2", "record": { "name": "Budget", "members": ["p4", "p5"] } }
+    ] } },
+    { "plan": { "position": 0, "edit": [
+      { "op": "remove", "kind": "person", "id": "p1" },
+      { "op": "change", "kind": "committee", "id": "k1", "record": { "name": "Audit", "members": ["p2", "p3"] } }
+    ], "outcome": "accepted", "writes": [
+      { "op": "del", "kind": "person", "id": "p1" },
+      { "op": "put", "kind": "committee", "id": "k1", "record": { "name": "Audit", "members": ["p2", "p3"] } },
+      { "op": "put", "kind": "committee", "id": "k2", "record": { "name": "Budget", "members": ["p4", "p5"] } }
+    ] } },
+    { "ask": { "position": 0, "questions": [
+      { "q": "get", "kind": "person", "id": "p1", "answer": { "name": "Ada" } },
+      { "q": "referrersOf", "id": "p3", "answer": [ { "kind": "committee", "id": "k2", "field": "members" } ] }
+    ] } }
+  ]
+}

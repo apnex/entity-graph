@@ -12,8 +12,9 @@ A case the implementer believes wrong goes back to its author, and any change to
 | Batch | Directory | Covers |
 |---|---|---|
 | 1 | `batch-1/` | Milestone M1: declaring kinds and their reference fields, refusals of a bad declaration, entities held by kind and id at a known position, changes taken in, and the answers `targetsOf`, `referrersOf`, `ownerOf` and `reachable`, each dated to a position |
+| 2 | `batch-2/` | Milestone M2: planning an edit with every declared reference rule, to a fixed point, judged on the state it would leave, refused with the facts the contract names, and changing no answer |
 
-Planning, reference rules applied by planning, consequences, phases, resolvers, context, undo and the store port belong to later batches.
+Application consequences, phases, conditions over the whole set, shapes, resolvers, context, undo and the store port belong to later batches.
 
 ---
 
@@ -126,6 +127,79 @@ The labels used in batch 1 are `target-kind-undeclared`, `no-target-kind`, `dupl
 
 ---
 
+## Planning steps (batch 2)
+
+Batch 2 keeps every form above and adds one step, `plan`, which asks the graph to plan an edit against the view as it stands.\
+A plan lands nothing, so a `take` that follows a plan is a change from the store, not the plan landing.
+
+```json
+{ "plan": { "position": 4, "edit": [ <item>, ... ], "outcome": "accepted", "writes": [ <write>, ... ] } }
+```
+
+```json
+{ "plan": { "position": 4, "edit": [ <item>, ... ], "outcome": "refused", "refusal": { "part": "entity-graph", "code": "reference-rule", "ruleKey": "book.shelf.onTargetDelete", "subject": "b1", "measure": 1, "opIndex": 0 } } }
+```
+
+- `position` is the position the plan must state it was planned from, which is the view's position.
+- `edit` is the list of requested items, in the order asked.
+- `outcome` is `"accepted"` or `"refused"`; an accepted plan carries `writes` and no `refusal`, a refused one carries `refusal` and no `writes`.
+
+### Items
+
+An item is one of:
+
+- `{ "op": "create", "kind": <kind>, "id": <id>, "record": <record> }`: the entity is absent at that point in the edit and exists after it with this record.
+- `{ "op": "change", "kind": <kind>, "id": <id>, "record": <record> }`: the entity is present at that point in the edit and holds this record after it.
+- `{ "op": "remove", "kind": <kind>, "id": <id> }`: the entity is present at that point in the edit and is absent after it.
+
+A `change` item states the entity's whole record.\
+No case leaves out of a `change` a field the entity held, so a harness may map `change` onto a write that replaces a record or onto one that sets the fields named, and get the same record.\
+One case names one operation the contract does not, to be refused.
+
+### An accepted plan
+
+`writes` are the plan's net writes: one write for every entity whose state after the edit differs from its state before, in the form of a `take` step's writes.\
+A `put` carries the entity's whole record after the edit, whether the edit created or changed it; a `del` names an entity present before the edit and absent after it.\
+An entity the edit created and removed again, or left with the record it had, has no write.\
+`writes` is compared without regard to order, and every entity it does not name is unchanged.\
+The resulting entities are the view's entities with `writes` applied, so a harness comparing equivalently compares those.\
+No case asserts the order of a plan's steps, its reversal, or the steps themselves (`R15`).
+
+### A refused plan
+
+`refusal` holds the facts of the `GraphRefusal` the contract names: `part`, `code`, and from `details` the `ruleKey`, `subject`, `measure` and `opIndex`.\
+`what`, `why`, `fix` and `details.sentence` are not asserted, since no batch 2 case declares an application condition whose sentence could be carried.\
+`code` is a label of this corpus, mapped by a harness to the implementation's code, one code per label, as a declaration's `reason` is.\
+`ruleKey`, `subject`, `measure` and `opIndex` are compared exactly, under the readings `R18` to `R22`.\
+Each refused plan breaks exactly one rule once, or holds exactly one fault, so it does not matter which of several breaches an implementation would report.
+
+The codes used in batch 2 are:
+
+| `code` | Refused for | `ruleKey` |
+|---|---|---|
+| `reference-rule` | a declared reference rule the edit would break, judged on the state it would leave | `<kind>.<field>.<option>`, the option being `targets`, `onTargetDelete`, `exclusivity` or `min` |
+| `invalid-reference` | a requested record holding a reference in a form its declaration cannot hold, at the item | `<kind>.<field>.holds` |
+| `unknown-operation` | an item naming no operation the edit knows, at the item | `unknown-operation` |
+| `entity-absent` | a `change` or `remove` of an entity absent at that point in the edit, at the item | `entity-absent` |
+| `entity-present` | a `create` of an entity present at that point in the edit, at the item | `entity-present` |
+| `identity-taken` | a `create` of an id an entity of another kind holds, at the item | `identity-taken` |
+| `undeclared-kind` | an item naming a kind the declaration does not hold, at the item | `undeclared-kind` |
+
+### Planning changes no answer
+
+After every `plan` step, refused or accepted, the harness checks that the view is as it was before the step: the same position, and for every declared kind the same entities with the same records.\
+Many cases also ask questions after a plan, and those answers are the ones the view gave before it.
+
+### The three worlds
+
+Batch 2 is written over three small worlds, each declared in full in every case that uses it.
+
+- A library: a `shelf` features one `book` (`featured`, unlinked when the book goes); a `book` stands on one `shelf` (`shelf`, the shelf's removal refused while a book stands on it) and carries `tag`s (`tags`, unlinked, a tag deleted once the edit leaves no book carrying it).
+- A project: a `team` and a `committee` each hold at least two `person`s (`members`, unlinked, a member taken from the team or committee that held it); a team falling below two is deleted, and a committee falling below two refuses the edit; a `task` waits on `task`s (`waitsOn`, unlinked), is assigned to one `team` (`assignee`, unlinked, the team kept when no task is assigned to it) and is owned by one `person` (`owner`, unlinked, an owner taken from the task that held it).
+- A document: a `section` sits in a parent `section` (`parent`, deleted with it) and cites `figure`s (`cites`, a cited figure's removal refused); a `figure` sits in one `section` (`section`, deleted with it); a `caption` belongs to one `figure` (`figure`, deleted with it, a figure holding one caption only, a second refused).
+
+---
+
 ## Readings
 
 Where the contract leaves a question open, the corpus takes one reading and says so here.\
@@ -159,6 +233,38 @@ Each is a reading, not a ruling, and is open to an entity-graph decision.
   The declaration is held to a declared shape (`graph-declaration` requires `shape-check:declared-shape-validation`), and an ignored misspelt rule would be a rule silently not kept.
 - **R13. Declaration order.** A reference may target a kind declared later in the list.
 
+Readings `R14` onwards are batch 2's.
+
+- **R14. Items, and one expansion.** An edit's items are applied in the order asked to a copy of the view, each checked for faults against the copy as the items before it left it, and only then are the reference rules expanded, once, to a fixed point.
+  The stopping rule says planning "ends after at most one expansion more than there are phases", which leaves one expansion for the requested items, not one per item.
+  So no item sees another item's consequences, and a `change` of an entity a later rule deletes is no fault.
+- **R15. What a plan answers (owed at M2).** A plan answers at least its net writes, one per entity whose state the edit changes, a `put` with the whole record or a `del`, with the position it was planned from.
+  The corpus asserts those and nothing else of an accepted plan; whether a plan also answers its steps is the implementation's, and no case asserts steps, since the contract fixes no order among the consequences of reference rules.
+- **R16. Removing the only target of a one-target reference (owed at M2).** It leaves the reference holding `null`, the referrer kept, whether the target was unlinked by its deletion or taken by `exclusivity: "steal"`.
+  A `null` one-target reference holds no target, as batch 1's `R2` reads, and is then judged by any `min` the reference declares.
+- **R17. What each rule does in the expansion.** Each rule acts only on what the edit changed, so a breach already in the view that the edit does not touch is left as it is.
+  `onTargetDelete` acts on a present referrer holding a target the edit deleted: `"unlink"` takes the target out of a list or sets a one-target reference to `null` (`R16`), `"cascade-delete"` deletes the referrer, and `"refuse"` does nothing and leaves the breach to judgement.
+  `exclusivity: "steal"` acts on a target held through the reference by more than one present referrer, at least one of which the edit made a holder: every referrer that held it before the edit loses it as `"unlink"` would take it.
+  `onBelowMin: "cascade-delete"` deletes a present referrer holding fewer targets than its minimum and fewer than it held before the edit.
+  `onUnreferenced: "delete"` deletes a present target that a reference declaring it held before or during the edit, and that no reference of any field holds after it.
+  A deletion by any rule is a deletion the edit made, so the rules act on it in turn, until nothing changes.
+- **R18. Judging by key and measure.** After the expansion, each breach is identified by its `ruleKey` and `subject` and has a measure; the plan is refused when a breach is new or its measure is higher than in the view before the edit, and allowed otherwise, partial repairs included.
+  The rule keys are `<kind>.<field>.<option>`, naming the kind and the reference that declare the rule and the option broken.
+  A `targets` breach is a referrer holding through the field targets that are absent and were absent before the edit, or present and of a kind the field may not target, measured by how many.
+  An `onTargetDelete` breach is a referrer holding through a `"refuse"` field targets the edit deleted, measured by how many.
+  An `exclusivity` breach is a target held through a `"refuse"` field by more than one referrer, measured by the number of its referrers less one.
+  A `min` breach is a referrer holding through a field whose `onBelowMin` is `"refuse"` fewer targets than its minimum, measured by how many fewer.
+- **R19. The subject.** The subject is the identity of the entity concerned: the referrer for `targets`, `onTargetDelete`, `min` and `holds`, and the target for `exclusivity`, which is the entity held more than once.
+  It may be an entity the edit never named.
+- **R20. A reference to an absent entity.** A requested reference to an id no entity holds after the edit breaks `targets`, since an absent entity is of no kind the reference may target.
+  A target created anywhere in the same edit is present after it, whatever the order of the items.
+- **R21. The item that led there.** `opIndex` is the index of the requested item whose write the breach follows from, through every consequence between; no case asks for a breach two items cause only together.
+- **R22. Faults in the request.** A request fault is refused at the first item that faults, before any rule is judged, with the code as its `ruleKey` (`D10`'s proposed reading), the item's id as its `subject`, and a measure of 1.
+  A `remove` of an absent entity is a change to it, and so a fault, as a `change` is; a `create` of an id an entity already holds is a fault, `entity-present` when that entity is of the same kind and `identity-taken` (`D14`) when of another.
+  A reference held in a form its declaration cannot hold, such as a list in a one-target reference, is refused at the item, as `invalid-reference`, with the field's `holds` as its `ruleKey`.
+- **R23. Planning changes no answer.** A plan, accepted or refused, leaves the view exactly as it was, including its position, as the `plan-graph-change` row says.
+- **R24. Codes.** The contract names no code for a refusal of a plan, so the corpus's codes are labels a harness maps, one implementation code per label.
+
 ---
 
 ## Checking the files
@@ -167,4 +273,5 @@ The corpus author ran one check of form over the files, and no other code.\
 It checks that each case parses as JSON, carries the keys above, is named for its file, and keeps ids unique across kinds.\
 It checks that an accepted case starts with one `start` step, keeps positions strictly increasing, asks at the position of the last step before it, and writes each entity at most once per change.\
 It checks that no answer repeats an element, every reading and label a case names is listed here, every file is plain ASCII under 16 KiB, and no case uses a drawing's words.\
-Every expected answer was worked out by hand from the contract text.
+For batch 2 it also checks that each `plan` step states the view's position, carries the keys of its outcome, and writes each entity at most once, and that the items of an accepted plan name only declared kinds and keep ids unique across kinds.\
+Every expected answer was worked out by hand from the contract text, in both batches.

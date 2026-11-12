@@ -19,8 +19,9 @@ const KINDS = WORLD.kinds.map((k) => k.kind);
 const refsOf = (kind) => REFERENCES[kind].map((r) => [r.field, r]);
 const byId = (a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : a.field < b.field ? -1 : a.field > b.field ? 1 : 0);
 
-/** What a fresh reading of `entities` (id -> { kind, record }) answers. */
-export function freshReading(entities) {
+/** What a fresh reading of `entities` (id -> { kind, record }) answers, its kinds' references in `references` (kind -> [reference]). */
+export function freshReading(entities, references = REFERENCES) {
+	const refsOf = (kind) => (references[kind] ?? []).map((r) => [r.field, r]);
 	const kindOf = (id) => entities.get(id)?.kind ?? null;
 	const held = (record, field, holds) => {
 		const v = Object.hasOwn(record, field) ? record[field] : undefined;   // a record's own members alone

@@ -8,3 +8,5 @@ export type { CompiledReference, GraphDeclaration, KindDeclaration, ReferenceDec
 export type { Referrer } from "./references.js";
 export type { GraphRefusal, GraphRefusalCode, GraphRefusalDetails } from "./refusal.js";
 export { GRAPH_LIMITS, type GraphChange, type GraphChangeItem, type GraphEntity, type GraphRecord } from "./view.js";
+export type { GraphEdit, GraphEditItem, GraphPlan } from "./planner.js";
+export type { GraphStep } from "./scratch.js";
