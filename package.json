@@ -23,13 +23,16 @@
     "./entity-store": {
       "types": "./dist/entity-store-port.d.ts",
       "default": "./dist/entity-store-port.js"
-    }
+    },
+    "./corpus": "./dist/corpus.json",
+    "./corpus/worlds/document": "./corpus/worlds/document.mjs"
   },
   "files": [
-    "dist"
+    "dist",
+    "corpus"
   ],
   "scripts": {
-    "build": "tsc -p .",
+    "build": "tsc -p . && node tools/bundle-corpus.mjs",
     "test": "npm run build && node --test \"test/**/*.test.js\"",
     "docs:check": "tools/check-docs.sh",
     "vocabulary:check": "node tools/check-vocabulary.mjs"

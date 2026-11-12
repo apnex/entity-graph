@@ -15,10 +15,14 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { test } from "node:test";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 import { toCanonicalJson } from "@apnex/shape-check";
-import { createEntityGraph } from "../dist/index.js";
 import { STORES, storeFor } from "./support/store-ports.js";
+import { fileOf, graphPackage, PROJECT, shippedCorpus, shippedWorlds, UNDER_TEST } from "./support/under-test.js";
+
+// the package under test and the corpus it ships, read through their public paths, @apnex/entity-graph and
+// @apnex/entity-graph/corpus, as a consumer reads them (test/support/under-test.js); the case files under corpus/ are the master
+const { createEntityGraph } = graphPackage;
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 // every batch directory the corpus holds, none left out (draw's H31-EG-M4)
@@ -27,7 +31,7 @@ const LATER = [];
 const DIRECTORIES = fs.readdirSync(path.join(root, "corpus")).filter((f) => /^batch-\d+$/.test(f)).sort((a, b) => Number(a.slice(6)) - Number(b.slice(6)));
 const BATCHES = DIRECTORIES.filter((b) => !LATER.includes(b));
 const filesOf = (batch) => fs.readdirSync(path.join(root, "corpus", batch)).filter((f) => f.endsWith(".json")).sort().map((f) => path.join(root, "corpus", batch, f));
-const CASES = BATCHES.flatMap(filesOf).map((f) => JSON.parse(fs.readFileSync(f, "utf8")));
+const CASES = shippedCorpus.cases.filter((c) => !LATER.includes(`batch-${c.batch}`));
 
 /**
  * The corpus's refusal labels (corpus/README.md, R9), each mapped to what distinguishes it in this implementation's refusal:
@@ -99,8 +103,8 @@ function compareRefusal(where, refusal, want) {
 	assert.deepEqual(got, { ...rest, code: PLAN_CODES[want.code] }, `${where}: the refusal`);
 }
 
-/** The world modules batches 3 and 4 name, each read once. */
-const WORLDS = Object.fromEntries(await Promise.all(fs.readdirSync(path.join(root, "corpus", "worlds")).filter((f) => f.endsWith(".mjs")).map(async (f) => [path.basename(f, ".mjs"), await import(pathToFileURL(path.join(root, "corpus", "worlds", f)).href)])));
+/** The world modules batches 3 to 6 name, each read once through the specifier the shipped corpus gives it. */
+const WORLDS = shippedWorlds;
 const DIALECT = "urn:apnex:shape-check:dialect:1";
 // the corpus's view over this implementation's reader: a record or null, and the identities of a kind
 const viewOf = (graph) => ({ get: (kind, id) => graph.get(kind, id)?.record ?? null, all: (kind) => graph.all(kind).map((e) => e.id) });
@@ -297,10 +301,19 @@ for (const c of CASES) {
 	if (c.batch >= 5) for (const name of STORES) test(`corpus ${c.case} on ${name}`, () => runAccepted(c, "fill", name));
 }
 
+test(`the code, the cases and the world modules are read from the package under test, in ${UNDER_TEST}`, () => {
+	for (const specifier of ["@apnex/entity-graph", "@apnex/entity-graph/entity-store", "@apnex/entity-graph/corpus", ...Object.values(shippedCorpus.worlds)]) {
+		assert.ok(fileOf(specifier).startsWith(PROJECT + path.sep), `${specifier} resolves to ${fileOf(specifier)}`);
+	}
+});
+
 test("the corpus is read whole: batch 1's 38 cases, batch 2's 32, batch 3's 18, batch 4's 7, batch 5's 14 and batch 6's 8, each named for its file", () => {
 	assert.deepEqual(BATCHES.map((b) => filesOf(b).length), [38, 32, 18, 7, 14, 8]);
 	assert.deepEqual(DIRECTORIES, [...BATCHES, ...LATER], "every batch directory, run here or left to a later milestone by name");
 	for (const f of BATCHES.flatMap(filesOf)) assert.equal(JSON.parse(fs.readFileSync(f, "utf8")).case, path.basename(f, ".json"));
+	// the shipped bundle holds exactly the case files, in order, and a world module for every world the files name
+	assert.deepEqual(shippedCorpus.cases, BATCHES.flatMap(filesOf).map((f) => JSON.parse(fs.readFileSync(f, "utf8"))), `the corpus shipped by ${UNDER_TEST} is the case files`);
+	assert.deepEqual(Object.keys(shippedWorlds).sort(), fs.readdirSync(path.join(root, "corpus", "worlds")).filter((f) => f.endsWith(".mjs")).map((f) => path.basename(f, ".mjs")).sort());
 	const counted = (batch) => CASES.filter((c) => c.batch === batch).flatMap((c) => (c.steps ?? []).filter((st) => st.plan)).map((st) => st.plan.outcome);
 	const tally = (batch) => [counted(batch).filter((o) => o === "accepted").length, counted(batch).filter((o) => o === "refused").length];
 	assert.deepEqual([tally(2), tally(3), tally(4)], [[62, 26], [33, 14], [12, 10]], "batch 2's 88 plans, 62 accepted and 26 refused; batch 3's 47, 33 and 14; batch 4's 22, 12 and 10");

@@ -12,6 +12,28 @@
       "exports": {
         "createEntityStorePort": { "part": "entity-graph", "serves": ["positioned-graph-sync"] }
       }
+    },
+    "./corpus": {
+      "data": { "part": "entity-graph", "serves": ["dated-graph-view", "graph-declaration", "plan-graph-change", "reversible-history", "positioned-graph-sync"] }
+    },
+    "./corpus/worlds/document": {
+      "exports": {
+        "base": { "part": "entity-graph", "serves": ["dated-graph-view", "graph-declaration", "plan-graph-change", "reversible-history", "positioned-graph-sync"] },
+        "bytesBounded": { "part": "entity-graph", "serves": ["dated-graph-view", "graph-declaration", "plan-graph-change", "reversible-history", "positioned-graph-sync"] },
+        "bytesHard": { "part": "entity-graph", "serves": ["dated-graph-view", "graph-declaration", "plan-graph-change", "reversible-history", "positioned-graph-sync"] },
+        "captionResolving": { "part": "entity-graph", "serves": ["dated-graph-view", "graph-declaration", "plan-graph-change", "reversible-history", "positioned-graph-sync"] },
+        "citing": { "part": "entity-graph", "serves": ["dated-graph-view", "graph-declaration", "plan-graph-change", "reversible-history", "positioned-graph-sync"] },
+        "conflicting": { "part": "entity-graph", "serves": ["dated-graph-view", "graph-declaration", "plan-graph-change", "reversible-history", "positioned-graph-sync"] },
+        "contexts": { "part": "entity-graph", "serves": ["dated-graph-view", "graph-declaration", "plan-graph-change", "reversible-history", "positioned-graph-sync"] },
+        "countBounded": { "part": "entity-graph", "serves": ["dated-graph-view", "graph-declaration", "plan-graph-change", "reversible-history", "positioned-graph-sync"] },
+        "fixtures": { "part": "entity-graph", "serves": ["dated-graph-view", "graph-declaration", "plan-graph-change", "reversible-history", "positioned-graph-sync"] },
+        "indexed": { "part": "entity-graph", "serves": ["dated-graph-view", "graph-declaration", "plan-graph-change", "reversible-history", "positioned-graph-sync"] },
+        "resolving": { "part": "entity-graph", "serves": ["dated-graph-view", "graph-declaration", "plan-graph-change", "reversible-history", "positioned-graph-sync"] },
+        "sloppy": { "part": "entity-graph", "serves": ["dated-graph-view", "graph-declaration", "plan-graph-change", "reversible-history", "positioned-graph-sync"] },
+        "undeclaredPhase": { "part": "entity-graph", "serves": ["dated-graph-view", "graph-declaration", "plan-graph-change", "reversible-history", "positioned-graph-sync"] },
+        "undeclaredTriggerKind": { "part": "entity-graph", "serves": ["dated-graph-view", "graph-declaration", "plan-graph-change", "reversible-history", "positioned-graph-sync"] },
+        "withGallery": { "part": "entity-graph", "serves": ["dated-graph-view", "graph-declaration", "plan-graph-change", "reversible-history", "positioned-graph-sync"] }
+      }
     }
   },
   "deferred": {}
