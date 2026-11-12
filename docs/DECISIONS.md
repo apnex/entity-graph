@@ -805,7 +805,10 @@ Bounding the plan by its net writes alone - an expansion can write and unwrite o
 ## D37 - Proposed reading: an undo or a redo is refused where an entity it writes no longer stands as its record left it
 
 **Proposed by:** the builder of M5, 2026-11-12, for zorg's review, on draw's `H31-EG-M5` brief, judging the corpus's `R44` against `D8` and `VISION.md`; draw's director rules on it for draw.\
-**Affects:** `src/replay.ts`, `src/refusal.ts`.
+**Affects:** `src/replay.ts`, `src/refusal.ts`.\
+**Ruled for draw by draw's director** (2026-11-12, draw's `H31-15`): an undo or a redo over another writer's later change is refused, naming the entity.
+**Pending zorg:** its acceptance of this reading, and the sentence it is asked by letter to add to `CONTRACT.md`'s *Undo and redo*, "An undo or redo is also refused, naming the entity, when an entity it would write no longer stands as its recorded writes left it"; `CONTRACT.md` is unchanged until it agrees.\
+**Corrected under `H31-15`:** the last sentence below said batch 6's `b6-08` asserts reading A; the corpus author has since restated `R44` and rewritten the case as `b6-08-undo-over-other-writer-refused` (`ebcd8e9`), which asserts reading B, and this implementation gives its answers, checked by hand, batch 6 being M6's.
 
 **The two readings.**\
 Reading A, the corpus's (`R44`, `b6-08`): `D8`'s guard is the expected position alone, so an undo planned after the view has taken in another writer's later change to an entity the edit wrote restores the entity, overwriting that change.\

@@ -67,6 +67,8 @@ const PLAN_CODES = {
 	"invalid-context": "invalid-context",
 	// batch 5's
 	"store-moved": "store-moved", "note-bound": "note-bound", "nothing-to-undo": "nothing-to-undo", "nothing-to-redo": "nothing-to-redo",
+	// batch 6's, its b6-08 as restated under draw's H31-15 (docs/DECISIONS.md D37)
+	"history-superseded": "history-superseded",
 };
 
 /** A value with every `{ "$fixture": name }` in it replaced by what the world module's fixture answers (batch 5, R50). */
