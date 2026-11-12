@@ -1,15 +1,14 @@
 /**
  * The declaration (CONTRACT.md `graph-declaration`, *Reference rules*, *Consequences and the stopping rule*; docs/DECISIONS.md
- * D10, D11, D20, D21): a list of kinds, each with the list of references its records hold, each naming its field, the declared
- * kinds it may target, how many targets it holds and what becomes of the referrer when a target is deleted, with the other rule
- * options as the contract allows them; the shape of its records, prepared through shape-check; its consequences, each a
- * function with a trigger stated as data and one of the phases the declaration lists; and its conditions over the whole set.
- * A bad declaration is refused at creation, its subject naming the kind, the member and the part at fault. The index from each
- * kind to the consequences of each phase listening to it is built here, once. An intent resolver is accepted and not yet read
- * (M4).
+ * D10, D11, D20, D21, D26): a list of kinds, each with the list of references its records hold, each naming its field, the
+ * declared kinds it may target, how many targets it holds and what becomes of the referrer when a target is deleted, with the
+ * other rule options as the contract allows them; the shape of its records, prepared through shape-check; its consequences, each a
+ * function with a trigger stated as data and one of the phases the declaration lists; its conditions over the whole set; and its
+ * intent resolver (D26). A bad declaration is refused at creation, its subject naming the kind, the member and the part at fault.
+ * The index from each kind to the consequences of each phase listening to it is built here, once.
  */
-import { type PreparedShape, prepareShapeDocument, readPlainJson } from "@apnex/shape-check";
-import { itemsOf, membersOf } from "./plain-members.js";
+import { type PreparedShape, prepareShapeDocument } from "@apnex/shape-check";
+import { itemsOf, membersOf, observeAll, readPlain } from "./plain-members.js";
 import { type GraphRefusal, refuse } from "./refusal.js";
 
 /** How many targets a reference holds. */
@@ -56,7 +55,7 @@ export interface ConsequenceDeclaration {
 	id: string;
 	phase: string;
 	trigger: TriggerClause | readonly TriggerClause[];
-	run: (input: { readonly matches: readonly GraphChangeHeard[]; readonly graph: GraphReader }) => unknown;
+	run: (input: { readonly matches: readonly GraphChangeHeard[]; readonly graph: GraphReader; readonly context: unknown }) => unknown;
 }
 
 /** One breach a condition reports: the entity or thing concerned, how much, and the application's own sentence (D21). */
@@ -69,17 +68,20 @@ export interface ConditionBreach {
 /** A condition over the whole set that a shape cannot state (D21). */
 export interface ConditionDeclaration {
 	id: string;
-	check: (graph: GraphReader) => unknown;
+	check: (input: { readonly graph: GraphReader; readonly context: unknown }) => unknown;
 }
 
-/** One kind: its records' shape, the references they hold, its consequences and conditions, and its intent resolver (M4). */
+/** An intent resolver: a pure function rewriting one requested item of its kind into the writes it stands for (D26). */
+export type IntentResolver = (input: { readonly item: unknown; readonly graph: GraphReader; readonly context: unknown }) => unknown;
+
+/** One kind: its records' shape, the references they hold, its consequences and conditions, and its intent resolver. */
 export interface KindDeclaration {
 	kind: string;
 	references?: readonly ReferenceDeclaration[];
 	shape?: unknown;
 	conditions?: readonly ConditionDeclaration[];
 	consequences?: readonly ConsequenceDeclaration[];
-	intentResolver?: unknown;
+	intentResolver?: IntentResolver;
 }
 
 /** The application's declaration: its kinds, and the phases its consequences run in, in order. */
@@ -131,6 +133,7 @@ export interface CompiledDeclaration {
 	readonly consequences: readonly CompiledConsequence[];
 	readonly listening: ReadonlyMap<string, ReadonlyMap<string, readonly CompiledConsequence[]>>;
 	readonly conditions: readonly CompiledCondition[];
+	readonly resolvers: ReadonlyMap<string, IntentResolver>;
 }
 
 const TOP = new Set(["kinds", "phases"]);
@@ -162,7 +165,11 @@ const firstUnknown = (value: Record<string, unknown>, known: ReadonlySet<string>
  * `unpaired`, or `undeclared <kind>`.
  */
 export function compileDeclaration(input: unknown): { ok: true; declaration: CompiledDeclaration } | { ok: false; refusal: GraphRefusal } {
-	const bad = (path: string, fault: string) => ({ ok: false as const, refusal: refuse("invalid-declaration", `${path}: ${fault}`) });
+	// a refused declaration has its promises observed, whatever part of it was read, so none goes unhandled (D30)
+	const bad = (path: string, fault: string) => {
+		observeAll(input);
+		return { ok: false as const, refusal: refuse("invalid-declaration", `${path}: ${fault}`) };
+	};
 	const top = membersOf(input);
 	if (top === null) return bad("declaration", "invalid");
 	if (top["kinds"] === undefined) return bad("kinds", "missing");
@@ -195,16 +202,17 @@ export function compileDeclaration(input: unknown): { ok: true; declaration: Com
 	const shapes = new Map<string, PreparedShape & { accepted: true }>();
 	const consequences: CompiledConsequence[] = [];
 	const conditions: CompiledCondition[] = [];
+	const resolvers = new Map<string, IntentResolver>();
 	for (const declared of entries) {
 		const kind = declared["kind"] as string;
 		const unknown = firstUnknown(declared, KIND);
 		if (unknown !== undefined) return bad(`${kind}.${unknown}`, "unknown");
 		// the references read once, each as plain JSON, so the first that is not plain data is named by its index
-		const listed = declared["references"] === undefined ? [] : itemsOf(declared["references"]);
+		const listed = declared["references"] === undefined ? [] : itemsOf(declared["references"], true);
 		if (listed === null) return bad(`${kind}.references`, "invalid");
 		const references: unknown[] = [];
 		for (const [j, entry] of listed.entries()) {
-			const read = readPlainJson(entry);
+			const read = readPlain(entry);
 			if (!read.ok) return bad(`${kind}.references[${j}]`, "invalid");
 			references.push(read.value);
 		}
@@ -247,7 +255,7 @@ export function compileDeclaration(input: unknown): { ok: true; declaration: Com
 		}
 		compiled.set(kind, list);
 		if (declared["shape"] !== undefined) {
-			const read = readPlainJson(declared["shape"]);
+			const read = readPlain(declared["shape"]);
 			if (!read.ok) return bad(`${kind}.shape`, "invalid");
 			const prepared = prepareShapeDocument(read.value);
 			if (!prepared.accepted) return bad(`${kind}.shape${prepared.problems[0]?.pointer ?? ""}`, "invalid");
@@ -259,6 +267,9 @@ export function compileDeclaration(input: unknown): { ok: true; declaration: Com
 		const checks = compileConditions(kind, declared["conditions"]);
 		if (!checks.ok) return bad(checks.path, checks.fault);
 		conditions.push(...checks.list);
+		const resolver = declared["intentResolver"];
+		if (resolver !== undefined && typeof resolver !== "function") return bad(`${kind}.intentResolver`, "invalid");
+		if (resolver !== undefined) resolvers.set(kind, resolver as IntentResolver);
 	}
 	const stray = firstUnknown(top, TOP);
 	if (stray !== undefined) return bad(stray, "unknown");
@@ -271,7 +282,7 @@ export function compileDeclaration(input: unknown): { ok: true; declaration: Com
 			index.get(k)!.push(c);
 		}
 	}
-	return { ok: true, declaration: { kinds: compiled, fields, shapes, phases, consequences, listening, conditions } };
+	return { ok: true, declaration: { kinds: compiled, fields, shapes, phases, consequences, listening, conditions, resolvers } };
 }
 
 type Compiled<T> = { ok: true; list: T[] } | { ok: false; path: string; fault: string };
@@ -279,7 +290,7 @@ type Compiled<T> = { ok: true; list: T[] } | { ok: false; path: string; fault: s
 /** A trigger read as plain data: one clause or a list of them, each naming declared kinds or a declared kind's fields; or the fault. */
 function compileTrigger(value: unknown, names: readonly string[]): { ok: true; clauses: TriggerClause[] } | { ok: false; fault: string } {
 	if (value === undefined) return { ok: false, fault: "missing" };
-	const read = readPlainJson(value);
+	const read = readPlain(value);
 	if (!read.ok) return { ok: false, fault: "invalid" };
 	const given = Array.isArray(read.value) ? read.value : [read.value];
 	if (given.length === 0) return { ok: false, fault: "invalid" };

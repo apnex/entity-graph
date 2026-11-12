@@ -9,13 +9,13 @@
  * the item the changes it heard follow from; a second consequence writing an entity one already wrote in this run of the phase
  * is a fault, never resolved by letting one win.
  *
- * A condition is called with a reader of one state and answers its breaches, each a subject, a measure and its own sentence.
+ * A condition is called with a reader of one state and the plan's context, and answers its breaches, each a subject, a measure
+ * and its own sentence. Every consequence, condition and resolver of a plan is handed the same context, frozen (D28).
  *
  * Purity (D22): what a function is handed is frozen and its reader answers only during the call; what it answers is read once
  * as plain JSON, running none of its code. A function that throws, answers what is not plain data or is not in the form asked,
  * or reaches for what it was handed, is refused, and nothing of it reaches the view.
  */
-import { readPlainJson } from "@apnex/shape-check";
 import type { CompiledConsequence, CompiledDeclaration } from "./declaration.js";
 import { applyItem } from "./items.js";
 import { openReader } from "./reader.js";
@@ -23,6 +23,7 @@ import type { ConditionReading } from "./reference-rules.js";
 import type { GraphRefusalCode } from "./refusal.js";
 import { type Attribution, type GraphChangeRecord, type GraphState, later, type Scratch } from "./scratch.js";
 import { isObject } from "./view.js";
+import { observeAll, readPlain } from "./plain-members.js";
 
 /** Why a phase or a condition stops the plan: the refusal's code and the facts it names. */
 export interface PhaseFault {
@@ -57,7 +58,7 @@ function heardFrom(s: Scratch, c: CompiledConsequence, change: GraphChangeRecord
 }
 
 /** Runs one phase over the edit so far, applying what its consequences write; the fault that stops it, or null. */
-export function runPhase(s: Scratch, d: CompiledDeclaration, phase: string): PhaseFault | null {
+export function runPhase(s: Scratch, d: CompiledDeclaration, phase: string, context: unknown): PhaseFault | null {
 	const index = d.listening.get(phase)!;
 	const claimed = new Map<string, string>(); // entity -> the consequence that wrote it in this run of the phase
 	// what a trigger hears, by its clauses, while nothing has been written since: consequences with one trigger share it (D25)
@@ -116,13 +117,14 @@ export function runPhase(s: Scratch, d: CompiledDeclaration, phase: string): Pha
 		const { reader, close } = openReader(s, d);
 		let returned: unknown;
 		try {
-			returned = Reflect.apply(c.run, undefined, [Object.freeze({ matches: heard, graph: reader })]);
-		} catch {
+			returned = Reflect.apply(c.run, undefined, [Object.freeze({ matches: heard, graph: reader, context })]);
+		} catch (thrown) {
+			observeAll(thrown); // a thrown value holding a promise that rejects leaves no unhandled rejection (D30)
 			return failed("consequence-failed", c.key, matches[0]!.id);
 		} finally {
 			close();
 		}
-		const read = readPlainJson(returned as never);
+		const read = readPlain(returned as never);
 		if (!read.ok || !Array.isArray(read.value)) return failed("consequence-failed", c.key, matches[0]!.id);
 		for (const [i, write] of (read.value as unknown[]).entries()) {
 			const id = isObject(write) && typeof write["id"] === "string" ? write["id"] : null;
@@ -138,21 +140,22 @@ export function runPhase(s: Scratch, d: CompiledDeclaration, phase: string): Pha
 	return null;
 }
 
-/** Every condition's breaches in one state, keyed `<rule key>@<subject>`, or the condition that failed to answer. */
-export function readConditions(d: CompiledDeclaration, state: GraphState): { ok: true; breaches: Map<string, ConditionReading> } | { ok: false; fault: PhaseFault } {
+/** Every condition's breaches in one state, read with the plan's context, keyed `<rule key>@<subject>`, or the condition that failed to answer. */
+export function readConditions(d: CompiledDeclaration, state: GraphState, context: unknown): { ok: true; breaches: Map<string, ConditionReading> } | { ok: false; fault: PhaseFault } {
 	const breaches = new Map<string, ConditionReading>();
 	for (const c of d.conditions) {
 		const failed = { ok: false as const, fault: { code: "condition-failed" as const, ruleKey: c.key, subject: c.key, measure: 1, opIndex: -1 } };
 		const { reader, close } = openReader(state, d);
 		let returned: unknown;
 		try {
-			returned = Reflect.apply(c.check, undefined, [reader]);
-		} catch {
+			returned = Reflect.apply(c.check, undefined, [Object.freeze({ graph: reader, context })]);
+		} catch (thrown) {
+			observeAll(thrown);
 			return failed;
 		} finally {
 			close();
 		}
-		const read = readPlainJson(returned as never);
+		const read = readPlain(returned as never);
 		if (!read.ok || !Array.isArray(read.value)) return failed;
 		const subjects = new Set<string>();
 		for (const b of read.value as unknown[]) {

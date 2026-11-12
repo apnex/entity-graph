@@ -19,6 +19,8 @@ export type GraphRefusalCode =
 	| "condition-failed"
 	| "consequence-failed"
 	| "consequence-conflict"
+	| "resolver-failed"
+	| "invalid-context"
 	| "reentrant"
 	| "too-many-writes"
 	| "stale-position"
@@ -41,9 +43,10 @@ export interface GraphRefusalDetails {
 	opIndex: number;
 	sentence: string | null;
 	/**
-	 * The consequences that wrote the entity a refusal concerns, each `<kind>.<id>`, in declared order: present for an entity a
-	 * consequence wrote and for the conflict fault, absent otherwise. Proposed in docs/DECISIONS.md D23 and owed to zorg, since the
-	 * contract's refusal form names no member for it.
+	 * The consequences and reference rules behind a refusal (CONTRACT.md *Judging and refusals*; docs/DECISIONS.md D23, D25, D30,
+	 * accepted by zorg): the two consequences of a `consequence-conflict`; the consequence `<kind>.<id>` or rule
+	 * `<kind>.<field>.<option>` whose write a reference-rule or shape breach follows from; for a condition's breach, those that
+	 * wrote its subject, sorted, consequences first, each in declared order. Omitted where a requested item alone wrote the entity.
 	 */
 	writers?: readonly string[];
 }
@@ -133,6 +136,16 @@ const TEXTS: Readonly<Record<GraphRefusalCode, { what: string; why: string; fix:
 		what: "The edit was refused: two consequences wrote one entity in one run of a phase.",
 		why: "Within a run of a phase each entity is written by one consequence at most, and two writing it is a fault, never resolved by letting one win.",
 		fix: "Change the consequences in details.writers so one of them writes the entity in details.subject, or move one to another phase.",
+	},
+	"resolver-failed": {
+		what: "The edit was refused: a kind's intent resolver did not answer.",
+		why: "An intent resolver answers the writes one requested item stands for, as a plain list; one that throws, answers otherwise, or reaches for what it was handed, cannot be applied.",
+		fix: "Correct the resolver in details.ruleKey; details.opIndex is the item it was handed.",
+	},
+	"invalid-context": {
+		what: "The edit was refused: its context is not plain JSON.",
+		why: "A plan's context is read once as plain JSON before any item, running none of its code, and handed as it is to consequences, conditions and resolvers.",
+		fix: "Send a context of plain JSON values - objects, lists, strings, finite numbers, booleans and null - without functions, cycles or class instances.",
 	},
 	"reentrant": {
 		what: "Refused: the graph was asked to change or plan while it was planning.",

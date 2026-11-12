@@ -411,6 +411,27 @@ export const withGallery = {
   ],
 };
 
+// Variant "captionResolving": a caption created without a figure is attached to the figure "f<n>" with the highest n present.
+function attachCaption({ item, view }) {
+  if (item.op !== "create" || typeof item.record.figure === "string") return [item];
+  let latest = null;
+  let n = 0;
+  for (const id of view.all("figure")) {
+    const m = /^f(\d+)$/.exec(id);
+    if (m !== null && Number(m[1]) > n) {
+      n = Number(m[1]);
+      latest = id;
+    }
+  }
+  return [{ op: "create", kind: "caption", id: item.id, record: { ...item.record, figure: latest } }];
+}
+
+// The resolving world with attachCaption on captions; every other kind as in resolving.
+export const captionResolving = {
+  ...resolving,
+  kinds: resolving.kinds.map((k) => (k.kind === "caption" ? { ...k, intentResolver: attachCaption } : k)),
+};
+
 // Contexts no JSON file can state, each a value plain JSON cannot hold.
 export const contexts = {
   withFunction() {

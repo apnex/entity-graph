@@ -4,7 +4,8 @@
 // asking for a book as a shelf. The rule engine's (M2): a rule value ignored, cascade-delete read as refuse; a cascade cut short,
 // the rules expanded once; a worsening let through, only a new breach refused -- each caught by a scenario the contract answers.
 // M3's: a phase re-entered, the conflict let through, a held write not judged, a condition's worsening let through.
-// Each mutant must land, or its verdict would measure nothing.
+// M4's: a resolver called against the edit as it was found, its writes given the wrong index, the context not handed to a
+// resolver, a consequence or a condition. Each mutant must land, or its verdict would measure nothing.
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
@@ -61,7 +62,7 @@ const heldWriteJudged = (createEntityGraph) => {
 	return r.ok === false && r.refusal.code === "shape-misfit" && r.refusal.details.writers?.[0] === "task.spoil" ? null : { what: "a consequence's write was not held to its kind's shape", got: r };
 };
 const conditionWorseningRefused = (createEntityGraph) => {
-	const crowded = { id: "crowded", check: (graph) => (graph.all("task").length > 1 ? [{ subject: "all", measure: graph.all("task").length - 1, sentence: "too many" }] : []) };
+	const crowded = { id: "crowded", check: ({ graph }) => (graph.all("task").length > 1 ? [{ subject: "all", measure: graph.all("task").length - 1, sentence: "too many" }] : []) };
 	const g = createEntityGraph({ kinds: [{ kind: "task", conditions: [crowded] }] }, { position: 1, entities: [{ kind: "task", id: "a", record: {} }, { kind: "task", id: "b", record: {} }] }).graph;
 	const r = g.plan({ items: [{ op: "create", kind: "task", id: "c", record: {} }] });
 	return r.ok === false && r.refusal.code === "condition-broken" ? null : { what: "a condition's worsened breach was let through", got: r };
@@ -74,6 +75,35 @@ const sharedRefreshed = (createEntityGraph) => {
 	const r = g.plan({ items: [{ op: "create", kind: "note", id: "a", record: {} }] });
 	return r.ok && JSON.stringify(r.writes.find((w) => w.id === "t")?.record.seen) === JSON.stringify(["a", "copy-a"]) ? null : { what: "a shared match list was kept after a write", got: r };
 };
+// M4's scenarios: a resolver sees the edit as the items before it left it; its writes carry the item's index; the context
+// reaches each of a consequence, a condition and a resolver
+const naming = ({ item, graph, context }) => (item.op === "create" && item.id === undefined ? [{ op: "create", kind: "note", id: `n${graph.all("note").length + 1}`, record: { place: context?.place ?? "inbox", ...item.record } }] : [item]);
+const noteWorld = (extra = {}) => ({ kinds: [{ kind: "note", intentResolver: naming, ...extra }] });
+const resolvedAgainstTheEdit = (createEntityGraph) => {
+	const r = createEntityGraph(noteWorld()).graph.plan({ items: [{ op: "create", kind: "note", record: {} }, { op: "create", kind: "note", record: {} }] });
+	return r.ok && r.writes.map((w) => w.id).join() === "n1,n2" ? null : { what: "a resolver did not see the item before it", got: r };
+};
+// a breach judged on the result names the item its write carries: item 1's note refers to a note that is not there
+const resolvedWritesIndexed = (createEntityGraph) => {
+	const to = [{ field: "to", targets: ["note"], holds: "one", onTargetDelete: "unlink" }];
+	const r = createEntityGraph(noteWorld({ references: to })).graph.plan({ items: [{ op: "create", kind: "note", record: {} }, { op: "create", kind: "note", record: { to: "ghost" } }] });
+	return r.ok === false && r.refusal.details.ruleKey === "note.to.targets" && r.refusal.details.opIndex === 1 ? null : { what: "a resolver's write was given another item's index", got: r };
+};
+const contextToResolver = (createEntityGraph) => {
+	const r = createEntityGraph(noteWorld()).graph.plan({ items: [{ op: "create", kind: "note", record: {} }] }, { context: { place: "desk" } });
+	return r.ok && r.writes[0].record.place === "desk" ? null : { what: "the context did not reach a resolver", got: r };
+};
+const contextToConsequence = (createEntityGraph) => {
+	const stamp = { id: "stamp", phase: "first", trigger: { created: ["note"] }, run: ({ matches, context }) => matches.map((m) => ({ op: "set", kind: "note", id: m.id, patch: { by: context?.who ?? null } })) };
+	const r = createEntityGraph({ phases: ["first"], kinds: [{ kind: "note", consequences: [stamp] }] }).graph.plan({ items: [{ op: "create", kind: "note", id: "a", record: {} }] }, { context: { who: "me" } });
+	return r.ok && r.writes[0].record.by === "me" ? null : { what: "the context did not reach a consequence", got: r };
+};
+const contextToCondition = (createEntityGraph) => {
+	const roomy = { id: "roomy", check: ({ graph, context }) => (graph.all("note").length > (context?.limit ?? 1) ? [{ subject: "all", measure: 1, sentence: "too many" }] : []) };
+	const g = createEntityGraph({ kinds: [{ kind: "note", conditions: [roomy] }] }, { position: 1, entities: [{ kind: "note", id: "a", record: {} }] }).graph;
+	const r = g.plan({ items: [{ op: "create", kind: "note", id: "b", record: {} }] }, { context: { limit: 2 } });
+	return r.ok ? null : { what: "the context did not reach a condition", got: r };
+};
 const MUTANTS = [
 	{ name: "a stale reverse entry", file: "references.js", needle: "this.drop(id); // the references it held before this change" },
 	{ name: "a missed delete", file: "references.js", needle: "this.drop(id); // a deleted entity refers to nothing" },
@@ -85,6 +115,11 @@ const MUTANTS = [
 	{ name: "the conflict let through", file: "phases.js", needle: "if (holder !== undefined && holder !== c.key)", replacement: "if (false)", check: conflictReported },
 	{ name: "a held write not judged: a consequence's writes spared their shape", file: "reference-rules.js", needle: "touched.has(id) ? shapeBreach(d, entity) : null", replacement: "touched.has(id) && s.lastWrite.get(id)?.by === null ? shapeBreach(d, entity) : null", check: heldWriteJudged },
 	{ name: "a shared match list kept after a write", file: "phases.js", needle: "if (found === undefined || found.steps !== s.steps.length)", replacement: "if (found === undefined)", check: sharedRefreshed },
+	{ name: "a resolver called against the edit as it was found, not as the items before it left it", file: "planner.js", needle: "resolveItem(s, d, resolver, item, context)", replacement: "resolveItem(new Scratch(view, d), d, resolver, item, context)", check: resolvedAgainstTheEdit },
+	{ name: "a resolver's writes given the first item's index", file: "planner.js", needle: "applyItem(s, d, write, `items[${i}].writes[${j}]`, i, null)", replacement: "applyItem(s, d, write, `items[${i}].writes[${j}]`, 0, null)", check: resolvedWritesIndexed },
+	{ name: "the context not handed to a resolver", file: "resolvers.js", needle: "freeze({ item, graph: reader, context })", replacement: "freeze({ item, graph: reader, context: undefined })", check: contextToResolver },
+	{ name: "the context not handed to a consequence", file: "phases.js", needle: "freeze({ matches: heard, graph: reader, context })", replacement: "freeze({ matches: heard, graph: reader, context: undefined })", check: contextToConsequence },
+	{ name: "the context not handed to a condition", file: "phases.js", needle: "freeze({ graph: reader, context })", replacement: "freeze({ graph: reader, context: undefined })", check: contextToCondition },
 	{ name: "a condition's worsening let through: only a new breach refuses", file: "reference-rules.js", needle: "if (c.measure <= (conditionsBefore.get(key)?.measure ?? 0))", replacement: "if (conditionsBefore.has(key))", check: conditionWorseningRefused },
 ];
 

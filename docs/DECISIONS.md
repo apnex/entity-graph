@@ -244,13 +244,14 @@ Kinds and references as objects keyed by name - a duplicate cannot be written, s
 ## D12 - Proposed reading: the view is first filled from entities stated with their position, and takes in each later change in order, applying no rule
 
 **Proposed by:** the builder of M1, 2026-11-11, for zorg's review, on the build plan's decision owed before M1 (`docs/BUILD-PLAN.md`, section 4; `CONTRACT.md`, *Design owed*).\
-**Affects:** `src/view.ts`, `src/entity-graph.ts`.
+**Affects:** `src/view.ts`, `src/entity-graph.ts`.\
+**Corrected by `D30` (2026-11-12), at zorg's request:** the sentence on how a change is checked said "against the view as the items before it leave it"; it now says what `EntityView.check` does, one item per identity checked against the view before any is applied.
 
 **Reading.**\
 A graph starts from the entities it is given and the position they reflect, as a reading of a store at that position gives them, or empty at position 0; the corpus leaves the first fill uncovered, and asks only that filling and landing the entities as one change answer alike.\
 An opening is no change: it is checked as a change's items are, and not bound by a change's 2,000 items, since a store holds any number of entities at one position; an opening that is not plain data is refused, `invalid-opening`.\
 Every change taken in afterwards states a position after the view's, which the view moves to; a change at or before it is refused, `stale-position`, and changes nothing; a gap between positions is allowed (the corpus's `R7`, `R7a`).\
-A change states each entity's whole state after it, or its deletion, and is checked whole, against the view as the items before it leave it, before any item is applied.\
+A change states at most one item per identity - each entity's whole state after the change, or its deletion - and is checked whole against the view before any item is applied, a second item naming an identity refused as `duplicate-item`.\
 Taking a change in applies no reference rule: a deleted target leaves its referrers' references, and a reference to an absent target or a target of a kind the reference does not allow, an exclusive target held twice and a reference below its minimum are each held as they stand (the corpus's `R3`); only a form the declaration cannot hold, such as a list in a one-target reference, is refused, `invalid-reference`.\
 What the graph does when the store no longer holds the position it needs, and whether a gap means a missed change, are settled with the store port at M6.
 
@@ -453,6 +454,7 @@ Staying on shape-check `0.1.0` until M8 - a consumer's dialect 2 shapes would be
 **Proposed by:** the builder of M3, 2026-11-11, for zorg's review, reading `CONTRACT.md`'s *Consequences and the stopping rule* and *Judging and refusals*; it takes the neutral corpus's readings `R25` to `R29`, `R32` and `R36` (`corpus/README.md`).\
 **Affects:** `src/declaration.ts`, `src/phases.ts`, `src/planner.ts`.\
 **Corrected by `D25` (2026-11-12), after the independent check of `5f6c512`:** the conflict's measure is stated below as the settlement it is; and the last sentence below, on the net-write bound, held only for the expansion after the last phase, as `D25` restates.\
+**Restated by `D28` (2026-11-12):** a condition's `check` is handed `{ graph, context }`, as a consequence and a resolver are, not the reader alone, and its reading of the state the edit found is kept per position and context.\
 The rest is kept as it was proposed.
 
 **Reading.**\
@@ -483,7 +485,8 @@ Naming the second consequence as the conflict's `ruleKey` and the item it follow
 ## D22 - Proposed reading: a consequence or condition cannot change the view
 
 **Proposed by:** the builder of M3, 2026-11-11, for zorg's review, on the brief's purity requirement and `CONTRACT.md`'s "a pure function".\
-**Affects:** `src/reader.ts`, `src/phases.ts`, `src/entity-graph.ts`.
+**Affects:** `src/reader.ts`, `src/phases.ts`, `src/entity-graph.ts`.\
+**Refined by `D31` (2026-11-12):** `plan` refuses a call made while planning before reading anything it carries, and observes what it carries unread.
 
 **Reading.**\
 Everything a consequence or condition is handed is frozen - the matches, each record, every entity and list its reader answers - and its reader answers only during the call it is handed to, throwing when asked afterwards or for a kind the declaration does not hold.\
@@ -504,7 +507,8 @@ Copying what each function is handed instead of freezing it - a function's chang
 
 **Proposed by:** the builder of M3, 2026-11-11, for zorg's review, reading `CONTRACT.md`'s *Consequence writes held to request rules*; it takes the corpus's readings `R30` and `R33`.\
 **Owed to zorg:** the new member `details.writers`, since the contract's refusal form names `details` as `{ ruleKey, subject, measure, opIndex, sentence }` and no member can name a consequence there; this branch adds it in the code and leaves `CONTRACT.md`'s terms as they are until zorg rules.\
-**Affects:** `src/reference-rules.ts`, `src/refusal.ts`, `src/planner.ts`, `src/phases.ts`.\
+**Affects:** `src/reference-rules.ts`, `src/refusal.ts`, `src/planner.ts`, `src/phases.ts`.\\
+**Accepted by zorg** (2026-11-12, `drawv2-entity-graph-m2-m3-reply.md`), with `details.writers` approved for `CONTRACT.md`; added there under `D30` (draw's `H31-13`).
 **Refined by `D25` (2026-11-12):** for a breach of a reference rule or a shape, `writers` names the consequence or rule whose write the breach follows from (the corpus's `R38`), a rule by its key; a condition's breach names those that wrote its subject.\
 The text below is kept as it was proposed.
 
@@ -545,7 +549,8 @@ Judging a requested write's shape on the result by its number of misfits, a part
 ## D25 - The independent check's findings on `5f6c512` fixed: the early stop waits for the last expansion, a rule is named among the writers, changes are worked out once per write
 
 **Ruled by:** the builder of M3, 2026-11-12, on the independent check of pull request 6 at `5f6c512`, dispatched by draw's recorder; proposed for zorg's review where it settles what the contract leaves open, and `details.writers` still owed to zorg (`D23`).\
-**Affects:** `src/planner.ts`, `src/reference-rules.ts`, `src/scratch.ts`, `src/phases.ts`, `src/declaration.ts`, `test/phases.test.js`, `test/plan-cost.test.js`, `test/plan.test.js`, `test/mutation.test.js`, `test/corpus.test.js`.
+**Affects:** `src/planner.ts`, `src/reference-rules.ts`, `src/scratch.ts`, `src/phases.ts`, `src/declaration.ts`, `test/phases.test.js`, `test/plan-cost.test.js`, `test/plan.test.js`, `test/mutation.test.js`, `test/corpus.test.js`.\
+**Accepted by zorg** (2026-11-12, `drawv2-entity-graph-m2-m3-reply.md`), with `details.writers` approved for `CONTRACT.md`; added there under `D30` (draw's `H31-13`).
 
 **Ruling.**\
 The expansion may stop early at the net-write bound only when it is the last of the plan: after the requested items when the declaration has no phase, and otherwise after the last phase.\
@@ -566,4 +571,130 @@ An edit that changes nothing cannot write too much; and the contract asks a refu
 **Alternatives refuted.**\
 Counting an entity as a certain write once a requested item or consequence can no longer write it - the scratch layer cannot know that before the last phase has run.\
 Keeping each consequence's matches apart and caching only the change records - 300 listeners with one trigger would still each read every change, about 290 ms where they now add about 1 ms.
+
+---
+
+## D26 - M4 is built: intent resolvers and the edit context; `graph-declaration` and `plan-graph-change` served, the other rows deferred to M5 and M6
+
+**Ruled by:** the build plan, approved by the director as draw's `H31-10` (2026-11-11, draw's `dev/DECISIONS.md`), on the contract co-signed by zorg (`zorg/docs/DECISIONS.md` `D76`); the as-built choices are the builder's of M4, proposed for zorg's review where they settle something the contract leaves open, as `D27` to `D29` do.\
+**Affects:** `src/declaration.ts`, `src/resolvers.ts`, `src/planner.ts`, `src/phases.ts`, `src/refusal.ts`, `src/entity-graph.ts`, `export-map.json`, `test/`.
+
+**Ruling.**\
+A kind may declare an `intentResolver`, a function that rewrites each requested item of its kind into the writes it stands for, against the edit as the items before it left it (`D27`).\
+A plan takes `plan(edit, { context })`, the context read once as plain JSON and handed to every consequence, condition and resolver, never interpreted (`D28`).\
+An edit whose every item resolves to nothing is a plan that changes nothing (`D29`).\
+`graph-declaration` and `plan-graph-change` are served, each with its contract test file; `reversible-history` and `positioned-graph-sync` stay deferred under this ruling, to M5 and M6, as the build plan has them.\
+The neutral corpus's batch 4 (five cases, written by another agent, on `main` with wave B) passes unedited, with batches 1 to 3, the harness running every batch directory.
+
+**Why.**\
+The plan's M4 completes the planning surface: each term of both rows - kinds as data, the stopping rule, held writes, judging, resolvers and the context - is built and tested.
+
+**Alternatives refuted.**\
+Serving the rows at M3 - the resolver and the context are terms of both.
+
+---
+
+## D27 - Proposed reading: an intent resolver rewrites one requested item against the edit so far, its writes standing in the item's place
+
+**Proposed by:** the builder of M4, 2026-11-12, for zorg's review, reading `CONTRACT.md`'s *Intent resolvers* and the *Design owed* question of how an entity created within an edit is named; it takes the corpus's reading `R35`.\
+**Affects:** `src/declaration.ts`, `src/resolvers.ts`, `src/planner.ts`.
+
+**Reading.**\
+A kind's `intentResolver` is a function, refused at creation otherwise (`<kind>.intentResolver: invalid`).\
+It is called once for each requested item of its kind, in item order, before the item is checked, handed `{ item, graph, context }`: the item as read, frozen; a reader of the edit as the items before it left it, before any rule is expanded (`R14`); and the plan's context (`D28`).\
+So an item of its kind may leave out what the resolver supplies, its identity included, and the application names an entity created within the edit before the store forms an identity, as the contract proposes.\
+It answers a list of writes in the edit's own form, which stand in the item's place: applied in order, each checked as a requested item is, its shape at the item included (`R31`), each carrying the item's index, so a breach it leads to on the result names that item; its writes are not resolved again, and may write any declared kind.\
+A resolver that throws, answers what is not plain data or not a list, or reaches for what it was handed is refused as `resolver-failed`, keyed `<kind>.intentResolver`, the item's identity or `items[<i>]` as `subject`, the item as `opIndex`.\
+A write that is no item - not an object, an unknown operation, members not its operation's, a record that is not an object - or that names no declared kind is the resolver's fault, refused with that fault's code and keyed `<kind>.intentResolver`; any other fault of a write, of the edit's state, is the item's, refused as a requested write's would be.\
+An item of a kind without a resolver is applied as given.
+
+**Why.**\
+The contract has the resolver rewrite one item "judged against the scratch view as the items before it left it" and the component apply the result "without understanding it"; checking its writes as requested items keeps one set of rules for what an edit may write, and naming the resolver for what only it could get wrong tells the application where to look.
+
+**Alternatives refuted.**\
+Resolving a resolver's writes again - a resolver writing its own kind would loop.\
+Naming the resolver for every fault of its writes - a write onto an entity absent at that point is the edit's state, as it is for a requested item, and the corpus refuses a resolver's misfit as the item's (`b4-02`).
+
+---
+
+## D28 - Proposed reading: the edit context is read once, as plain JSON, and handed alike to consequences, conditions and resolvers
+
+**Proposed by:** the builder of M4, 2026-11-12, for zorg's review, reading `CONTRACT.md`'s *Edit context*; it takes the corpus's reading `R34`.\
+**Affects:** `src/entity-graph.ts`, `src/planner.ts`, `src/phases.ts`, `src/resolvers.ts`.\
+**Corrected by `D31` (2026-11-12):** the reading of the state found was kept by the context's canonical JSON, so two contexts differing only in key order shared it; it is now kept by the context compared with its keys' order.
+
+**Reading.**\
+`plan(edit, { context })` reads the context once, through shape-check's `readPlainJson`, before any item; one that is not plain JSON is refused as `invalid-context`, keyed by the code, `"context"` as `subject`, a measure of 1 and `opIndex` -1, before any fault of an item.\
+The same frozen copy is handed to every consequence, as `{ matches, graph, context }`, every condition, as `{ graph, context }`, and every resolver, as `{ item, graph, context }`; it is `undefined` when the plan has none, and `null` is a context like any other.\
+A condition is run with it on the state the edit found and on the state the edit would leave (`R32`), its reading of the state found kept per view position and context, keyed by the context's canonical JSON, so two plans with different contexts never share it.\
+The component never reads the context itself.
+
+**Why.**\
+The contract has consequences, conditions and resolvers read the context and the component never interpret it; reading it once before anything else means every function sees one value, and a bad one is refused before any work is done.
+
+**Alternatives refuted.**\
+Handing a condition the reader alone, as `D21` first had it - the context could not reach it, and the three kinds of function would take three forms.
+
+---
+
+## D29 - Proposed reading: an edit whose every item resolves to nothing is a plan that changes nothing (draw's Q8)
+
+**Proposed by:** the builder of M4, 2026-11-12, for zorg's review, on the first run of draw's cases after M3 (`RUN-1-AFTER-M3.md`, *Contract questions*, Q8).\
+**Affects:** `src/planner.ts`, `test/resolvers.test.js`, `test/plan-properties.test.js`.
+
+**Reading.**\
+When every requested item resolves to no writes - a removal of an entity already absent, or a creation already as asked, as an application's resolver may answer - the plan is accepted as one that changes nothing: `{ ok: true, position, steps: [], inverse: [], writes: [] }`.\
+Its phases run and hear no change, and its conditions find no breach the state it found did not hold; an item that does resolve to writes alongside such items is planned as ever.\
+An edit of no items stays refused as `empty-edit`: that is a fault of the request itself, where an item resolving to nothing was read, understood and found to need nothing.
+
+**Why.**\
+Draw accepts such an edit as no change (`del-missing-is-no-op`), so a request replayed after it landed costs nothing; and the resolver is the application's own statement that the item stands for no write, which the component applies without understanding it.
+
+**Alternatives refuted.**\
+Refusing it as `empty-edit` - that would refuse a request for what the application's own resolver made of it, and make an idempotent replay fail.
+
+---
+
+## D30 - zorg accepts the readings `D10` to `D25`; `details.writers` enters the contract, promises are observed, and `D12` says what the view checks
+
+**Ruled by:** zorg, reviewing M1 (2026-11-11, `drawv2-planning-builds-reply.md`) and M2 and M3 (2026-11-12, `drawv2-entity-graph-m2-m3-reply.md`), and the director, accepting zorg's three items for M4 as draw's `H31-13`; built by the builder of M4.\
+**Affects:** `CONTRACT.md`, `src/refusal.ts`, `src/index.ts`, `src/plain-members.ts`, `src/phases.ts`, `src/resolvers.ts`, `src/planner.ts`, `src/view.ts`, `src/declaration.ts`, `src/entity-graph.ts`, `test/promise-hygiene.test.js`.\
+**Extended by `D31` (2026-11-12):** what a refusal leaves unread is observed for every argument of every call, the questions and a call made while planning included, and walked whole rather than to shape-check's 1,000 objects.
+
+**Ruling.**\
+The readings `D10` to `D25` are accepted by zorg: `D10` to `D14` in its letter of 2026-11-11, and `D15` to `D25`, `details.writers` included, in its letter of 2026-11-12; `D26` to `D29` stay proposed for its review.\
+`CONTRACT.md`'s *Judging and refusals* gives `details` as `{ ruleKey, subject, measure, opIndex, sentence, writers? }`, stating what `writers` carries as zorg states it, and the exported `GraphRefusalDetails` matches; the exported types now include the declaration's consequences, conditions, triggers, reader and intent resolver.\
+Promises, under zorg's `D54` and `D55`, which shape-check's `readPlainJson` enforces for plain JSON: a declaration's member or item that is a native promise is refused, and whenever a value is refused its own value, every member or item read from it so far and anything a Proxy's trap threw are handed to shape-check's `observePromises`.\
+A member or item the caller reads as plain JSON next - an edit's items, a change's items, an opening's entities, a kind's references, the plan's options - keeps a promise for that reading, which refuses it and observes it, so its fault is still named at its item; whatever a refusal leaves unread - the rest of a declaration, an edit, a change, an opening or the options, and the items after the first refused - is observed with it.\
+A value a consequence, a condition or a resolver throws is handed to `observePromises` before the refusal.\
+`D12` and `src/view.ts` now say that a change states at most one item per identity, refused as `duplicate-item` otherwise, each checked against the view before any is applied, as `EntityView.check` does.
+
+**Why.**\
+A refusal must name the consequence or rule behind it, which the contract's form now carries; and no input the component refuses, nor any function it calls, may leave the host with an unhandled rejection.
+
+**Alternatives refuted.**\
+Refusing a promise in every member and item - an edit holding one would be refused as a whole, where its reading names the item that faulted.
+
+---
+
+## D31 - The independent check's findings on `6929d79` fixed: every refusal observes what it did not read, however large, and the conditions' reading is kept by the context in order
+
+**Ruled by:** the builder of M4, 2026-11-12, on the independent check of pull request 7 at `6929d79`, dispatched by draw's recorder; proposed for zorg's review, with one question for it below.\
+**Affects:** `src/entity-graph.ts`, `src/plain-members.ts`, `src/declaration.ts`, `src/phases.ts`, `src/planner.ts`, `src/resolvers.ts`, `src/view.ts`, `test/promise-hygiene.test.js`, `test/resolvers.test.js`, `test/corpus.test.js`.
+
+**Ruling.**\
+Every refusal that returns before an argument is read observes that argument: a declaration refused before its opening is read observes the opening; options refused as not an object, for a member they do not know, or for a context that is not plain JSON observe the edit; a call made while planning, to `applyChange` or `plan`, is refused before anything it carries is read, and observes it; and a question refused for one argument - a kind, an identity, a field, a filter - observes all of them.\
+Every observation walks the whole of what it is handed, past shape-check's walk of 1,000 objects, and every plain-JSON reading that refuses observes its value whole too, so a promise behind more than 1,000 parts of a refused answer, edit or change is observed.\
+A condition's reading of the state the edit found is kept by the view's position and the context compared with its keys' order, since plain JSON as shape-check reads it keeps the order of an object's keys and a condition may read it; two contexts differing only in that order are read apart.\
+The corpus's `b4-06` and `b4-07` (`a7b82da`, merged unedited) pass with the rest of batch 4: a resolver's write leading to a breach on the result names the item it rewrote.
+**A question for zorg:** shape-check's `readPlainJson` observes the values it captured on refusal through a walk of at most 1,000 objects, and `observePromises` defaults to the same bound; whether shape-check's reading should observe all it captured, so no consumer need walk a refused value again, is shape-check's to rule.\
+The question has a cost the re-check of `fc90540` measured: walking the whole value means a hostile Proxy that hands back a fresh child on every read is walked until memory runs out, on paths that refused it at once at `6929d79` - `applyChange` with such a Proxy carrying a stray member, `get("nope", proxy)`, and the other refusals observing an argument they did not read - as the same Proxy already exhausts memory inside shape-check's `readPlainJson` wherever plain JSON is read.\
+So zorg is asked as well whether observation should be bounded: a large finite bound always ends, but can miss a promise past it, where an unbounded walk misses none but need not end; entity-graph walks unbounded until zorg rules.
+
+**Why.**\
+An argument left unread is never observed unless the refusal does it, and a host running Node's default treats an unhandled rejection as a crash; and a reading kept for a context must be the reading that context gets.
+
+**Alternatives refuted.**\
+Keying the conditions' reading by the context's canonical JSON, as `D28` first had it - two contexts a condition can tell apart would share a reading.\
+Leaving the bound to shape-check - until it rules, a consumer refusing a large value would leave a promise in it unhandled.
 

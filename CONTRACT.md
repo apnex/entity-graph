@@ -13,8 +13,8 @@ related: [C0, C1, C3, C4, C5, C6, C11, C12, C13, C14, P4, E5, A1, A2, A3]
 
 The contract of record for entity-graph: what a consumer can depend on, scaffolded as a candidate component under zorg's `D35` and `BL33` (`zorg/docs/BACKLOG.md`) and registered as `C15` (`status: draft`) in `mission-kit/components/C15-entity-graph.md`; its vision is ratified (`D7`), and its contract is a draft whose design is owed.\
 It also carries the fields of its mission-kit registry entry (`C15`).\
-Each row states what a consumer will depend on at the level `VISION.md` commits to; how each is achieved is owed by the design effort (`D2`), which began with the build plan (`docs/BUILD-PLAN.md`) and has built its first three milestones, the dated view, planning with the reference rules, and the application's phases, held writes, conditions and shapes (`D10`, `D15`, `D20`); what it still owes is listed under *Design owed*.\
-The terms under *Terms of the rows* carry the requirements its first candidate consumer, `drawv2`, records under mission-kit's `0117`, drafted with zorg's agreement and ruled by the director (`D8`, `D9`); the reference rules, the consequences and the stopping rule, the holding of consequence writes, and judging are built, and the other terms are not yet (`D15`, `D20`).
+Each row states what a consumer will depend on at the level `VISION.md` commits to; how each is achieved is owed by the design effort (`D2`), which began with the build plan (`docs/BUILD-PLAN.md`) and has built its first four milestones, the dated view, planning with the reference rules, the application's phases, held writes, conditions and shapes, and intent resolvers and the edit context (`D10`, `D15`, `D20`, `D26`); what it still owes is listed under *Design owed*.\
+The terms under *Terms of the rows* carry the requirements its first candidate consumer, `drawv2`, records under mission-kit's `0117`, drafted with zorg's agreement and ruled by the director (`D8`, `D9`); the reference rules, the consequences and the stopping rule, the holding of consequence writes, intent resolvers, the edit context, and judging are built, and the other terms are not yet (`D15`, `D20`, `D26`).
 
 ---
 
@@ -86,7 +86,8 @@ State an application keeps about its whole set, rather than about one entity, is
 Rules - reference rules, conditions over the whole set, and the rules a consequence write is held to - are judged on the state the edit would leave, by a stable key and a numeric measure for each breach: an edit is refused only for a breach it introduces, or whose measure it raises.\
 A fault in the request itself - an item that names no known operation, a change to an entity absent at that point in the edit, a request outside its bounds - is refused at the item that faults.\
 A shape misfit of a requested or consequence write refuses the plan.\
-A refusal is a `GraphRefusal` in the shared refusal form, `{ part, code, what, why, fix, details }`, with `part: "entity-graph"`; `details` carries `{ ruleKey, subject, measure, opIndex, sentence }`, where `opIndex` is the index of the requested item that led there, or `-1` for the edit as a whole, and `sentence` is an application condition's own sentence, carried verbatim.\
+A refusal is a `GraphRefusal` in the shared refusal form, `{ part, code, what, why, fix, details }`, with `part: "entity-graph"`; `details` carries `{ ruleKey, subject, measure, opIndex, sentence, writers? }`, where `opIndex` is the index of the requested item that led there, or `-1` for the edit as a whole, and `sentence` is an application condition's own sentence, carried verbatim.\
+`writers`, a list of keys, names the consequences and reference rules behind a refusal: the two consequences of a `consequence-conflict`; the consequence (`<kind>.<id>`) or reference rule (`<kind>.<field>.<option>`) whose write a breach of a reference rule or a shape follows from; and, for a breach of a condition, the consequences and rules that wrote its `subject`, sorted; it is omitted where a requested item alone wrote the entity concerned.\
 The words a person or an agent finally reads are the application's to choose from these facts.
 
 **Undo and redo (`reversible-history`, `D8`).**\
@@ -172,7 +173,7 @@ Each is a question, and any answer keeps every commitment in `VISION.md` and in 
 ## Reference
 
 This repository, `apnex/entity-graph`.\
-Its first three milestones are built, serving `dated-graph-view` in memory, with planning under the reference rules and the application's phases, the other rows deferred (`D10`, `D15`, `D20`); the rest is built milestone by milestone under `docs/BUILD-PLAN.md`.\
+Its first four milestones are built, serving `dated-graph-view`, `graph-declaration` and `plan-graph-change` in memory, the other rows deferred (`D10`, `D15`, `D20`, `D26`); the rest is built milestone by milestone under `docs/BUILD-PLAN.md`.\
 `positioned-graph-sync` takes a store port shaped by the `entity-store` capabilities it requires, with `entity-store` as the reference provider (*The store port*), and `reversible-history` keeps its undo records in the note `entity-store:change-provenance` carries.\
 Those `entity-store` capabilities are designed under `entity-store`'s own `D4` and not yet served: its multi-item `change`, the expected position on a change, and the note.
 
