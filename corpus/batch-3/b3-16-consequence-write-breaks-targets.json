@@ -1,0 +1,45 @@
+{
+  "case": "b3-16-consequence-write-breaks-targets",
+  "batch": 3,
+  "summary": "citeByTitle, writing a section to cite an absent figure or a section, is held to the targets rule a requested write would meet and refused, naming the consequence and the item it follows from; citing a present figure is accepted, and so is a write onto a section whose absent citation already stood, unless it adds another.",
+  "covers": ["plan-graph-change", "Consequence writes held to request rules", "Reference rules", "Judging and refusals"],
+  "readings": ["R1", "R2", "R3", "R4", "R14", "R15", "R18", "R19", "R20", "R21", "R23", "R24", "R25", "R26", "R27", "R28", "R30", "R33", "R38"],
+  "world": "document",
+  "variant": "citing",
+  "verdict": "accepted",
+  "steps": [
+    { "start": { "position": 0, "entities": [
+      { "kind": "section", "id": "s1", "record": { "heading": "Intro", "parent": null, "cites": [] } },
+      { "kind": "section", "id": "s2", "record": { "heading": "Method", "parent": null, "cites": [] } },
+      { "kind": "section", "id": "s3", "record": { "heading": "Notes", "parent": null, "cites": ["f9"] } },
+      { "kind": "figure", "id": "f1", "record": { "title": "Map", "section": "s1", "number": 1 } },
+      { "kind": "figure", "id": "f2", "record": { "title": "Chart", "section": "s1", "number": 2 } },
+      { "kind": "caption", "id": "c1", "record": { "body": "Figure 1: Map", "figure": "f1" } },
+      { "kind": "caption", "id": "c2", "record": { "body": "Figure 2: Chart", "figure": "f2" } }
+    ] } },
+    { "plan": { "position": 0, "edit": [
+      { "op": "create", "kind": "figure", "id": "f3", "record": { "title": "Plot", "section": "s2", "number": 1 } },
+      { "op": "change", "kind": "section", "id": "s1", "record": { "heading": "See f9", "parent": null, "cites": [] } }
+    ], "outcome": "refused", "refusal": { "part": "entity-graph", "code": "reference-rule", "ruleKey": "section.cites.targets", "subject": "s1", "measure": 1, "opIndex": 1, "writers": ["section.citeByTitle"] } } },
+    { "plan": { "position": 0, "edit": [
+      { "op": "change", "kind": "section", "id": "s1", "record": { "heading": "See s2", "parent": null, "cites": [] } }
+    ], "outcome": "refused", "refusal": { "part": "entity-graph", "code": "reference-rule", "ruleKey": "section.cites.targets", "subject": "s1", "measure": 1, "opIndex": 0, "writers": ["section.citeByTitle"] } } },
+    { "plan": { "position": 0, "edit": [
+      { "op": "change", "kind": "section", "id": "s1", "record": { "heading": "See f2", "parent": null, "cites": [] } }
+    ], "outcome": "accepted", "writes": [
+      { "op": "put", "kind": "section", "id": "s1", "record": { "heading": "See f2", "parent": null, "cites": ["f2"] } }
+    ] } },
+    { "plan": { "position": 0, "edit": [
+      { "op": "change", "kind": "section", "id": "s3", "record": { "heading": "See f1", "parent": null, "cites": ["f9"] } }
+    ], "outcome": "accepted", "writes": [
+      { "op": "put", "kind": "section", "id": "s3", "record": { "heading": "See f1", "parent": null, "cites": ["f9", "f1"] } }
+    ] } },
+    { "plan": { "position": 0, "edit": [
+      { "op": "change", "kind": "section", "id": "s3", "record": { "heading": "See f8", "parent": null, "cites": ["f9"] } }
+    ], "outcome": "refused", "refusal": { "part": "entity-graph", "code": "reference-rule", "ruleKey": "section.cites.targets", "subject": "s3", "measure": 2, "opIndex": 0, "writers": ["section.citeByTitle"] } } },
+    { "ask": { "position": 0, "questions": [
+      { "q": "get", "kind": "section", "id": "s1", "answer": { "heading": "Intro", "parent": null, "cites": [] } },
+      { "q": "referrersOf", "id": "f9", "answer": [ { "kind": "section", "id": "s3", "field": "cites" } ] }
+    ] } }
+  ]
+}

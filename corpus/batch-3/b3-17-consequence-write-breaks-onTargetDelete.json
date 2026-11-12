@@ -1,0 +1,47 @@
+{
+  "case": "b3-17-consequence-write-breaks-onTargetDelete",
+  "batch": 3,
+  "summary": "dropBlank, deleting a figure another section cites through a refusing reference, is held to the rule a requested deletion would meet and refused, naming the citing section, the consequence and the item, at index 1, it follows from; deleting an uncited figure, or dropping the citation in the same edit, is accepted.",
+  "covers": ["plan-graph-change", "Consequence writes held to request rules", "Reference rules", "Judging and refusals"],
+  "readings": ["R1", "R2", "R14", "R15", "R17", "R18", "R19", "R21", "R23", "R24", "R25", "R26", "R27", "R28", "R30", "R33", "R38"],
+  "world": "document",
+  "variant": "indexed",
+  "verdict": "accepted",
+  "steps": [
+    { "start": { "position": 0, "entities": [
+      { "kind": "section", "id": "s1", "record": { "heading": "Intro", "parent": null, "cites": [] } },
+      { "kind": "section", "id": "s2", "record": { "heading": "Method", "parent": null, "cites": ["f1"] } },
+      { "kind": "figure", "id": "f1", "record": { "title": "Map", "section": "s1", "number": 1 } },
+      { "kind": "figure", "id": "f2", "record": { "title": "Chart", "section": "s1", "number": 2 } },
+      { "kind": "figure", "id": "f3", "record": { "title": "Plot", "section": "s2", "number": 1 } },
+      { "kind": "caption", "id": "c1", "record": { "body": "Figure 1: Map", "figure": "f1" } },
+      { "kind": "caption", "id": "c2", "record": { "body": "Figure 2: Chart", "figure": "f2" } },
+      { "kind": "caption", "id": "c3", "record": { "body": "Figure 1: Plot", "figure": "f3" } },
+      { "kind": "index", "id": "ix", "record": { "count": 3 } }
+    ] } },
+    { "plan": { "position": 0, "edit": [
+      { "op": "create", "kind": "section", "id": "s4", "record": { "heading": "Notes", "parent": null, "cites": [] } },
+      { "op": "change", "kind": "figure", "id": "f1", "record": { "title": "", "section": "s1", "number": 1 } }
+    ], "outcome": "refused", "refusal": { "part": "entity-graph", "code": "reference-rule", "ruleKey": "section.cites.onTargetDelete", "subject": "s2", "measure": 1, "opIndex": 1, "writers": ["figure.dropBlank"] } } },
+    { "plan": { "position": 0, "edit": [
+      { "op": "change", "kind": "figure", "id": "f2", "record": { "title": "", "section": "s1", "number": 2 } }
+    ], "outcome": "accepted", "writes": [
+      { "op": "del", "kind": "figure", "id": "f2" },
+      { "op": "del", "kind": "caption", "id": "c2" },
+      { "op": "put", "kind": "index", "id": "ix", "record": { "count": 2 } }
+    ] } },
+    { "plan": { "position": 0, "edit": [
+      { "op": "change", "kind": "figure", "id": "f1", "record": { "title": "", "section": "s1", "number": 1 } },
+      { "op": "change", "kind": "section", "id": "s2", "record": { "heading": "Method", "parent": null, "cites": [] } }
+    ], "outcome": "accepted", "writes": [
+      { "op": "del", "kind": "figure", "id": "f1" },
+      { "op": "del", "kind": "caption", "id": "c1" },
+      { "op": "put", "kind": "section", "id": "s2", "record": { "heading": "Method", "parent": null, "cites": [] } },
+      { "op": "put", "kind": "index", "id": "ix", "record": { "count": 2 } }
+    ] } },
+    { "ask": { "position": 0, "questions": [
+      { "q": "referrersOf", "id": "f1", "answer": [ { "kind": "section", "id": "s2", "field": "cites" }, { "kind": "caption", "id": "c1", "field": "figure" } ] },
+      { "q": "get", "kind": "index", "id": "ix", "answer": { "count": 3 } }
+    ] } }
+  ]
+}
