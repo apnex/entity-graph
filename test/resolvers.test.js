@@ -64,6 +64,8 @@ test("a resolver's writes are checked as items are and carry the item's index; t
 	assert.deepEqual(facts(refused(g.plan({ items: [create("note", "ok", { title: "T" }), create("note", "bad", { title: "T" })] }))), { code: "shape-misfit", ruleKey: "note.shape", subject: "bad", measure: 1, opIndex: 1, sentence: null }, "refused at item 1, as a requested write would be");
 	assert.deepEqual(Object.keys(puts(accepted(g.plan({ items: [create("note", "ok", { title: "T" })] })))), ["ok", "tag-ok"]);
 	assert.deepEqual(facts(refused(g.plan({ items: [create("note", "x", { title: "T" }), create("note", "a", { title: "T" })] }))), { code: "entity-present", ruleKey: "entity-present", subject: "a", measure: 1, opIndex: 1, sentence: null }, "a fault of the edit's state, as the item's");
+	const to = make({ kinds: [{ kind: "note", references: [{ field: "to", targets: ["note"], holds: "one", onTargetDelete: "unlink" }], intentResolver: name }] });
+	assert.deepEqual(facts(refused(to.plan({ items: [create("note", undefined, { title: "A" }), create("note", undefined, { title: "B", to: "ghost" })] }))), { code: "rule-broken", ruleKey: "note.to.targets", subject: "n2", measure: 1, opIndex: 1, sentence: null }, "a breach judged on the result names the item its write carries");
 });
 
 test("a resolver that throws, answers what is not plain data, writes malformed items or an undeclared kind is refused naming it, and the view is as it was", () => {

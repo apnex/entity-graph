@@ -453,6 +453,7 @@ Staying on shape-check `0.1.0` until M8 - a consumer's dialect 2 shapes would be
 **Proposed by:** the builder of M3, 2026-11-11, for zorg's review, reading `CONTRACT.md`'s *Consequences and the stopping rule* and *Judging and refusals*; it takes the neutral corpus's readings `R25` to `R29`, `R32` and `R36` (`corpus/README.md`).\
 **Affects:** `src/declaration.ts`, `src/phases.ts`, `src/planner.ts`.\
 **Corrected by `D25` (2026-11-12), after the independent check of `5f6c512`:** the conflict's measure is stated below as the settlement it is; and the last sentence below, on the net-write bound, held only for the expansion after the last phase, as `D25` restates.\
+**Restated by `D28` (2026-11-12):** a condition's `check` is handed `{ graph, context }`, as a consequence and a resolver are, not the reader alone, and its reading of the state the edit found is kept per position and context.\
 The rest is kept as it was proposed.
 
 **Reading.**\
@@ -566,4 +567,84 @@ An edit that changes nothing cannot write too much; and the contract asks a refu
 **Alternatives refuted.**\
 Counting an entity as a certain write once a requested item or consequence can no longer write it - the scratch layer cannot know that before the last phase has run.\
 Keeping each consequence's matches apart and caching only the change records - 300 listeners with one trigger would still each read every change, about 290 ms where they now add about 1 ms.
+
+---
+
+## D26 - M4 is built: intent resolvers and the edit context; `graph-declaration` and `plan-graph-change` served, the other rows deferred to M5 and M6
+
+**Ruled by:** the build plan, approved by the director as draw's `H31-10` (2026-11-11, draw's `dev/DECISIONS.md`), on the contract co-signed by zorg (`zorg/docs/DECISIONS.md` `D76`); the as-built choices are the builder's of M4, proposed for zorg's review where they settle something the contract leaves open, as `D27` to `D29` do.\
+**Affects:** `src/declaration.ts`, `src/resolvers.ts`, `src/planner.ts`, `src/phases.ts`, `src/refusal.ts`, `src/entity-graph.ts`, `export-map.json`, `test/`.
+
+**Ruling.**\
+A kind may declare an `intentResolver`, a function that rewrites each requested item of its kind into the writes it stands for, against the edit as the items before it left it (`D27`).\
+A plan takes `plan(edit, { context })`, the context read once as plain JSON and handed to every consequence, condition and resolver, never interpreted (`D28`).\
+An edit whose every item resolves to nothing is a plan that changes nothing (`D29`).\
+`graph-declaration` and `plan-graph-change` are served, each with its contract test file; `reversible-history` and `positioned-graph-sync` stay deferred under this ruling, to M5 and M6, as the build plan has them.\
+The neutral corpus's batch 4 (five cases, written by another agent, on `main` with wave B) passes unedited, with batches 1 to 3, the harness running every batch directory.
+
+**Why.**\
+The plan's M4 completes the planning surface: each term of both rows - kinds as data, the stopping rule, held writes, judging, resolvers and the context - is built and tested.
+
+**Alternatives refuted.**\
+Serving the rows at M3 - the resolver and the context are terms of both.
+
+---
+
+## D27 - Proposed reading: an intent resolver rewrites one requested item against the edit so far, its writes standing in the item's place
+
+**Proposed by:** the builder of M4, 2026-11-12, for zorg's review, reading `CONTRACT.md`'s *Intent resolvers* and the *Design owed* question of how an entity created within an edit is named; it takes the corpus's reading `R35`.\
+**Affects:** `src/declaration.ts`, `src/resolvers.ts`, `src/planner.ts`.
+
+**Reading.**\
+A kind's `intentResolver` is a function, refused at creation otherwise (`<kind>.intentResolver: invalid`).\
+It is called once for each requested item of its kind, in item order, before the item is checked, handed `{ item, graph, context }`: the item as read, frozen; a reader of the edit as the items before it left it, before any rule is expanded (`R14`); and the plan's context (`D28`).\
+So an item of its kind may leave out what the resolver supplies, its identity included, and the application names an entity created within the edit before the store forms an identity, as the contract proposes.\
+It answers a list of writes in the edit's own form, which stand in the item's place: applied in order, each checked as a requested item is, its shape at the item included (`R31`), each carrying the item's index, so a breach it leads to on the result names that item; its writes are not resolved again, and may write any declared kind.\
+A resolver that throws, answers what is not plain data or not a list, or reaches for what it was handed is refused as `resolver-failed`, keyed `<kind>.intentResolver`, the item's identity or `items[<i>]` as `subject`, the item as `opIndex`.\
+A write that is no item - not an object, an unknown operation, members not its operation's, a record that is not an object - or that names no declared kind is the resolver's fault, refused with that fault's code and keyed `<kind>.intentResolver`; any other fault of a write, of the edit's state, is the item's, refused as a requested write's would be.\
+An item of a kind without a resolver is applied as given.
+
+**Why.**\
+The contract has the resolver rewrite one item "judged against the scratch view as the items before it left it" and the component apply the result "without understanding it"; checking its writes as requested items keeps one set of rules for what an edit may write, and naming the resolver for what only it could get wrong tells the application where to look.
+
+**Alternatives refuted.**\
+Resolving a resolver's writes again - a resolver writing its own kind would loop.\
+Naming the resolver for every fault of its writes - a write onto an entity absent at that point is the edit's state, as it is for a requested item, and the corpus refuses a resolver's misfit as the item's (`b4-02`).
+
+---
+
+## D28 - Proposed reading: the edit context is read once, as plain JSON, and handed alike to consequences, conditions and resolvers
+
+**Proposed by:** the builder of M4, 2026-11-12, for zorg's review, reading `CONTRACT.md`'s *Edit context*; it takes the corpus's reading `R34`.\
+**Affects:** `src/entity-graph.ts`, `src/planner.ts`, `src/phases.ts`, `src/resolvers.ts`.
+
+**Reading.**\
+`plan(edit, { context })` reads the context once, through shape-check's `readPlainJson`, before any item; one that is not plain JSON is refused as `invalid-context`, keyed by the code, `"context"` as `subject`, a measure of 1 and `opIndex` -1, before any fault of an item.\
+The same frozen copy is handed to every consequence, as `{ matches, graph, context }`, every condition, as `{ graph, context }`, and every resolver, as `{ item, graph, context }`; it is `undefined` when the plan has none, and `null` is a context like any other.\
+A condition is run with it on the state the edit found and on the state the edit would leave (`R32`), its reading of the state found kept per view position and context, keyed by the context's canonical JSON, so two plans with different contexts never share it.\
+The component never reads the context itself.
+
+**Why.**\
+The contract has consequences, conditions and resolvers read the context and the component never interpret it; reading it once before anything else means every function sees one value, and a bad one is refused before any work is done.
+
+**Alternatives refuted.**\
+Handing a condition the reader alone, as `D21` first had it - the context could not reach it, and the three kinds of function would take three forms.
+
+---
+
+## D29 - Proposed reading: an edit whose every item resolves to nothing is a plan that changes nothing (draw's Q8)
+
+**Proposed by:** the builder of M4, 2026-11-12, for zorg's review, on the first run of draw's cases after M3 (`RUN-1-AFTER-M3.md`, *Contract questions*, Q8).\
+**Affects:** `src/planner.ts`, `test/resolvers.test.js`, `test/plan-properties.test.js`.
+
+**Reading.**\
+When every requested item resolves to no writes - a removal of an entity already absent, or a creation already as asked, as an application's resolver may answer - the plan is accepted as one that changes nothing: `{ ok: true, position, steps: [], inverse: [], writes: [] }`.\
+Its phases run and hear no change, and its conditions find no breach the state it found did not hold; an item that does resolve to writes alongside such items is planned as ever.\
+An edit of no items stays refused as `empty-edit`: that is a fault of the request itself, where an item resolving to nothing was read, understood and found to need nothing.
+
+**Why.**\
+Draw accepts such an edit as no change (`del-missing-is-no-op`), so a request replayed after it landed costs nothing; and the resolver is the application's own statement that the item stands for no write, which the component applies without understanding it.
+
+**Alternatives refuted.**\
+Refusing it as `empty-edit` - that would refuse a request for what the application's own resolver made of it, and make an idempotent replay fail.
 
