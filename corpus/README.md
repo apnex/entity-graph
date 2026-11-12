@@ -211,7 +211,6 @@ Batches 1 and 2 keep their inline declarations, unchanged.
 ### Naming a world
 
 A batch 3 or 4 case carries `world` and, optionally, `variant`, in place of `declare`:
-
 ```json
 { "case": "b3-01-phases-deleted-and-changed", "batch": 3, "world": "document", "variant": "base", "verdict": "accepted", "steps": [] }
 ```
