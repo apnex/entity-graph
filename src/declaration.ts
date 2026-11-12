@@ -7,7 +7,7 @@
  * intent resolver (D26). A bad declaration is refused at creation, its subject naming the kind, the member and the part at fault.
  * The index from each kind to the consequences of each phase listening to it is built here, once.
  */
-import { type PreparedShape, prepareShapeDocument, readPlainJson } from "@apnex/shape-check";
+import { observePromises, type PreparedShape, prepareShapeDocument, readPlainJson } from "@apnex/shape-check";
 import { itemsOf, membersOf } from "./plain-members.js";
 import { type GraphRefusal, refuse } from "./refusal.js";
 
@@ -165,7 +165,11 @@ const firstUnknown = (value: Record<string, unknown>, known: ReadonlySet<string>
  * `unpaired`, or `undeclared <kind>`.
  */
 export function compileDeclaration(input: unknown): { ok: true; declaration: CompiledDeclaration } | { ok: false; refusal: GraphRefusal } {
-	const bad = (path: string, fault: string) => ({ ok: false as const, refusal: refuse("invalid-declaration", `${path}: ${fault}`) });
+	// a refused declaration has its promises observed, whatever part of it was read, so none goes unhandled (D30)
+	const bad = (path: string, fault: string) => {
+		observePromises(input);
+		return { ok: false as const, refusal: refuse("invalid-declaration", `${path}: ${fault}`) };
+	};
 	const top = membersOf(input);
 	if (top === null) return bad("declaration", "invalid");
 	if (top["kinds"] === undefined) return bad("kinds", "missing");
@@ -204,7 +208,7 @@ export function compileDeclaration(input: unknown): { ok: true; declaration: Com
 		const unknown = firstUnknown(declared, KIND);
 		if (unknown !== undefined) return bad(`${kind}.${unknown}`, "unknown");
 		// the references read once, each as plain JSON, so the first that is not plain data is named by its index
-		const listed = declared["references"] === undefined ? [] : itemsOf(declared["references"]);
+		const listed = declared["references"] === undefined ? [] : itemsOf(declared["references"], true);
 		if (listed === null) return bad(`${kind}.references`, "invalid");
 		const references: unknown[] = [];
 		for (const [j, entry] of listed.entries()) {

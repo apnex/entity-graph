@@ -2,44 +2,64 @@
  * Reading an input's members as plain data, running none of its code (docs/DECISIONS.md D10): an object's own enumerable
  * data members, or a list's items, copied once, so a getter, a Proxy whose trap throws, a prototype other than an object's or
  * a list's, or a list with members of its own beyond its items is refused rather than read. Plain JSON is read through
- * shape-check's `readPlainJson`; this reads the declaration's objects and lists, which may hold the functions later
- * milestones read and which plain JSON cannot hold.
+ * shape-check's `readPlainJson`; this reads the declaration's objects and lists, which may hold the functions consequences,
+ * conditions and resolvers are and which plain JSON cannot hold.
+ *
+ * Promises (zorg's D54 and D55; docs/DECISIONS.md D30): a native promise met as a member or an item is refused, since no part of a
+ * declaration is one, unless `plainNext` says the caller reads the values as plain JSON next, which refuses it there and observes
+ * it; and whenever a value is refused, the value itself, every member or item read from it so far and anything a Proxy's trap
+ * threw are handed to shape-check's `observePromises`, so a promise among them that rejects leaves no unhandled rejection.
  */
+import { observePromises } from "@apnex/shape-check";
 
 /** An object's own members, copied onto an object with no prototype, or null when it is not plain data. */
-export function membersOf(value: unknown): Record<string, unknown> | null {
+export function membersOf(value: unknown, plainNext = false): Record<string, unknown> | null {
+	const captured: unknown[] = [value];
+	const refused = (thrown?: unknown): null => {
+		observePromises([...captured, thrown]);
+		return null;
+	};
 	try {
-		if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
+		if (typeof value !== "object" || value === null || Array.isArray(value)) return refused();
 		const proto: unknown = Object.getPrototypeOf(value);
-		if (proto !== Object.prototype && proto !== null) return null;
+		if (proto !== Object.prototype && proto !== null) return refused();
 		const out: Record<string, unknown> = Object.create(null);
 		for (const key of Reflect.ownKeys(value)) {
 			const d = Object.getOwnPropertyDescriptor(value, key);
-			if (typeof key !== "string" || d === undefined || !("value" in d) || !d.enumerable) return null;
+			if (d !== undefined && "value" in d) captured.push(d.value);
+			if (typeof key !== "string" || d === undefined || !("value" in d) || !d.enumerable) return refused();
+			if (!plainNext && d.value instanceof Promise) return refused();
 			out[key] = d.value;
 		}
 		return out;
-	} catch {
-		return null;
+	} catch (thrown) {
+		return refused(thrown);
 	}
 }
 
 /** A list's items, copied, or null when it is not a plain list. */
-export function itemsOf(value: unknown): unknown[] | null {
+export function itemsOf(value: unknown, plainNext = false): unknown[] | null {
+	const captured: unknown[] = [value];
+	const refused = (thrown?: unknown): null => {
+		observePromises([...captured, thrown]);
+		return null;
+	};
 	try {
-		if (!Array.isArray(value) || Object.getPrototypeOf(value) !== Array.prototype) return null;
+		if (!Array.isArray(value) || Object.getPrototypeOf(value) !== Array.prototype) return refused();
 		const length = (Object.getOwnPropertyDescriptor(value, "length") as PropertyDescriptor).value as number;
 		const keys = Reflect.ownKeys(value);
-		if (keys.length !== length + 1) return null;
+		if (keys.length !== length + 1) return refused();
 		const out: unknown[] = [];
 		for (let i = 0; i < length; i++) {
 			const d = Object.getOwnPropertyDescriptor(value, String(i));
-			if (d === undefined || !("value" in d)) return null;
+			if (d !== undefined && "value" in d) captured.push(d.value);
+			if (d === undefined || !("value" in d)) return refused();
+			if (!plainNext && d.value instanceof Promise) return refused();
 			out.push(d.value);
 		}
 		return out;
-	} catch {
-		return null;
+	} catch (thrown) {
+		return refused(thrown);
 	}
 }
 

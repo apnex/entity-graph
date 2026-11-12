@@ -5,7 +5,7 @@
  * entity refers to, which containers of a kind hold a member, and what can be reached from an entity by following references.
  * Asking changes nothing. A question naming a kind or a field the declaration does not hold is refused, not answered empty.
  */
-import { readPlainJson, toCanonicalJson } from "@apnex/shape-check";
+import { observePromises, readPlainJson, toCanonicalJson } from "@apnex/shape-check";
 import { type CompiledDeclaration, compileDeclaration, type GraphDeclaration } from "./declaration.js";
 import type { Referrer } from "./references.js";
 import { type GraphRefusal, refuse } from "./refusal.js";
@@ -83,11 +83,16 @@ export function createEntityGraph(declaration: GraphDeclaration, opening?: Graph
 	// position and entities, or anything not plain data, is refused, the first entity that is not named by its index
 	const members = opening === undefined ? Object.create(null) as Record<string, unknown> : membersOf(opening);
 	if (members === null) return { ok: false, refusal: refuse("invalid-opening", "opening") };
+	// an opening refused before its entities are read has its promises observed (D30)
+	const unread = (subject: string) => {
+		observePromises(opening);
+		return { ok: false as const, refusal: refuse("invalid-opening", subject) };
+	};
 	const stray = Object.keys(members).find((k) => k !== "position" && k !== "entities");
-	if (stray !== undefined) return { ok: false, refusal: refuse("invalid-opening", `opening.${stray}`) };
+	if (stray !== undefined) return unread(`opening.${stray}`);
 	const start = members["position"] ?? 0;
-	if (typeof start !== "number" || !Number.isSafeInteger(start) || start < 0) return { ok: false, refusal: refuse("invalid-opening", "opening.position") };
-	const listed = members["entities"] === undefined ? [] : itemsOf(members["entities"]);
+	if (typeof start !== "number" || !Number.isSafeInteger(start) || start < 0) return unread("opening.position");
+	const listed = members["entities"] === undefined ? [] : itemsOf(members["entities"], true);
 	if (listed === null) return { ok: false, refusal: refuse("invalid-opening", "opening.entities") };
 	const entities = readEachPlain(listed);
 	if (!entities.ok) return { ok: false, refusal: refuse("invalid-opening", `opening.entities[${entities.at}]`, entities.at) };
@@ -178,10 +183,13 @@ export function createEntityGraph(declaration: GraphDeclaration, opening?: Graph
 			// the context read once as plain JSON before any item, refused of the edit as a whole if it is not (the corpus's R34; D28)
 			let context: unknown;
 			if (options !== undefined) {
-				const given = membersOf(options);
+				const given = membersOf(options, true);
 				if (given === null) return { ok: false, refusal: refuse("invalid-edit", "options") };
 				const stray = Object.keys(given).find((k) => k !== "context");
-				if (stray !== undefined) return { ok: false, refusal: refuse("invalid-edit", `options.${stray}`) };
+				if (stray !== undefined) {
+					observePromises(given); // the options' members, none of them read as plain JSON (D30)
+					return { ok: false, refusal: refuse("invalid-edit", `options.${stray}`) };
+				}
 				if (given["context"] !== undefined) {
 					const read = readPlainJson(given["context"]);
 					if (!read.ok) return { ok: false, refusal: refuse("invalid-context", "context") };

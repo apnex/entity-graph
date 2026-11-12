@@ -43,9 +43,10 @@ export interface GraphRefusalDetails {
 	opIndex: number;
 	sentence: string | null;
 	/**
-	 * The consequences that wrote the entity a refusal concerns, each `<kind>.<id>`, in declared order: present for an entity a
-	 * consequence wrote and for the conflict fault, absent otherwise. Proposed in docs/DECISIONS.md D23 and owed to zorg, since the
-	 * contract's refusal form names no member for it.
+	 * The consequences and reference rules behind a refusal (CONTRACT.md *Judging and refusals*; docs/DECISIONS.md D23, D25, D30,
+	 * accepted by zorg): the two consequences of a `consequence-conflict`; the consequence `<kind>.<id>` or rule
+	 * `<kind>.<field>.<option>` whose write a reference-rule or shape breach follows from; for a condition's breach, those that
+	 * wrote its subject, sorted, consequences first, each in declared order. Omitted where a requested item alone wrote the entity.
 	 */
 	writers?: readonly string[];
 }

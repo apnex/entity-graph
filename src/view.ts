@@ -1,10 +1,11 @@
 /**
  * The dated view (CONTRACT.md `dated-graph-view`; the build plan's `view` module): the entities by identity and kind, as they
- * stand at one store position, and the reference index kept with them. A change is taken in whole or not at all: every item
- * is checked against the view as the items before it leave it, and only then is any applied, the position moving to the
- * change's. Records are read as plain JSON through shape-check and kept frozen, so no answer can change what is held.
+ * stand at one store position, and the reference index kept with them. A change is taken in whole or not at all: it states at
+ * most one item per identity (`duplicate-item`) - each entity's whole state after the change, or its deletion - and every item is
+ * checked against the view before any item is applied, the position moving to the change's (docs/DECISIONS.md D12, D30).
+ * Records are read as plain JSON through shape-check and kept frozen, so no answer can change what is held.
  */
-import { readPlainJson } from "@apnex/shape-check";
+import { observePromises, readPlainJson } from "@apnex/shape-check";
 import type { CompiledDeclaration, CompiledReference } from "./declaration.js";
 import { itemsOf, membersOf } from "./plain-members.js";
 import { ReferenceIndex } from "./references.js";
@@ -71,7 +72,11 @@ export function readEachPlain(items: readonly unknown[]): { ok: true; items: unk
 	const out: unknown[] = [];
 	for (const [i, item] of items.entries()) {
 		const read = readPlainJson(item);
-		if (!read.ok) return { ok: false, at: i };
+		// the refused item is observed by the reading; the items after it, never read, are observed here (D30)
+		if (!read.ok) {
+			observePromises(items.slice(i + 1));
+			return { ok: false, at: i };
+		}
 		out.push(read.value);
 	}
 	return { ok: true, items: out };
@@ -109,17 +114,22 @@ export class EntityView {
 	 * A member other than `position` and `items` is refused, as an opening's is.
 	 */
 	take(input: unknown): { ok: true; position: number } | { ok: false; refusal: GraphRefusal } {
+		// a change refused before its items are read has its promises observed, so none it holds goes unhandled (D30)
+		const unread = (code: Parameters<typeof refuse>[0], subject: string) => {
+			observePromises(input);
+			return { ok: false as const, refusal: refuse(code, subject) };
+		};
 		const change = membersOf(input);
 		if (change === null) return { ok: false, refusal: refuse("invalid-change", "change") };
 		const stray = Object.keys(change).find((k) => k !== "position" && k !== "items");
-		if (stray !== undefined) return { ok: false, refusal: refuse("invalid-change", `change.${stray}`) };
-		if (!isPosition(change["position"])) return { ok: false, refusal: refuse("invalid-change", "position") };
+		if (stray !== undefined) return unread("invalid-change", `change.${stray}`);
+		if (!isPosition(change["position"])) return unread("invalid-change", "position");
 		const position = change["position"];
-		if (position <= this.current) return { ok: false, refusal: refuse("stale-position", String(position)) };
-		const listed = itemsOf(change["items"]);
+		if (position <= this.current) return unread("stale-position", String(position));
+		const listed = itemsOf(change["items"], true);
 		if (listed === null) return { ok: false, refusal: refuse("invalid-change", "items") };
-		if (listed.length === 0) return { ok: false, refusal: refuse("empty-change", "items") };
-		if (listed.length > GRAPH_LIMITS.maxChangeItems) return { ok: false, refusal: refuse("too-many-items", String(listed.length)) };
+		if (listed.length === 0) return unread("empty-change", "items");
+		if (listed.length > GRAPH_LIMITS.maxChangeItems) return unread("too-many-items", String(listed.length));
 		const read = readEachPlain(listed);
 		if (!read.ok) return { ok: false, refusal: refuse("not-plain", `items[${read.at}]`, read.at) };
 		return this.land(position, read.items, false);

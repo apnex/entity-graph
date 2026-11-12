@@ -244,13 +244,14 @@ Kinds and references as objects keyed by name - a duplicate cannot be written, s
 ## D12 - Proposed reading: the view is first filled from entities stated with their position, and takes in each later change in order, applying no rule
 
 **Proposed by:** the builder of M1, 2026-11-11, for zorg's review, on the build plan's decision owed before M1 (`docs/BUILD-PLAN.md`, section 4; `CONTRACT.md`, *Design owed*).\
-**Affects:** `src/view.ts`, `src/entity-graph.ts`.
+**Affects:** `src/view.ts`, `src/entity-graph.ts`.\
+**Corrected by `D30` (2026-11-12), at zorg's request:** the sentence on how a change is checked said "against the view as the items before it leave it"; it now says what `EntityView.check` does, one item per identity checked against the view before any is applied.
 
 **Reading.**\
 A graph starts from the entities it is given and the position they reflect, as a reading of a store at that position gives them, or empty at position 0; the corpus leaves the first fill uncovered, and asks only that filling and landing the entities as one change answer alike.\
 An opening is no change: it is checked as a change's items are, and not bound by a change's 2,000 items, since a store holds any number of entities at one position; an opening that is not plain data is refused, `invalid-opening`.\
 Every change taken in afterwards states a position after the view's, which the view moves to; a change at or before it is refused, `stale-position`, and changes nothing; a gap between positions is allowed (the corpus's `R7`, `R7a`).\
-A change states each entity's whole state after it, or its deletion, and is checked whole, against the view as the items before it leave it, before any item is applied.\
+A change states at most one item per identity - each entity's whole state after the change, or its deletion - and is checked whole against the view before any item is applied, a second item naming an identity refused as `duplicate-item`.\
 Taking a change in applies no reference rule: a deleted target leaves its referrers' references, and a reference to an absent target or a target of a kind the reference does not allow, an exclusive target held twice and a reference below its minimum are each held as they stand (the corpus's `R3`); only a form the declaration cannot hold, such as a list in a one-target reference, is refused, `invalid-reference`.\
 What the graph does when the store no longer holds the position it needs, and whether a gap means a missed change, are settled with the store port at M6.
 
@@ -505,7 +506,8 @@ Copying what each function is handed instead of freezing it - a function's chang
 
 **Proposed by:** the builder of M3, 2026-11-11, for zorg's review, reading `CONTRACT.md`'s *Consequence writes held to request rules*; it takes the corpus's readings `R30` and `R33`.\
 **Owed to zorg:** the new member `details.writers`, since the contract's refusal form names `details` as `{ ruleKey, subject, measure, opIndex, sentence }` and no member can name a consequence there; this branch adds it in the code and leaves `CONTRACT.md`'s terms as they are until zorg rules.\
-**Affects:** `src/reference-rules.ts`, `src/refusal.ts`, `src/planner.ts`, `src/phases.ts`.\
+**Affects:** `src/reference-rules.ts`, `src/refusal.ts`, `src/planner.ts`, `src/phases.ts`.\\
+**Accepted by zorg** (2026-11-12, `drawv2-entity-graph-m2-m3-reply.md`), with `details.writers` approved for `CONTRACT.md`; added there under `D30` (draw's `H31-13`).
 **Refined by `D25` (2026-11-12):** for a breach of a reference rule or a shape, `writers` names the consequence or rule whose write the breach follows from (the corpus's `R38`), a rule by its key; a condition's breach names those that wrote its subject.\
 The text below is kept as it was proposed.
 
@@ -546,7 +548,8 @@ Judging a requested write's shape on the result by its number of misfits, a part
 ## D25 - The independent check's findings on `5f6c512` fixed: the early stop waits for the last expansion, a rule is named among the writers, changes are worked out once per write
 
 **Ruled by:** the builder of M3, 2026-11-12, on the independent check of pull request 6 at `5f6c512`, dispatched by draw's recorder; proposed for zorg's review where it settles what the contract leaves open, and `details.writers` still owed to zorg (`D23`).\
-**Affects:** `src/planner.ts`, `src/reference-rules.ts`, `src/scratch.ts`, `src/phases.ts`, `src/declaration.ts`, `test/phases.test.js`, `test/plan-cost.test.js`, `test/plan.test.js`, `test/mutation.test.js`, `test/corpus.test.js`.
+**Affects:** `src/planner.ts`, `src/reference-rules.ts`, `src/scratch.ts`, `src/phases.ts`, `src/declaration.ts`, `test/phases.test.js`, `test/plan-cost.test.js`, `test/plan.test.js`, `test/mutation.test.js`, `test/corpus.test.js`.\
+**Accepted by zorg** (2026-11-12, `drawv2-entity-graph-m2-m3-reply.md`), with `details.writers` approved for `CONTRACT.md`; added there under `D30` (draw's `H31-13`).
 
 **Ruling.**\
 The expansion may stop early at the net-write bound only when it is the last of the plan: after the requested items when the declaration has no phase, and otherwise after the last phase.\
@@ -647,4 +650,25 @@ Draw accepts such an edit as no change (`del-missing-is-no-op`), so a request re
 
 **Alternatives refuted.**\
 Refusing it as `empty-edit` - that would refuse a request for what the application's own resolver made of it, and make an idempotent replay fail.
+
+---
+
+## D30 - zorg accepts the readings `D10` to `D25`; `details.writers` enters the contract, promises are observed, and `D12` says what the view checks
+
+**Ruled by:** zorg, reviewing M1 (2026-11-11, `drawv2-planning-builds-reply.md`) and M2 and M3 (2026-11-12, `drawv2-entity-graph-m2-m3-reply.md`), and the director, accepting zorg's three items for M4 as draw's `H31-13`; built by the builder of M4.\
+**Affects:** `CONTRACT.md`, `src/refusal.ts`, `src/index.ts`, `src/plain-members.ts`, `src/phases.ts`, `src/resolvers.ts`, `src/planner.ts`, `src/view.ts`, `src/declaration.ts`, `src/entity-graph.ts`, `test/promise-hygiene.test.js`.
+
+**Ruling.**\
+The readings `D10` to `D25` are accepted by zorg: `D10` to `D14` in its letter of 2026-11-11, and `D15` to `D25`, `details.writers` included, in its letter of 2026-11-12; `D26` to `D29` stay proposed for its review.\
+`CONTRACT.md`'s *Judging and refusals* gives `details` as `{ ruleKey, subject, measure, opIndex, sentence, writers? }`, stating what `writers` carries as zorg states it, and the exported `GraphRefusalDetails` matches; the exported types now include the declaration's consequences, conditions, triggers, reader and intent resolver.\
+Promises, under zorg's `D54` and `D55`, which shape-check's `readPlainJson` enforces for plain JSON: a declaration's member or item that is a native promise is refused, and whenever a value is refused its own value, every member or item read from it so far and anything a Proxy's trap threw are handed to shape-check's `observePromises`.\
+A member or item the caller reads as plain JSON next - an edit's items, a change's items, an opening's entities, a kind's references, the plan's options - keeps a promise for that reading, which refuses it and observes it, so its fault is still named at its item; whatever a refusal leaves unread - the rest of a declaration, an edit, a change, an opening or the options, and the items after the first refused - is observed with it.\
+A value a consequence, a condition or a resolver throws is handed to `observePromises` before the refusal.\
+`D12` and `src/view.ts` now say that a change states at most one item per identity, refused as `duplicate-item` otherwise, each checked against the view before any is applied, as `EntityView.check` does.
+
+**Why.**\
+A refusal must name the consequence or rule behind it, which the contract's form now carries; and no input the component refuses, nor any function it calls, may leave the host with an unhandled rejection.
+
+**Alternatives refuted.**\
+Refusing a promise in every member and item - an edit holding one would be refused as a whole, where its reading names the item that faulted.
 

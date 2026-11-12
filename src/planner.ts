@@ -8,6 +8,7 @@
  * answers the steps applied, their reversal and the net writes, at the view's position, or refuses, naming the rule, the
  * entity and the item that led there. The view is only read. Intent resolvers and the edit context are M4's.
  */
+import { observePromises } from "@apnex/shape-check";
 import type { CompiledDeclaration } from "./declaration.js";
 import { applyItem, type ItemFault } from "./items.js";
 import { itemsOf, membersOf } from "./plain-members.js";
@@ -56,14 +57,19 @@ const withDetails = (r: GraphRefusal, details: Partial<GraphRefusal["details"]>)
 /** Plans an edit over the view, with the context already read as plain JSON; reads the view and changes nothing of it. */
 export function planEdit(view: EntityView, d: CompiledDeclaration, input: unknown, context: unknown, conditionsBefore: ConditionsBefore): GraphPlan {
 	const no = (code: GraphRefusalCode, subject: string, opIndex = -1): GraphPlan => ({ ok: false, refusal: refuse(code, subject, opIndex) });
+	// an edit refused before its items are read has its promises observed, so none it holds goes unhandled (D30)
+	const unread = (code: GraphRefusalCode, subject: string): GraphPlan => {
+		observePromises(input);
+		return no(code, subject);
+	};
 	const edit = membersOf(input);
 	if (edit === null) return no("invalid-edit", "edit");
 	const stray = Object.keys(edit).find((k) => k !== "items");
-	if (stray !== undefined) return no("invalid-edit", `edit.${stray}`);
-	const listed = itemsOf(edit["items"]);
+	if (stray !== undefined) return unread("invalid-edit", `edit.${stray}`);
+	const listed = itemsOf(edit["items"], true);
 	if (listed === null) return no("invalid-edit", "items");
-	if (listed.length === 0) return no("empty-edit", "items");
-	if (listed.length > PLAN_LIMITS.maxEditItems) return no("too-many-items", String(listed.length));
+	if (listed.length === 0) return unread("empty-edit", "items");
+	if (listed.length > PLAN_LIMITS.maxEditItems) return unread("too-many-items", String(listed.length));
 	const read = readEachPlain(listed);
 	if (!read.ok) return no("not-plain", `items[${read.at}]`, read.at);
 
