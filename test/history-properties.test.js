@@ -80,7 +80,13 @@ test("over 20 random graphs and 30 edits each: an undo restores the state before
 			changes++;
 			assert.equal(snapshot(g), after, `${where}: the redo did not restore the edit's result`);
 		}
-		assert.equal(port.changes(0).changes.length, changes, `stream ${s}: the store holds the changes the graph landed, and only those`);
+		let held = 0;
+		for (let since = 0, page = port.changes(0); ; page = port.changes(since)) {
+			held += page.changes.length;
+			if (page.next === null || page.next === undefined) break;
+			since = page.next;
+		}
+		assert.equal(held, changes, `stream ${s}: the store holds the changes the graph landed, and only those`);
 		assert.equal(port.position(), g.position());
 	}
 	assert.ok(landed > 200 && undone > 60 && redone > 30, `exercised: ${landed} landed, ${undone} undone, ${refusedUndo} undos refused, ${redone} redone`);

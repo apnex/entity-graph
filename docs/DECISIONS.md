@@ -722,7 +722,8 @@ Serving `positioned-graph-sync` at M5 - its adapter, first fill, restart and fol
 ## D33 - Proposed reading: commit, undo and redo land through the store port, each judged as any edit is
 
 **Proposed by:** the builder of M5, 2026-11-12, for zorg's review, reading `CONTRACT.md`'s *Undo and redo* and *The store port*, and `D8`; it takes the corpus's readings `R39` to `R42`, `R44` but for what `D37` settles, `R45` and `R46`.\
-**Affects:** `src/port.ts`, `src/entity-graph.ts`, `src/replay.ts`.
+**Affects:** `src/port.ts`, `src/entity-graph.ts`, `src/replay.ts`.\
+**Refined by `D38` (2026-11-12):** a commit that changes nothing answers `landed: false` and no position, a landed one `landed: true`; an undo or a redo that would change nothing, or carry an identity across kinds, is refused before the port is asked; a change the view would not take is never sent; and a record is read back from one page of the port's changes.
 
 **Reading.**\
 The port is a structural `GraphStorePort`: its `noteBound`, the bytes of canonical UTF-8 JSON a note may take; `position()`, the store's latest; `change({ writes, expectedPosition, note })`, landing a change of one or more writes whole at the store's next position or refusing it, `store-moved` where its expected position is not the latest; and `changes(since)`, every change after a position, in order, each with its writes and note.\
@@ -786,7 +787,8 @@ Evicting a younger unpinned edit past a pinned oldest one - every edit older tha
 ## D36 - Proposed reading: a plan is refused past 20,000 steps
 
 **Proposed by:** the builder of M5, 2026-11-12, for zorg's review, on `D25`'s note that the undo record's bound would need a step limit.\
-**Affects:** `src/planner.ts`, `src/scratch.ts`.
+**Affects:** `src/planner.ts`, `src/scratch.ts`.\
+**Corrected by `D38` (2026-11-12):** its reason said the limit keeps a record no note could hold from being built, but the record holds one entry per entity (`D34`), not per step, so the step limit bounds planning's cost alone; the limit is kept for that.
 
 **Reading.**\
 A plan takes at most 20,000 steps - each a write of one entity, by a requested item, a resolver, a reference rule or a consequence - ten times the net writes a change may hold, and the write past them stops the plan, refused as `too-many-steps`, keyed `steps`, `measure` the step it stopped at.\
@@ -820,4 +822,26 @@ Against B, `VISION.md` also says every edit that landed can be undone; but an un
 **What it costs.**\
 An edit whose entity another writer has since changed cannot be undone through the history; the caller edits the entity as it now stands.\
 Batch 5 is answered alike under both readings, since none of its other writers touches an entity an undone edit wrote; batch 6's `b6-08` asserts A, and this implementation refuses it.
+
+---
+
+## D38 - The independent check's findings on `27276b1` fixed: an undo never sends what the view cannot take or a change of nothing, and a commit of nothing says so
+
+**Ruled by:** the builder of M5, 2026-11-12, on the independent check of pull request 8 at `27276b1`, dispatched by draw's recorder; proposed for zorg's review.\
+**Affects:** `src/replay.ts`, `src/entity-graph.ts`, `src/view.ts`, `src/port.ts`, `src/refusal.ts`, `test/history.test.js`, `test/mutation.test.js`, `test/corpus.test.js`, `test/history-properties.test.js`.
+
+**Ruling.**\
+An undo or a redo whose net writes would put an identity the view holds under one kind under another - an identity removed as one kind and created as another, then both undone at once - is refused before anything lands, as `identity-taken`, the identity as `subject`, `opIndex` -1, since one change holds one write per identity (`D14`, `D19`).\
+And every change is checked against the view, as `applyChange` checks it, before it is sent to the port, so a change the view would not take is never sent and the store and the view cannot part; the view's refusal is answered.\
+An undo or a redo whose writes would change nothing - an edit and a later one reversing it, undone together - is refused before the port is asked, as `replay-changes-nothing`, keyed by the code, `"history"` as `subject`, a measure of 1, `opIndex` -1, the history as it was; accepting it as no change would leave no note from which a restart could rebuild the history.\
+A commit answers `landed: true` with the position its change landed at, or, where its plan changes nothing, `landed: false` and no position, so the two cannot be filed alike; an undo and a redo that land answer `landed: true`.\
+The step limit (`D36`) is kept as a bound on planning's cost: the undo record holds one entry per entity, not per step, so a plan of one request and 20,000 rewrites of one entity is refused for its steps, though its record would hold about 100 bytes.\
+A record is read back from one page of the port's changes from the edit's position, the first change on it being the edit's, as entity-store's `changes` answers a page; `createMemoryGraphPort` answers pages of at most 100 changes, with the position to ask from for the next, so an undo's cost does not grow with the changes after its edit.
+
+**Why.**\
+An undo that lands in the store and not in the view leaves the graph unable to land anything again, and a refusal answered after the store moved misstates what happened.
+
+**Alternatives refuted.**\
+Landing an identity's change of kind as a deletion and a creation in one change - a change holds one write per identity, and the store beneath keys an entity by its identity.\
+Accepting an undo of nothing as no change - it would move the history without a note to rebuild it from.
 

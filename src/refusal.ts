@@ -28,6 +28,7 @@ export type GraphRefusalCode =
 	| "note-bound"
 	| "nothing-to-undo"
 	| "nothing-to-redo"
+	| "replay-changes-nothing"
 	| "undo-target-unknown"
 	| "history-superseded"
 	| "history-unreadable"
@@ -182,6 +183,11 @@ const TEXTS: Readonly<Record<GraphRefusalCode, { what: string; why: string; fix:
 		what: "Refused: the history holds no undone edit.",
 		why: "A redo replays an edit an undo reversed; an edit committed after the undo discards what was undone.",
 		fix: "Nothing to do.",
+	},
+	"replay-changes-nothing": {
+		what: "Refused: the undo or redo would change nothing.",
+		why: "The edits it replays leave every entity as it stands - an edit and a later one reversing it, undone together - and a change that writes nothing lands no change, whose note could hold its record.",
+		fix: "Undo the latest edit alone, or none.",
 	},
 	"undo-target-unknown": {
 		what: "Refused: the undo names no landed edit the history holds and has not undone.",

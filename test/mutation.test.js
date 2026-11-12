@@ -160,6 +160,38 @@ test("each scenario a mutant is caught by answers as the contract says on the bu
 	for (const mutant of MUTANTS) if (mutant.check) assert.equal(mutant.check(mod.createEntityGraph, mod), null, `${mutant.name}: the scenario fails unmutated`);
 });
 
+// B1 at 27276b1 (docs/DECISIONS.md D38): an undo carrying an identity across kinds is refused twice over - by the replay, and by
+// land's check of the change against the view before the store sees it - so with the replay's guard planted out, land's alone
+// keeps the store and the view equal; and with both planted out, the store moves where the view cannot follow, as it did
+const crossKinds = (mod) => {
+	const port = mod.createMemoryGraphPort();
+	const g = mod.createEntityGraph({ kinds: [{ kind: "person" }, { kind: "tag" }] }, { position: 0, entities: [{ kind: "person", id: "x", record: {} }] }, { port }).graph;
+	g.commit({ items: [{ op: "remove", kind: "person", id: "x" }] });
+	g.commit({ items: [{ op: "create", kind: "tag", id: "x", record: {} }] });
+	const r = g.undo(1);
+	return { refused: r.ok === false, equal: port.position() === g.position() };
+};
+const planted = async (edits) => {
+	const dir = fs.mkdtempSync(path.join(root, ".mutants-"));
+	try {
+		fs.cpSync(path.join(root, "dist"), dir, { recursive: true });
+		for (const [file, needle, replacement] of edits) {
+			const text = fs.readFileSync(path.join(dir, file), "utf8");
+			assert.equal(text.split(needle).length, 2, `the needle is in ${file} exactly once: ${needle}`);
+			fs.writeFileSync(path.join(dir, file), text.replace(needle, replacement));
+		}
+		return crossKinds(await import(pathToFileURL(path.join(dir, "index.js")).href));
+	} finally {
+		fs.rmSync(dir, { recursive: true, force: true });
+	}
+};
+test("an undo carrying an identity across kinds: land's check alone keeps the store and the view equal, and without both they part", async () => {
+	const replayGuard = ["replay.js", "if (crossing !== undefined)", "if (false)"];
+	const landGuard = ["entity-graph.js", "if (unfit !== null)", "if (false)"];
+	assert.deepEqual(await planted([replayGuard]), { refused: true, equal: true }, "land's check alone");
+	assert.deepEqual(await planted([replayGuard, landGuard]), { refused: true, equal: false }, "neither: the store moved, the view did not");
+});
+
 for (const mutant of MUTANTS) {
 	test(`the suite catches ${mutant.name}, planted in a copy of dist/`, async () => {
 		// inside the repository, so the copy resolves its dependencies as dist/ does

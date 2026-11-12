@@ -37,6 +37,11 @@ export function planReplay(view: EntityView, d: CompiledDeclaration, records: re
 		}
 	}
 	const writes = s.netWrites();
+	// a reversal that changes nothing lands no change, and leaves no note a restart could rebuild the history from (D38)
+	if (writes.length === 0) return facts(refuse("replay-changes-nothing", "history"), { ruleKey: "replay-changes-nothing", measure: 1 });
+	// one change holds one write per identity, so an identity the view holds under one kind cannot be put under another (D14, D38)
+	const crossing = writes.find((w) => w.op === "put" && view.get(w.id) !== undefined && view.get(w.id)!.kind !== w.kind);
+	if (crossing !== undefined) return facts(refuse("identity-taken", crossing.id), { ruleKey: "identity-taken", measure: 1 });
 	let before: ReadonlyMap<string, ConditionReading> = new Map();
 	let after: ReadonlyMap<string, ConditionReading> = new Map();
 	if (d.conditions.length > 0) {

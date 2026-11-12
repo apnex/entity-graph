@@ -134,6 +134,17 @@ export class EntityView {
 		return this.land(position, read.items, false);
 	}
 
+	/** Whether the view would take a change's items, checked as `take` checks them, applying none: its refusal, or null (D38). */
+	checkItems(items: readonly unknown[]): GraphRefusal | null {
+		const seen = new Set<string>();
+		for (const [i, item] of items.entries()) {
+			const one = this.check(item, i, seen, false);
+			if (!one.ok) return one.refusal;
+			seen.add(one.checked.id);
+		}
+		return null;
+	}
+
 	/**
 	 * Fills an empty view from entities stated with its position, already read as plain JSON: the first fill (docs/DECISIONS.md
 	 * D12). An opening is no change, so no bound on a change's items applies to it.

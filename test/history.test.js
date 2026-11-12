@@ -43,7 +43,8 @@ test("an edit is committed through the port as one change at the position it was
 	assert.deepEqual(landed[0].writes, [{ kind: "shelf", id: "s", deleted: true }, { kind: "book", id: "b", deleted: true }]);
 	assert.deepEqual(landed[0].note, { "entity-graph": { v: 1, act: "edit", of: [], entities: [["shelf", "s", {}, null], ["book", "b", { shelf: "s" }, null]] } }, "each entity as it was before and as the edit leaves it");
 	const nothing = ok(graph.commit({ items: [create("shelf", "s"), remove("shelf", "s")] }));
-	assert.deepEqual([nothing.position, nothing.writes, port.position(), graph.history().edits.length], [5, [], 5, 1], "a plan that changes nothing lands nothing, and holds no place in the history");
+	// RESTATED (docs/DECISIONS.md D38): a commit that lands nothing answers so, with no position to file it under
+	assert.deepEqual([nothing.landed, nothing.writes, port.position(), graph.history().edits.length], [false, [], 5, 1], "a plan that changes nothing lands nothing, and holds no place in the history");
 });
 
 test("a store that has moved refuses the commit by its expected position, and the answers stay as they were", () => {
@@ -168,4 +169,59 @@ test("a plan taking more steps than the step limit is refused before its record 
 test("without a port a graph plans and takes changes in, and refuses to commit, undo or redo", () => {
 	const g = createEntityGraph({ kinds: [{ kind: "note" }] }).graph;
 	for (const r of [g.commit({ items: [create("note", "a")] }), g.undo(), g.redo()]) assert.equal(no(r).code, "no-store");
+});
+
+// --- the independent check's findings on 27276b1 (docs/DECISIONS.md D38) ---
+
+test("an undo whose writes would carry an identity across kinds is refused before anything lands, the store and the view equal", () => {
+	const { graph, port } = open({ kinds: [{ kind: "person" }, { kind: "tag" }] }, { entities: [{ kind: "person", id: "x", record: { name: "X" } }] });
+	assert.equal(ok(graph.commit({ items: [remove("person", "x")] })).position, 1);
+	assert.equal(ok(graph.commit({ items: [create("tag", "x", { label: "x" })] })).position, 2);
+	const r = no(graph.undo(1));
+	assert.deepEqual([r.code, r.details.subject, r.details.opIndex], ["identity-taken", "x", -1]);
+	assert.deepEqual([port.position(), graph.position(), port.changes(0).changes.length], [2, 2, 2], "nothing landed");
+	assert.deepEqual(graph.get("tag", "x").entity?.record, { label: "x" });
+	assert.equal(ok(graph.commit({ items: [create("person", "y")] })).position, 3, "the graph goes on landing edits");
+	assert.equal(ok(graph.undo()).position, 4);
+});
+
+test("an undo of several edits whose reversal changes nothing is refused, legibly, before the port is asked", () => {
+	const first = open({ kinds: [{ kind: "doc" }] });
+	ok(first.graph.commit({ items: [create("doc", "d1")] }));
+	ok(first.graph.commit({ items: [remove("doc", "d1")] }));
+	const r = no(first.graph.undo(1));
+	assert.deepEqual([r.code, r.details.ruleKey, r.details.subject, r.details.measure, r.details.opIndex], ["replay-changes-nothing", "replay-changes-nothing", "history", 1, -1]);
+	assert.deepEqual([first.port.position(), first.graph.history().edits.map((e) => e.undone)], [2, [false, false]], "nothing landed, nothing undone");
+	const second = open({ kinds: [{ kind: "doc" }] }, { entities: [{ kind: "doc", id: "d", record: { v: 1 } }] });
+	ok(second.graph.commit({ items: [set("doc", "d", { v: 2 })] }));
+	ok(second.graph.commit({ items: [set("doc", "d", { v: 1 })] }));
+	assert.equal(no(second.graph.undo(1)).code, "replay-changes-nothing");
+	assert.equal(ok(second.graph.undo()).writes[0].record.v, 2, "the latest alone still undoes");
+});
+
+test("a commit that changes nothing answers that it landed nothing, and no position to file it under", () => {
+	const { graph, port } = open({ kinds: [{ kind: "doc" }] });
+	const nothing = ok(graph.commit({ items: [create("doc", "d"), remove("doc", "d")] }));
+	assert.deepEqual([nothing.landed, Object.hasOwn(nothing, "position"), nothing.writes], [false, false, []]);
+	const landed = ok(graph.commit({ items: [create("doc", "d")] }));
+	assert.deepEqual([landed.landed, landed.position, port.position()], [true, 1, 1]);
+	assert.equal(ok(graph.undo()).landed, true);
+});
+
+test("an undo reads one page of the store's changes from the edit, however many changes came after it", () => {
+	const port = createMemoryGraphPort({ position: 0 });
+	let read = 0;
+	const counted = { ...port, noteBound: port.noteBound, position: () => port.position(), change: (input) => port.change(input), changes: (since) => { const answer = port.changes(since); read = Math.max(read, answer.changes.length); return answer; } };
+	const graph = createEntityGraph({ kinds: [{ kind: "doc" }] }, { position: 0 }, { port: counted }).graph;
+	ok(graph.commit({ items: [create("doc", "d")] }));
+	for (let i = 0; i < 250; i++) port.change({ writes: [{ kind: "doc", id: `other${i}`, record: {} }], expectedPosition: port.position() });
+	for (let since = graph.position(); since < port.position();) {
+		const page = port.changes(since);
+		for (const c of page.changes) ok(graph.applyChange({ position: c.position, items: c.writes }));
+		since = graph.position();
+	}
+	read = 0;
+	assert.equal(ok(graph.commit({ items: [create("doc", "e")] })).position, 252);
+	assert.equal(ok(graph.undo(1)).ok, true);
+	assert.ok(read <= 100, `an undo read ${read} changes at once`);
 });

@@ -230,10 +230,15 @@ function runAccepted(c, mode) {
 			const landed = port.change({ writes: fixed(c, step.other.writes).map(item), expectedPosition: port.position() });
 			assert.deepEqual(landed, { ok: true, position: step.other.position }, `step ${i + 1}: the other writer's change`);
 		} else if (step.sync) {
-			for (const change of port.changes(graph.position()).changes) {
-				if (change.position > step.sync.position) break;
-				const r = graph.applyChange({ position: change.position, items: change.writes });
-				assert.equal(r.ok, true, `step ${i + 1}: the change at ${change.position}: ${JSON.stringify(r.refusal)}`);
+			// page by page, as the port answers them, up to the step's position
+			for (let since = graph.position(); since < step.sync.position;) {
+				const page = port.changes(since).changes.filter((ch) => ch.position <= step.sync.position);
+				assert.ok(page.length > 0, `step ${i + 1}: the port holds no change after ${since}`);
+				for (const change of page) {
+					const r = graph.applyChange({ position: change.position, items: change.writes });
+					assert.equal(r.ok, true, `step ${i + 1}: the change at ${change.position}: ${JSON.stringify(r.refusal)}`);
+				}
+				since = graph.position();
 			}
 			assert.equal(graph.position(), step.sync.position, `step ${i + 1}: synced to`);
 		} else if (step.ask) {

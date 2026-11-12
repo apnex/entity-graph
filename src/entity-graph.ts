@@ -91,8 +91,14 @@ export interface GraphOptions {
 	history?: HistoryBounds;
 }
 
-/** What a commit, an undo or a redo answers: where its change landed and its net writes, or a refusal. */
-export type CommitAnswer = { ok: true; position: number; writes: GraphStep[]; steps?: GraphStep[]; inverse?: GraphStep[] } | { ok: false; refusal: GraphRefusal };
+/**
+ * What a commit, an undo or a redo answers: that its change landed, where, and its net writes; or, for a commit whose plan changes
+ * nothing, that it landed nothing, with no position (D38); or a refusal.
+ */
+export type CommitAnswer =
+	| { ok: true; landed: true; position: number; writes: GraphStep[]; steps?: GraphStep[]; inverse?: GraphStep[] }
+	| { ok: true; landed: false; writes: []; steps: GraphStep[]; inverse: GraphStep[] }
+	| { ok: false; refusal: GraphRefusal };
 
 /** Calls the store port, its answer read once as plain JSON; null where it throws or answers otherwise (D30, D31). */
 function callPort(call: () => unknown): unknown {
@@ -327,13 +333,14 @@ export function createEntityGraph(declaration: GraphDeclaration, opening?: Graph
 			planning = true;
 			try {
 				const planned = planEdit(view, d, edit, read.context, conditionsBefore);
-				// a plan that changes nothing lands nothing (D29), and holds no place in the history
-				if (!planned.ok || planned.writes.length === 0) return planned;
+				// a plan that changes nothing lands nothing (D29), holds no place in the history, and answers no position (D38)
+				if (!planned.ok) return planned;
+				if (planned.writes.length === 0) return { ok: true, landed: false, steps: planned.steps, inverse: planned.inverse, writes: [] };
 				const entities: RecordedEntity[] = planned.writes.map((w) => [w.kind, w.id, view.get(w.id)?.record ?? null, w.op === "put" ? w.record : null]);
 				const landed = land(port, planned.writes, { act: "edit", of: [], entities });
 				if (!landed.ok) return landed;
 				history.landed({ position: landed.position, bytes: landed.bytes, pinned: pinned(landed.position, planned.writes) });
-				return { ok: true, position: landed.position, steps: planned.steps, inverse: planned.inverse, writes: planned.writes };
+				return { ok: true, landed: true, position: landed.position, steps: planned.steps, inverse: planned.inverse, writes: planned.writes };
 			} finally {
 				planning = false;
 			}
@@ -414,7 +421,7 @@ export function createEntityGraph(declaration: GraphDeclaration, opening?: Graph
 		if (!landed.ok) return landed;
 		if (undo) history.undone(edits.length);
 		else history.redone();
-		return { ok: true, position: landed.position, writes: planned.writes };
+		return { ok: true, landed: true, position: landed.position, writes: planned.writes };
 	}
 
 	/**
@@ -426,6 +433,9 @@ export function createEntityGraph(declaration: GraphDeclaration, opening?: Graph
 		const bytes = noteBytes(note);
 		if (bytes > port.noteBound) return { ok: false, refusal: { ...refuse("note-bound", "note"), details: { ...refuse("note-bound", "note").details, measure: bytes } } };
 		const items = writes.map((w) => (w.op === "del" ? { kind: w.kind, id: w.id, deleted: true as const } : { kind: w.kind, id: w.id, record: w.record }));
+		// a change the view would not take is never sent, so the store and the view cannot part (D38)
+		const unfit = view.checkItems(items);
+		if (unfit !== null) return { ok: false, refusal: unfit };
 		const answer = callPort(() => port.change({ writes: items, expectedPosition: view.position(), note }));
 		if (answer === null || typeof answer !== "object" || typeof (answer as { ok?: unknown }).ok !== "boolean") return { ok: false, refusal: refuse("store-failed", "change") };
 		const { ok, position, code } = answer as { ok: boolean; position?: unknown; code?: unknown };
