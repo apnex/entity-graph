@@ -1,0 +1,48 @@
+{
+  "case": "b3-18-consequence-write-breaks-min",
+  "batch": 3,
+  "summary": "dropUntitled, taking an emptied figure out of a gallery that holds two, leaves it below its refusing minimum and is refused, naming the gallery, the consequence and the item, at index 1, it follows from; taking a figure out of a gallery that keeps two, or out of one the same edit filled, is accepted.",
+  "covers": ["plan-graph-change", "Consequence writes held to request rules", "Reference rules", "Judging and refusals"],
+  "readings": ["R1", "R2", "R14", "R15", "R17", "R18", "R19", "R21", "R23", "R24", "R25", "R26", "R27", "R28", "R30", "R33", "R38"],
+  "world": "document",
+  "variant": "withGallery",
+  "verdict": "accepted",
+  "steps": [
+    { "start": { "position": 0, "entities": [
+      { "kind": "section", "id": "s1", "record": { "heading": "Intro", "parent": null, "cites": [] } },
+      { "kind": "section", "id": "s2", "record": { "heading": "Method", "parent": null, "cites": [] } },
+      { "kind": "figure", "id": "f1", "record": { "title": "Map", "section": "s1", "number": 1 } },
+      { "kind": "figure", "id": "f2", "record": { "title": "Chart", "section": "s1", "number": 2 } },
+      { "kind": "figure", "id": "f3", "record": { "title": "Plot", "section": "s2", "number": 1 } },
+      { "kind": "caption", "id": "c1", "record": { "body": "Figure 1: Map", "figure": "f1" } },
+      { "kind": "caption", "id": "c2", "record": { "body": "Figure 2: Chart", "figure": "f2" } },
+      { "kind": "caption", "id": "c3", "record": { "body": "Figure 1: Plot", "figure": "f3" } },
+      { "kind": "gallery", "id": "g1", "record": { "name": "Best", "figures": ["f1", "f2"] } },
+      { "kind": "gallery", "id": "g2", "record": { "name": "All", "figures": ["f1", "f2", "f3"] } }
+    ] } },
+    { "plan": { "position": 0, "edit": [
+      { "op": "create", "kind": "section", "id": "s4", "record": { "heading": "Notes", "parent": null, "cites": [] } },
+      { "op": "change", "kind": "figure", "id": "f1", "record": { "title": "", "section": "s1", "number": 1 } }
+    ], "outcome": "refused", "refusal": { "part": "entity-graph", "code": "reference-rule", "ruleKey": "gallery.figures.min", "subject": "g1", "measure": 1, "opIndex": 1, "writers": ["gallery.dropUntitled"] } } },
+    { "plan": { "position": 0, "edit": [
+      { "op": "change", "kind": "figure", "id": "f3", "record": { "title": "", "section": "s2", "number": 1 } }
+    ], "outcome": "accepted", "writes": [
+      { "op": "put", "kind": "figure", "id": "f3", "record": { "title": "", "section": "s2", "number": 1 } },
+      { "op": "put", "kind": "caption", "id": "c3", "record": { "body": "Figure 1: ", "figure": "f3" } },
+      { "op": "put", "kind": "gallery", "id": "g2", "record": { "name": "All", "figures": ["f1", "f2"] } }
+    ] } },
+    { "plan": { "position": 0, "edit": [
+      { "op": "change", "kind": "figure", "id": "f1", "record": { "title": "", "section": "s1", "number": 1 } },
+      { "op": "change", "kind": "gallery", "id": "g1", "record": { "name": "Best", "figures": ["f1", "f2", "f3"] } }
+    ], "outcome": "accepted", "writes": [
+      { "op": "put", "kind": "figure", "id": "f1", "record": { "title": "", "section": "s1", "number": 1 } },
+      { "op": "put", "kind": "caption", "id": "c1", "record": { "body": "Figure 1: ", "figure": "f1" } },
+      { "op": "put", "kind": "gallery", "id": "g1", "record": { "name": "Best", "figures": ["f2", "f3"] } },
+      { "op": "put", "kind": "gallery", "id": "g2", "record": { "name": "All", "figures": ["f2", "f3"] } }
+    ] } },
+    { "ask": { "position": 0, "questions": [
+      { "q": "get", "kind": "gallery", "id": "g1", "answer": { "name": "Best", "figures": ["f1", "f2"] } },
+      { "q": "referrersOf", "id": "f3", "answer": [ { "kind": "caption", "id": "c3", "field": "figure" }, { "kind": "gallery", "id": "g2", "field": "figures" } ] }
+    ] } }
+  ]
+}

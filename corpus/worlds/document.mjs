@@ -339,6 +339,78 @@ export const undeclaredTriggerKind = declaration({
   captionConsequences: [retitle],
 });
 
+// Variant "citing", phase "numbering": a section whose heading changed to "See <id>" adds <id> to the figures it cites.
+const citeByTitle = {
+  name: "citeByTitle",
+  trigger: { changed: { kind: "section", fields: ["heading"] } },
+  phase: "numbering",
+  run({ changes, view }) {
+    const writes = [];
+    for (const c of changesById(changes)) {
+      const section = view.get("section", c.id);
+      if (section === null) continue;
+      const m = /^See (\S+)$/.exec(section.heading);
+      if (m !== null && !section.cites.includes(m[1])) {
+        writes.push({ op: "change", kind: "section", id: c.id, record: { ...section, cites: [...section.cites, m[1]] } });
+      }
+    }
+    return writes;
+  },
+};
+
+// Variant "withGallery", phase "numbering": a figure whose title was emptied leaves every gallery holding it.
+const dropUntitled = {
+  name: "dropUntitled",
+  trigger: { changed: { kind: "figure", fields: ["title"] } },
+  phase: "numbering",
+  run({ changes, view }) {
+    const emptied = new Set();
+    for (const c of changes) {
+      const figure = view.get("figure", c.id);
+      if (figure !== null && figure.title === "") emptied.add(c.id);
+    }
+    const writes = [];
+    for (const id of view.all("gallery").slice().sort(byId)) {
+      const gallery = view.get("gallery", id);
+      const kept = gallery.figures.filter((f) => !emptied.has(f));
+      if (kept.length !== gallery.figures.length) {
+        writes.push({ op: "change", kind: "gallery", id, record: { ...gallery, figures: kept } });
+      }
+    }
+    return writes;
+  },
+};
+
+// The base world with citeByTitle on sections; every other kind as in base.
+export const citing = {
+  ...base,
+  kinds: base.kinds.map((k) => (k.kind === "section" ? { ...k, consequences: [citeByTitle] } : k)),
+};
+
+// The base world with a gallery kind holding at least two figures, a gallery left below two refusing the edit.
+export const withGallery = {
+  ...base,
+  kinds: [
+    ...base.kinds,
+    {
+      kind: "gallery",
+      shape: {
+        type: "object",
+        properties: {
+          name: { type: "string" },
+          figures: { type: "array", items: { type: "string" } },
+        },
+        required: ["name", "figures"],
+        additionalProperties: false,
+      },
+      references: [
+        { field: "figures", targets: ["figure"], holds: "many", onTargetDelete: "unlink", min: 2, onBelowMin: "refuse" },
+      ],
+      consequences: [dropUntitled],
+    },
+  ],
+};
+
 // Contexts no JSON file can state, each a value plain JSON cannot hold.
 export const contexts = {
   withFunction() {

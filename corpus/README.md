@@ -305,7 +305,7 @@ Its comments state what each function does, and its code is what a case's answer
 - `section.figure-limit`: a section holds at most two figures, its breach measured by how many more, its sentence `Section <id> holds <n> figures; a section holds at most 2.`
 
 The prefix `Figure` and the limit 2 give way to a context's `captionPrefix` and `figureLimit` (batch 4).\
-The variants are `indexed`, adding a second phase, `index`, an `index` kind and three consequences; `conflicting`, adding `caption.shout`; `sloppy`, whose `figure.autoCaption` writes a member the caption's shape does not admit; `resolving`, adding an intent resolver on figures; and `undeclaredPhase` and `undeclaredTriggerKind`, each a declaration to be refused.
+The variants are `indexed`, adding a second phase, `index`, an `index` kind and three consequences; `conflicting`, adding `caption.shout`; `sloppy`, whose `figure.autoCaption` writes a member the caption's shape does not admit; `resolving`, adding an intent resolver on figures; `citing`, adding `section.citeByTitle`, which has a section whose heading becomes `See <id>` cite `<id>`; `withGallery`, adding a `gallery` kind holding at least two figures under a refusing minimum, and `gallery.dropUntitled`, which takes a figure whose title was emptied out of every gallery; and `undeclaredPhase` and `undeclaredTriggerKind`, each a declaration to be refused.
 
 ---
 
@@ -409,6 +409,10 @@ They rely on five questions *Design owed* lists, each with the answer the contra
 - **R36. Declarations of phases and triggers.** A consequence naming a phase the declaration does not list, or a trigger naming a kind it does not declare, is refused when the graph is created, as `phase-undeclared` or `trigger-kind-undeclared`, naming the kind, the consequence and the name undeclared.
   The contract says each consequence has "one of the phases the application declares" and that no kind is built in.
 - **R37. Consequences' writes.** A consequence writes with `create`, `change` and `remove`, and no case has a consequence write that would be a fault in a request, such as a change of an absent entity.
+- **R38. Which consequence a per-entity rule names.** A consequence's write is judged by the reference rules a requested write of the same entity would meet, and `writers` names the consequence whose write the breach follows from, while `subject` stays as `R19` reads it.
+  Under `targets` and `min` that write is the referrer's own, so the consequence wrote the subject.
+  Under `onTargetDelete: "refuse"` that write is the deletion of the target, so `writers` names the consequence that deleted the target, and `subject` is the referrer still holding it, which no consequence wrote.
+  Under `exclusivity` that write made the new holder hold the target, and `subject` is the target (`b3-15`).
 
 ---
 
