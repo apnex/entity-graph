@@ -32,12 +32,14 @@ export interface ConditionReading {
 
 /** What a refusal for a broken rule states: its code, rule key, subject, measure, the item it follows from, and a condition's sentence. */
 export interface Verdict {
-	readonly code: "rule-broken" | "shape-misfit" | "condition-broken" | "held-write";
+	readonly code: "rule-broken" | "shape-misfit" | "condition-broken";
 	readonly ruleKey: string;
 	readonly subject: string;
 	readonly measure: number;
 	readonly opIndex: number;
 	readonly sentence: string | null;
+	/** The consequences that wrote the entity the breach concerns, in declared order, or null where none did (D23). */
+	readonly writers: readonly string[] | null;
 }
 
 /** A breach as read in one state, with what it is read from: the entity and reference, and the targets, holders or misfits it counts. */
@@ -207,14 +209,17 @@ function entityBreaches(d: CompiledDeclaration, entity: GraphEntity, targets: Re
 	return out;
 }
 
-/** An entity's misfits against its kind's shape (D24), each named `<pointer> <keyword>`, as a breach measured by how many. */
+/**
+ * An entity's misfits against its kind's shape (D24), as a breach of measure 1 -- an entity fits or it does not (the corpus's
+ * R30) -- counting each misfit, named `<pointer> <keyword>`, so the write that introduced one can be found.
+ */
 function shapeBreach(d: CompiledDeclaration, entity: GraphEntity): Reading | null {
 	const shape = d.shapes.get(entity.kind);
 	if (shape === undefined) return null;
 	const verdict = shape.judge(entity.record as never);
 	if (verdict.verdict !== "misfit") return null;
 	const counted = verdict.misfits.map((m) => `${m.pointer} ${m.keyword}`);
-	return { key: `${entity.kind}.shape@${entity.id}`, ruleKey: `${entity.kind}.shape`, subject: entity.id, measure: counted.length, rule: "shape", id: entity.id, kind: entity.kind, field: "", counted };
+	return { key: `${entity.kind}.shape@${entity.id}`, ruleKey: `${entity.kind}.shape`, subject: entity.id, measure: 1, rule: "shape", id: entity.id, kind: entity.kind, field: "", counted };
 }
 
 /** The top-level field a misfit's pointer names, its JSON pointer escapes undone. */
@@ -223,11 +228,10 @@ const fieldOfMisfit = (counted: string): string => counted.slice(1, counted.inde
 /**
  * Judges the edit (D18, D19, D21, D23, D24): the breaches of the reference rules and shapes the edit introduced or worsened,
  * read in both states over what it can have changed, each refused for the item it follows from; and, if none, the breaches
- * of the conditions, which follow from the edit as a whole. A breach whose write was a consequence's, of an entity that did not
- * already fail before the edit, is refused as that consequence's write held to the rules a requested write meets. A
- * referrer's breaches about an entity change only where the entity's presence or kind does, so the referrers of an entity
- * whose record alone changed are not read; and a breach of exclusivity worsens only through a new holder, which the edit
- * touched.
+ * of the conditions, which follow from the edit as a whole. Every entity a consequence wrote is judged so, as every entity is,
+ * and a refusal concerning one names the consequences that wrote it (the corpus's R30). A referrer's breaches about an entity
+ * change only where the entity's presence or kind does, so the referrers of an entity whose record alone changed are not read;
+ * and a breach of exclusivity worsens only through a new holder, which the edit touched.
  */
 export function judge(s: Scratch, d: CompiledDeclaration, conditionsBefore: ReadonlyMap<string, ConditionReading>, conditionsAfter: ReadonlyMap<string, ConditionReading>): Verdict | null {
 	const entities = new Set<string>();
@@ -271,36 +275,30 @@ export function judge(s: Scratch, d: CompiledDeclaration, conditionsBefore: Read
 		}
 		return out;
 	};
-	const before = read(false);
-	// whether an entity failed a rule a requested write of it meets, before the edit: its shape, its references, a condition about it
-	const failedBefore = (id: string): boolean => {
-		for (const b of before.values()) if (b.rule === "exclusivity" ? b.counted.includes(id) : b.id === id) return true;
-		for (const c of conditionsBefore.values()) if (c.subject === id) return true;
-		return false;
+	// the consequences that wrote an entity, in declared order, or null where none did
+	const order = new Map(d.consequences.map((c) => [c.key, c.order]));
+	const writersOf = (id: string): readonly string[] | null => {
+		const by = s.writtenBy.get(id);
+		return by === undefined ? null : [...by].sort((a, b) => order.get(a)! - order.get(b)!);
 	};
+	const before = read(false);
 	const found: (Verdict & { key: string })[] = [];
 	for (const b of read(true).values()) {
 		const was = before.get(b.key);
 		if (b.measure <= (was?.measure ?? 0)) continue; // neither introduced nor worsened
 		const { at, entity } = attributionOf(s, b, was);
-		const held = at !== undefined && at.by !== null && !failedBefore(entity);
-		found.push(held
-			? { key: b.key, code: "held-write", ruleKey: at.by!, subject: entity, measure: b.measure, opIndex: at.cause, sentence: null }
-			: { key: b.key, code: b.rule === "shape" ? "shape-misfit" : "rule-broken", ruleKey: b.ruleKey, subject: b.subject, measure: b.measure, opIndex: at?.cause ?? -1, sentence: null });
+		found.push({ key: b.key, code: b.rule === "shape" ? "shape-misfit" : "rule-broken", ruleKey: b.ruleKey, subject: b.subject, measure: b.measure, opIndex: at?.cause ?? -1, sentence: null, writers: writersOf(entity) });
 	}
 	found.sort((a, b) => a.opIndex - b.opIndex || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
 	if (found.length > 0) {
 		const { key: _key, ...verdict } = found[0]!;
 		return verdict;
 	}
-	// the conditions, by key: one about an entity a consequence last wrote, which did not fail before, is that consequence's
-	const keys = [...conditionsAfter.keys()].sort();
-	for (const key of keys) {
+	// the conditions, by key, each following from the edit as a whole (the corpus's R32)
+	for (const key of [...conditionsAfter.keys()].sort()) {
 		const c = conditionsAfter.get(key)!;
 		if (c.measure <= (conditionsBefore.get(key)?.measure ?? 0)) continue;
-		const last = s.lastWrite.get(c.subject);
-		if (last !== undefined && last.by !== null && s.get(c.subject) !== undefined && !failedBefore(c.subject)) return { code: "held-write", ruleKey: last.by, subject: c.subject, measure: c.measure, opIndex: last.cause, sentence: c.sentence };
-		return { code: "condition-broken", ruleKey: c.ruleKey, subject: c.subject, measure: c.measure, opIndex: -1, sentence: c.sentence };
+		return { code: "condition-broken", ruleKey: c.ruleKey, subject: c.subject, measure: c.measure, opIndex: -1, sentence: c.sentence, writers: s.get(c.subject) === undefined ? null : writersOf(c.subject) };
 	}
 	return null;
 }

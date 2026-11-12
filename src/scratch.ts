@@ -94,6 +94,8 @@ export class Scratch implements GraphState {
 	/** Each top-level field of an entity, by the last write that changed it; and each entity, by its last write. */
 	readonly fieldCause = new Map<string, Attribution>();
 	readonly lastWrite = new Map<string, Attribution>();
+	/** The consequences that wrote each entity, any phase. */
+	readonly writtenBy = new Map<string, Set<string>>();
 	/** The targets an `onUnreferenced: "delete"` reference stopped holding, with the item that led there. */
 	readonly released = new Map<string, Attribution>();
 
@@ -216,6 +218,10 @@ export class Scratch implements GraphState {
 		}
 		if (free) this.free.add(id);
 		this.lastWrite.set(id, at);
+		if (by !== null) {
+			if (!this.writtenBy.has(id)) this.writtenBy.set(id, new Set());
+			this.writtenBy.get(id)!.add(by);
+		}
 		const after = now ? this.held(now) : NONE;
 		const created = now !== null && was?.kind !== now.kind;
 		if (created || (now === null && was !== undefined)) this.presence.set(id, at);

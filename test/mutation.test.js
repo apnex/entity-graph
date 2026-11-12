@@ -58,7 +58,7 @@ const heldWriteJudged = (createEntityGraph) => {
 	const spoil = { id: "spoil", phase: "first", trigger: { created: ["task"] }, run: ({ matches }) => matches.map((m) => ({ op: "set", kind: "task", id: m.id, patch: { v: "x" } })) };
 	const g = createEntityGraph({ phases: ["first"], kinds: [{ kind: "task", shape, consequences: [spoil] }] }).graph;
 	const r = g.plan({ items: [{ op: "create", kind: "task", id: "t", record: { v: 1 } }] });
-	return r.ok === false && r.refusal.code === "held-write" ? null : { what: "a consequence's write was not held to its kind's shape", got: r };
+	return r.ok === false && r.refusal.code === "shape-misfit" && r.refusal.details.writers?.[0] === "task.spoil" ? null : { what: "a consequence's write was not held to its kind's shape", got: r };
 };
 const conditionWorseningRefused = (createEntityGraph) => {
 	const crowded = { id: "crowded", check: (graph) => (graph.all("task").length > 1 ? [{ subject: "all", measure: graph.all("task").length - 1, sentence: "too many" }] : []) };

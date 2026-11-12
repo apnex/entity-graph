@@ -29,7 +29,9 @@ export interface PhaseFault {
 	readonly code: GraphRefusalCode;
 	readonly ruleKey: string;
 	readonly subject: string;
+	readonly measure: number;
 	readonly opIndex: number;
+	readonly writers?: readonly string[];
 }
 
 /** Whether a consequence's trigger hears one change: an entity of its kinds created or deleted, or one of its named fields changed. */
@@ -94,7 +96,7 @@ export function runPhase(s: Scratch, d: CompiledDeclaration, phase: string): Pha
 		let at: Attribution | undefined;
 		for (const m of matches) at = later(at, causeOfChange(s, c, m));
 		const cause = at?.cause ?? -1;
-		const failed = (code: GraphRefusalCode, ruleKey: string, subject: string): PhaseFault => ({ code, ruleKey, subject, opIndex: cause });
+		const failed = (code: GraphRefusalCode, ruleKey: string, subject: string): PhaseFault => ({ code, ruleKey, subject, measure: 1, opIndex: cause });
 		const heard = Object.freeze(matches.map((m) => Object.freeze({ kind: m.kind, id: m.id, before: m.before, after: m.after, fields: Object.freeze([...m.fields]) })));
 		const { reader, close } = openReader(s, d);
 		let returned: unknown;
@@ -110,7 +112,8 @@ export function runPhase(s: Scratch, d: CompiledDeclaration, phase: string): Pha
 		for (const [i, write] of (read.value as unknown[]).entries()) {
 			const id = isObject(write) && typeof write["id"] === "string" ? write["id"] : null;
 			const holder = id === null ? undefined : claimed.get(id);
-			if (holder !== undefined && holder !== c.key) return failed("consequence-conflict", c.key, id!);
+			// the fault is between two consequences, not of one item, so it names the edit as a whole (the corpus's R29; D21)
+			if (holder !== undefined && holder !== c.key) return { code: "consequence-conflict", ruleKey: "consequence-conflict", subject: id!, measure: 2, opIndex: -1, writers: [holder, c.key] };
 			const fault = applyItem(s, d, write, `writes[${i}]`, cause, c.key);
 			if (fault !== null) return failed(fault.code, c.key, fault.subject);
 			if (id !== null) claimed.set(id, c.key);
@@ -124,7 +127,7 @@ export function runPhase(s: Scratch, d: CompiledDeclaration, phase: string): Pha
 export function readConditions(d: CompiledDeclaration, state: GraphState): { ok: true; breaches: Map<string, ConditionReading> } | { ok: false; fault: PhaseFault } {
 	const breaches = new Map<string, ConditionReading>();
 	for (const c of d.conditions) {
-		const failed = { ok: false as const, fault: { code: "condition-failed" as const, ruleKey: c.key, subject: c.key, opIndex: -1 } };
+		const failed = { ok: false as const, fault: { code: "condition-failed" as const, ruleKey: c.key, subject: c.key, measure: 1, opIndex: -1 } };
 		const { reader, close } = openReader(state, d);
 		let returned: unknown;
 		try {

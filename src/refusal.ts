@@ -19,7 +19,6 @@ export type GraphRefusalCode =
 	| "condition-failed"
 	| "consequence-failed"
 	| "consequence-conflict"
-	| "held-write"
 	| "reentrant"
 	| "too-many-writes"
 	| "stale-position"
@@ -41,6 +40,12 @@ export interface GraphRefusalDetails {
 	measure: number;
 	opIndex: number;
 	sentence: string | null;
+	/**
+	 * The consequences that wrote the entity a refusal concerns, each `<kind>.<id>`, in declared order: present for an entity a
+	 * consequence wrote and for the conflict fault, absent otherwise. Proposed in docs/DECISIONS.md D23 and owed to zorg, since the
+	 * contract's refusal form names no member for it.
+	 */
+	writers?: readonly string[];
 }
 
 /** A refusal in the shared form. */
@@ -105,9 +110,9 @@ const TEXTS: Readonly<Record<GraphRefusalCode, { what: string; why: string; fix:
 		fix: "Change the edit so the rule in details.ruleKey holds for the entity in details.subject, or holds no worse than before; details.opIndex names the requested item that led there.",
 	},
 	"shape-misfit": {
-		what: "The edit was refused: it would leave an entity's record misfitting its kind's shape more than it found it.",
-		why: "A kind's records are judged against the shape it declares, through shape-check, on the state the edit would leave; a misfit the edit introduces, or more misfits than before, refuses it.",
-		fix: "Change the edit so the record of the entity in details.subject fits its kind's shape, or misfits no more than before; details.measure is how many misfits it would have.",
+		what: "The edit was refused: a record it writes does not fit its kind's shape.",
+		why: "A kind's records are judged against the shape it declares, through shape-check: a requested write that misfits is refused at its item, and an entity a consequence or a rule wrote that misfits when the edit found it fitting refuses the edit.",
+		fix: "Change the edit, or the consequence in details.writers, so the record of the entity in details.subject fits its kind's shape.",
 	},
 	"condition-broken": {
 		what: "The edit was refused: it would leave one of the application's conditions more broken than it found it.",
@@ -127,12 +132,7 @@ const TEXTS: Readonly<Record<GraphRefusalCode, { what: string; why: string; fix:
 	"consequence-conflict": {
 		what: "The edit was refused: two consequences wrote one entity in one run of a phase.",
 		why: "Within a run of a phase each entity is written by one consequence at most, and two writing it is a fault, never resolved by letting one win.",
-		fix: "Change the consequences so one of them writes the entity in details.subject, or move one to another phase; details.ruleKey is the second to write it.",
-	},
-	"held-write": {
-		what: "The edit was refused: an entity a consequence wrote would fail a rule a requested write of it must meet.",
-		why: "Every entity a consequence writes is held, as it stands in the result, to the shape, reference rules and conditions a requested write of it meets, unless it already failed them before the edit.",
-		fix: "Correct the consequence in details.ruleKey, or the edit that set it off, so the entity in details.subject meets its rules.",
+		fix: "Change the consequences in details.writers so one of them writes the entity in details.subject, or move one to another phase.",
 	},
 	"reentrant": {
 		what: "Refused: the graph was asked to change or plan while it was planning.",

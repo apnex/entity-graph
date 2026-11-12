@@ -43,6 +43,8 @@ export type GraphPlan = { ok: true; position: number; steps: GraphStep[]; invers
 
 /** A refusal carrying the rule key and measure its facts name. */
 const withFacts = (r: GraphRefusal, ruleKey: string, measure: number): GraphPlan => ({ ok: false, refusal: { ...r, details: { ...r.details, ruleKey, measure } } });
+/** A refusal carrying the facts named: any of its rule key, measure, sentence and writers. */
+const withDetails = (r: GraphRefusal, details: Partial<GraphRefusal["details"]>): GraphPlan => ({ ok: false, refusal: { ...r, details: { ...r.details, ...details } } });
 
 /** Plans an edit over the view; reads the view and changes nothing of it. */
 export function planEdit(view: EntityView, d: CompiledDeclaration, input: unknown, conditionsBefore: ConditionsBefore): GraphPlan {
@@ -72,7 +74,7 @@ export function planEdit(view: EntityView, d: CompiledDeclaration, input: unknow
 	if (!expander.run(PLAN_LIMITS.maxNetWrites)) return bound(s.certainWrites());
 	for (const phase of d.phases) {
 		const fault = runPhase(s, d, phase);
-		if (fault !== null) return withFacts(refuse(fault.code, fault.subject, fault.opIndex), fault.ruleKey, 1);
+		if (fault !== null) return withDetails(refuse(fault.code, fault.subject, fault.opIndex), { ruleKey: fault.ruleKey, measure: fault.measure, ...(fault.writers ? { writers: fault.writers } : {}) });
 		if (!expander.run(PLAN_LIMITS.maxNetWrites)) return bound(s.certainWrites());
 	}
 	// the bound is judged before the rules' breaches, since an expansion stopped at it is not judged (D19)
@@ -89,9 +91,6 @@ export function planEdit(view: EntityView, d: CompiledDeclaration, input: unknow
 		after = now.breaches;
 	}
 	const verdict = judge(s, d, before, after);
-	if (verdict !== null) {
-		const r = withFacts(refuse(verdict.code, verdict.subject, verdict.opIndex), verdict.ruleKey, verdict.measure);
-		return verdict.sentence === null || r.ok ? r : { ok: false, refusal: { ...r.refusal, details: { ...r.refusal.details, sentence: verdict.sentence } } };
-	}
+	if (verdict !== null) return withDetails(refuse(verdict.code, verdict.subject, verdict.opIndex), { ruleKey: verdict.ruleKey, measure: verdict.measure, sentence: verdict.sentence, ...(verdict.writers ? { writers: verdict.writers } : {}) });
 	return { ok: true, position: view.position(), steps: [...s.steps], inverse: s.inverse(), writes };
 }

@@ -1,8 +1,8 @@
 /**
  * One item applied to the scratch layer (CONTRACT.md *Judging and refusals*, *Consequence writes held to request rules*;
- * docs/DECISIONS.md D18, D19, D23): a requested item, or a write a consequence returned, checked against the edit as the writes
- * before it left it and applied, or the fault that stops it -- the same checks for both, so a consequence's write meets every
- * rule a requested write meets at the point it is made.
+ * docs/DECISIONS.md D18, D19, D23, D24): a requested item, or a write a consequence returned, checked against the edit as the
+ * writes before it left it and applied, or the fault that stops it -- the same checks for both, so a consequence's write meets
+ * every rule a requested write meets at the point it is made, but for its shape, which the result judges.
  */
 import type { CompiledDeclaration } from "./declaration.js";
 import type { GraphRefusalCode } from "./refusal.js";
@@ -47,6 +47,9 @@ export function applyItem(s: Scratch, d: CompiledDeclaration, item: unknown, at:
 	if (!isObject(given)) return { code: "not-plain", subject: id };
 	const record: GraphRecord = op === "set" ? { ...held!.record, ...given } : given;
 	for (const ref of refs) if (heldBy(record, ref) === undefined) return { code: "invalid-reference", subject: id, ruleKey: `${kind}.${ref.field}.holds` };
+	// a requested write's record is judged against its kind's shape at its item, whether or not the entity fit before (the
+	// corpus's R31; D24); a consequence's is judged on the result, as every entity a consequence or a rule wrote is
+	if (by === null && d.shapes.get(kind)?.judge(record as never).verdict === "misfit") return { code: "shape-misfit", subject: id, ruleKey: `${kind}.shape` };
 	s.write({ op: "put", kind, id, record }, cause, by, true);
 	return null;
 }
