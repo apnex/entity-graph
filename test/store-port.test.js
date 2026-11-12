@@ -220,3 +220,57 @@ test("a graph's writer is a name of 1 to 1,024 characters, or its options are re
 	for (const writer of ["", 7, "x".repeat(1025)]) assert.equal(createEntityGraph(NOTES, undefined, { port: createMemoryGraphPort(), writer }).refusal?.code, "invalid-options", JSON.stringify(writer));
 	assert.equal(createEntityGraph(NOTES, undefined, { port: createMemoryGraphPort(), writer: "x".repeat(1024) }).ok, true);
 });
+
+// --- the gaps the independent check of 6e9ce7e found: each kills a fault that survived the suite ---
+
+test("two adapters under one writer: the second graph's edit at a position the first's already used is refused store-moved, not store-failed", () => {
+	const store = openStore(createMemoryStoragePort());
+	const first = over(createEntityStorePort(store, { writer: "shared" }), { writer: "g1" });
+	const second = over(createEntityStorePort(store, { writer: "shared" }), { writer: "g2" });
+	ok(first.commit({ items: [create("note", "a")] }));
+	const r = no(second.commit({ items: [create("note", "b")] }));
+	assert.equal(r.code, "store-moved", "the write identity shared@0 already taken by a different change");
+	ok(second.sync());
+	assert.equal(ok(second.commit({ items: [create("note", "b")] })).position, 2);
+});
+
+test("over entity-store, a kind larger than one page of find is read whole by the first fill", () => {
+	const store = openStore(createMemoryStoragePort());
+	const body = { text: "x".repeat(600) };
+	for (let batch = 0; batch < 2; batch++) {
+		const writes = Array.from({ length: 600 }, (_, i) => ({ operation: "create", input: { kind: "note", name: `n${batch}-${String(i).padStart(4, "0")}`, tags: [], body } }));
+		assert.equal(store.change({ writes }, { writer: "seed", writeId: `seed-${batch}` }).outcome, "answered");
+	}
+	const firstPage = store.find({ kind: "note" }).answer;
+	assert.ok(firstPage.next !== null && firstPage.entries.length < 1200, `one page holds ${firstPage.entries.length} of 1,200`);
+	const g = over(createEntityStorePort(store, { writer: "reader" }), { writer: "reader" });
+	assert.deepEqual([g.position(), g.all("note").entities.length], [2, 1200]);
+});
+
+test("over entity-store, a view's position past the store's history window is refilled by sync, answering that it refilled", () => {
+	let now = 1_700_000_000_000;
+	const opened = openEntityStore({ storage: createMemoryStoragePort(), clock: { now: () => now }, historyMs: 1000, maxEntityBytes: 65536, kinds: { note: SHAPE, tag: SHAPE } });
+	const store = opened.store;
+	const g = over(createEntityStorePort(store, { writer: "mine" }), { writer: "mine" });
+	ok(g.commit({ items: [create("note", "a")] }));
+	const theirs = createEntityStorePort(store, { writer: "theirs" });
+	assert.equal(theirs.change({ writes: [{ kind: "note", id: "b", record: {} }], expectedPosition: 1 }).ok, true);
+	now += 5000;
+	assert.equal(theirs.change({ writes: [{ kind: "note", id: "c", record: {} }], expectedPosition: 2 }).ok, true);
+	assert.equal(theirs.changes(1).held, false, "the adapter answers that position 1 is no longer held");
+	const r = ok(g.sync());
+	assert.equal(r.position, 3);
+	assert.deepEqual(Object.keys(records(g)), ["a", "b", "c"]);
+});
+
+test("a restart after the store forgot its changes through 1, 3, 5 or 6 reads back exactly the edits whose notes it still holds", () => {
+	for (const forgotten of [1, 3, 5, 6]) {
+		const port = createMemoryGraphPort();
+		const g = over(port, { writer: "w" });
+		for (let i = 0; i < 8; i++) ok(g.commit({ items: [create("note", `n${i}`)] }));
+		port.forget(forgotten);
+		const again = over(port, { writer: "w" });
+		const want = Array.from({ length: 8 - forgotten }, (_, i) => forgotten + 1 + i);
+		assert.deepEqual(again.history().edits.map((e) => e.position), want, `forgotten through ${forgotten}`);
+	}
+});
