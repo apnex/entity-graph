@@ -161,9 +161,28 @@ test("a consequence's write is held to the rules a requested write of it would m
 	assert.deepEqual(facts(refused(absent.plan({ items: [set("task", "a", { n: 3 })] }))), { code: "entity-absent", ruleKey: "task.fill", subject: "ghost", measure: 1, opIndex: 0, sentence: null }, "a write no requested item could make, named by its fault and its consequence");
 });
 
-test("a reference rule's write is held to the shape a requested write of it would meet, named by the rule it breaks", () => {
+test("a reference rule's write is held to the shape a requested write of it would meet, named by the rule it breaks and the rule that wrote it (D25)", () => {
 	const g = make({ kinds: [{ kind: "person" }, { kind: "task", shape: SHAPED, references: [ref("owner", ["person"], "one")] }] }, [e("person", "p"), e("task", "a", { title: "A", owner: "p" })]);
-	assert.deepEqual(facts(refused(g.plan({ items: [remove("person", "p")] }))), { code: "shape-misfit", ruleKey: "task.shape", subject: "a", measure: 1, opIndex: 0, sentence: null }, "unlinking left owner null, which the shape does not allow");
+	assert.deepEqual(facts(refused(g.plan({ items: [remove("person", "p")] }))), { code: "shape-misfit", ruleKey: "task.shape", subject: "a", measure: 1, opIndex: 0, sentence: null, writers: ["task.owner.onTargetDelete"] }, "unlinking left owner null, which the shape does not allow");
+	const teams = [{ kind: "member" }, { kind: "team", references: [ref("members", ["member"], "many", { exclusivity: "steal", min: 2, onBelowMin: "refuse" })] }];
+	const t = make({ kinds: teams }, [e("member", "m1"), e("member", "m2"), e("member", "m3"), e("team", "red", { members: ["m1", "m2"] })]);
+	assert.deepEqual(facts(refused(t.plan({ items: [create("team", "blue", { members: ["m1", "m3"] })] }))), { code: "rule-broken", ruleKey: "team.members.min", subject: "red", measure: 1, opIndex: 0, sentence: null, writers: ["team.members.exclusivity"] }, "blue's steal left red below its minimum");
+	const both = make({ phases: ["first"], kinds: [{ kind: "person" }, { kind: "task", shape: SHAPED, references: [ref("owner", ["person"], "one")], consequences: [consequence("touch", "first", { deleted: ["person"] }, () => [set("task", "a", { n: 1 })])] }] }, [e("person", "p"), e("task", "a", { title: "A", owner: "p" })]);
+	assert.deepEqual(refused(both.plan({ items: [remove("person", "p")] })).details.writers, ["task.owner.onTargetDelete"], "the rule whose write the misfit follows from, not the consequence that also wrote the task (the corpus's R38)");
+});
+
+test("an edit whose rules a later phase undoes is not refused for the writes it would have made: the early stop waits for the last expansion (D25)", () => {
+	const restore = consequence("restore", "second", { deleted: ["hub"] }, ({ matches, graph }) => [
+		...matches.map((m) => create("hub", m.id, m.before)),
+		...graph.all("spoke").filter((x) => x.record.hub === null).map((x) => set("spoke", x.id, { hub: "h" })),
+	]);
+	for (const n of [2000, 2001, 5000]) {
+		const g = make({ phases: ["first", "second"], kinds: [{ kind: "hub", consequences: [restore] }, { kind: "spoke", references: [ref("hub", ["hub"], "one")] }] }, [e("hub", "h", { size: n }), ...Array.from({ length: n }, (_, i) => e("spoke", `s${i}`, { hub: "h" }))]);
+		const r = accepted(g.plan({ items: [remove("hub", "h")] }));
+		assert.deepEqual(r.writes, [], `${n} spokes: the hub and every spoke as the edit found them`);
+	}
+	const plain = make({ kinds: [{ kind: "hub" }, { kind: "spoke", references: [ref("hub", ["hub"], "one")] }] }, [e("hub", "h"), ...Array.from({ length: 2001 }, (_, i) => e("spoke", `s${i}`, { hub: "h" }))]);
+	assert.deepEqual([refused(plain.plan({ items: [remove("hub", "h")] })).code], ["too-many-writes"], "with no phase after it, the expansion stops at the bound");
 });
 
 test("a requested write whose record misfits its kind's shape is refused at its item, whether or not the entity fit before (the corpus's R31)", () => {

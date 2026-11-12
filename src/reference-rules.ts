@@ -105,8 +105,9 @@ export class RuleExpander {
 	/** True at the fixed point; false where it stopped because more than `bound` net writes are certain (D19). */
 	run(bound: number): boolean {
 		const { s, d } = this;
-		const put = (entity: GraphEntity, record: GraphRecord, cause: number) => s.write({ op: "put", kind: entity.kind, id: entity.id, record }, cause);
-		const remove = (entity: GraphEntity, cause: number) => s.write({ op: "del", kind: entity.kind, id: entity.id }, cause);
+		// each write names the rule that made it, `<kind>.<field>.<option>` of the reference declaring it (D25)
+		const put = (entity: GraphEntity, record: GraphRecord, cause: number, rule: string) => s.write({ op: "put", kind: entity.kind, id: entity.id, record }, cause, rule);
+		const remove = (entity: GraphEntity, cause: number, rule: string) => s.write({ op: "del", kind: entity.kind, id: entity.id }, cause, rule);
 		const over = () => s.certainWrites() > bound;
 		for (;;) {
 			let changed = false;
@@ -119,8 +120,9 @@ export class RuleExpander {
 					const holder = s.get(r.id);
 					const ref = refOf(d, r.kind, r.field);
 					if (holder === undefined || ref === undefined || ref.onTargetDelete === "refuse") continue;
-					if (ref.onTargetDelete === "cascade-delete") remove(holder, cause);
-					else put(holder, without(holder.record, ref, target), cause);
+					const rule = `${r.kind}.${r.field}.onTargetDelete`;
+					if (ref.onTargetDelete === "cascade-delete") remove(holder, cause, rule);
+					else put(holder, without(holder.record, ref, target), cause, rule);
 					changed = true;
 					if (over()) return false;
 				}
@@ -141,7 +143,7 @@ export class RuleExpander {
 					for (const r of holders) {
 						if (r.id === fresh[0]!.id) continue;
 						const holder = s.get(r.id)!;
-						put(holder, without(holder.record, ref, target), cause);
+						put(holder, without(holder.record, ref, target), cause, `${kind}.${field}.exclusivity`);
 						changed = true;
 						if (over()) return false;
 					}
@@ -160,7 +162,7 @@ export class RuleExpander {
 					const now = s.targetsOf(id).get(ref.field)?.length ?? 0;
 					const was = s.targetsBefore(id).get(ref.field)?.length ?? 0;
 					if (now < ref.min && now < was) {
-						remove(entity, s.shrunk.get(fieldKey(id, ref.field))?.cause ?? -1);
+						remove(entity, s.shrunk.get(fieldKey(id, ref.field))?.cause ?? -1, `${entity.kind}.${ref.field}.onBelowMin`);
 						changed = true;
 						if (over()) return false;
 						break;
@@ -176,7 +178,7 @@ export class RuleExpander {
 				const entity = s.get(target);
 				if (released === undefined || entity === undefined || s.referrersOf(target).length > 0) continue;
 				s.released.delete(target);
-				remove(entity, released.cause);
+				remove(entity, released.at.cause, released.rule);
 				changed = true;
 				if (over()) return false;
 			}
@@ -275,8 +277,10 @@ export function judge(s: Scratch, d: CompiledDeclaration, conditionsBefore: Read
 		}
 		return out;
 	};
-	// the consequences that wrote an entity, in declared order, or null where none did
+	// the consequences and rules that wrote an entity, the consequences first, each in declared order, or null where none did: a
+	// condition's breach names those of its subject, since no write of the whole set can be read from it (D25)
 	const order = new Map(d.consequences.map((c) => [c.key, c.order]));
+	for (const [kind, refs] of d.kinds) for (const ref of refs) for (const option of ["onTargetDelete", "exclusivity", "onBelowMin", "onUnreferenced"]) order.set(`${kind}.${ref.field}.${option}`, order.size);
 	const writersOf = (id: string): readonly string[] | null => {
 		const by = s.writtenBy.get(id);
 		return by === undefined ? null : [...by].sort((a, b) => order.get(a)! - order.get(b)!);
@@ -286,8 +290,9 @@ export function judge(s: Scratch, d: CompiledDeclaration, conditionsBefore: Read
 	for (const b of read(true).values()) {
 		const was = before.get(b.key);
 		if (b.measure <= (was?.measure ?? 0)) continue; // neither introduced nor worsened
-		const { at, entity } = attributionOf(s, b, was);
-		found.push({ key: b.key, code: b.rule === "shape" ? "shape-misfit" : "rule-broken", ruleKey: b.ruleKey, subject: b.subject, measure: b.measure, opIndex: at?.cause ?? -1, sentence: null, writers: writersOf(entity) });
+		// the consequence or rule whose write the breach follows from (the corpus's R38; D25)
+		const { at } = attributionOf(s, b, was);
+		found.push({ key: b.key, code: b.rule === "shape" ? "shape-misfit" : "rule-broken", ruleKey: b.ruleKey, subject: b.subject, measure: b.measure, opIndex: at?.cause ?? -1, sentence: null, writers: at?.by ? [at.by] : null });
 	}
 	found.sort((a, b) => a.opIndex - b.opIndex || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
 	if (found.length > 0) {
@@ -319,7 +324,7 @@ function attributionOf(s: Scratch, b: Reading, was: Reading | undefined): { at: 
 	for (const one of b.counted) {
 		if (before.has(one)) continue;
 		if (b.rule === "shape") {
-			at = later(at, s.fieldCause.get(fieldKey(b.id, fieldOfMisfit(one))) ?? s.lastWrite.get(b.id));
+			at = later(at, s.fieldCause(b.id, fieldOfMisfit(one)) ?? s.lastWrite.get(b.id));
 		} else if (b.rule === "exclusivity") {
 			if (s.heldBefore(one, b.kind, b.field, b.id)) continue;
 			const next = later(at, s.heldSince.get(holdingKey(one, b.field, b.id)));

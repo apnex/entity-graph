@@ -388,7 +388,8 @@ Letting the later of two new holders steal from the earlier - the contract's `st
 ## D19 - The independent check's findings on `d105140` fixed: what a breach follows from, an identity kept to its kind, the bound met early, a cost that follows the edit
 
 **Ruled by:** the builder of M2, 2026-11-11, on the independent check of pull request 5 at `d105140`, dispatched by draw's recorder; proposed for zorg's review where it settles what the contract leaves open, as `D16` to `D18` are.\
-**Affects:** `src/scratch.ts`, `src/reference-rules.ts`, `src/planner.ts`, `src/refusal.ts`, `src/plain-members.ts`, `src/view.ts`, `test/plan.test.js`, `test/plan-properties.test.js`, `test/plan-cost.test.js`, `test/mutation.test.js`.
+**Affects:** `src/scratch.ts`, `src/reference-rules.ts`, `src/planner.ts`, `src/refusal.ts`, `src/plain-members.ts`, `src/view.ts`, `test/plan.test.js`, `test/plan-properties.test.js`, `test/plan-cost.test.js`, `test/mutation.test.js`.\
+**Refined by `D25` (2026-11-12):** with phases, a later phase's consequence may write back what a rule wrote, so the early stop at the bound applies only in the expansion after the last phase.
 
 **Ruling.**\
 `opIndex` names the requested item a breach follows from, read from what the breach counts that it did not count before the edit (correcting `D18`).\
@@ -450,7 +451,9 @@ Staying on shape-check `0.1.0` until M8 - a consumer's dialect 2 shapes would be
 ## D21 - Proposed reading: phases, consequences and conditions as declared and as run
 
 **Proposed by:** the builder of M3, 2026-11-11, for zorg's review, reading `CONTRACT.md`'s *Consequences and the stopping rule* and *Judging and refusals*; it takes the neutral corpus's readings `R25` to `R29`, `R32` and `R36` (`corpus/README.md`).\
-**Affects:** `src/declaration.ts`, `src/phases.ts`, `src/planner.ts`.
+**Affects:** `src/declaration.ts`, `src/phases.ts`, `src/planner.ts`.\
+**Corrected by `D25` (2026-11-12), after the independent check of `5f6c512`:** the conflict's measure is stated below as the settlement it is; and the last sentence below, on the net-write bound, held only for the expansion after the last phase, as `D25` restates.\
+The rest is kept as it was proposed.
 
 **Reading.**\
 A declaration's `phases` is a non-empty list of distinct names, in running order, and may be left out by a declaration with no consequence.\
@@ -461,7 +464,8 @@ A change is read against the state the edit found: an entity created, one delete
 A kind first touched during a phase brings the consequences listening to it, declared after the one that touched it, into the same run.\
 `run` is called with `{ matches, graph }`: each match `{ kind, id, before, after, fields }`, the records as the edit found them and as they stand, and `graph` a reader of the edit so far (`D22`); it returns a list of writes in the edit's own form, `create`, `change`, `set` or `remove`, each checked and applied as a requested item is, and a write a requested item could not make is refused with that fault's code, the consequence's key as `details.ruleKey` and the write's identity as `subject`.\
 A write of a consequence carries the requested item the changes it heard follow from (`R33`; `D19`): an entity's creation or deletion, or the latest write of a field its trigger names.\
-Two different consequences writing one entity, by any write, in one run of a phase is refused as `consequence-conflict`, keyed by the code, the entity as `subject`, the number of consequences that wrote it as `measure`, `opIndex` -1, and the two in `details.writers` (`R29`; `D23`); a consequence writing what a requested item, a rule or an earlier phase wrote is no fault.\
+Two different consequences writing one entity, by any write, in one run of a phase is refused as `consequence-conflict` at the second one's write, keyed by the code, the entity as `subject`, `opIndex` -1, and the two in `details.writers` (`R29`; `D23`); a consequence writing what a requested item, a rule or an earlier phase wrote is no fault.\
+This settles when the fault is: it exists at the second writer's write, so planning stops there, a third writer never runs, and the measure is always 2.\
 After every phase the rules expand from the writes since they last ran; a hold a consequence gained on a target the edit deleted sends that target round again, so `onTargetDelete` acts on its new referrer.\
 A condition's `check` is called with a reader and answers a list of `{ subject, measure, sentence }`, each subject named once and each measure above nothing; it is run on the state the edit found, read once per view position, and on the state the edit would leave, and each breach is keyed `<rule key>@<subject>` and refused as `condition-broken` when new or worse, its `sentence` carried verbatim and its `opIndex` -1 (`R32`).\
 A condition's breach is reported only where no breach of a reference rule or a shape is, since those name the item they follow from.\
@@ -500,7 +504,9 @@ Copying what each function is handed instead of freezing it - a function's chang
 
 **Proposed by:** the builder of M3, 2026-11-11, for zorg's review, reading `CONTRACT.md`'s *Consequence writes held to request rules*; it takes the corpus's readings `R30` and `R33`.\
 **Owed to zorg:** the new member `details.writers`, since the contract's refusal form names `details` as `{ ruleKey, subject, measure, opIndex, sentence }` and no member can name a consequence there; this branch adds it in the code and leaves `CONTRACT.md`'s terms as they are until zorg rules.\
-**Affects:** `src/reference-rules.ts`, `src/refusal.ts`, `src/planner.ts`, `src/phases.ts`.
+**Affects:** `src/reference-rules.ts`, `src/refusal.ts`, `src/planner.ts`, `src/phases.ts`.\
+**Refined by `D25` (2026-11-12):** for a breach of a reference rule or a shape, `writers` names the consequence or rule whose write the breach follows from (the corpus's `R38`), a rule by its key; a condition's breach names those that wrote its subject.\
+The text below is kept as it was proposed.
 
 **Reading.**\
 Every entity a consequence or a reference rule wrote is judged as it stands in the result by its shape, the reference rules and the conditions, by key and measure, as every entity the edit touched is: refused for a breach it introduces or raises, so an entity that already failed and fails no worse is not (`R30`).\
@@ -533,3 +539,28 @@ The contract says a shape misfit of a requested write refuses the plan, without 
 
 **Alternatives refuted.**\
 Judging a requested write's shape on the result by its number of misfits, a partial repair allowed, as this branch first built - the contract states the exception for consequence writes alone.
+
+---
+
+## D25 - The independent check's findings on `5f6c512` fixed: the early stop waits for the last expansion, a rule is named among the writers, changes are worked out once per write
+
+**Ruled by:** the builder of M3, 2026-11-12, on the independent check of pull request 6 at `5f6c512`, dispatched by draw's recorder; proposed for zorg's review where it settles what the contract leaves open, and `details.writers` still owed to zorg (`D23`).\
+**Affects:** `src/planner.ts`, `src/reference-rules.ts`, `src/scratch.ts`, `src/phases.ts`, `src/declaration.ts`, `test/phases.test.js`, `test/plan-cost.test.js`, `test/plan.test.js`, `test/mutation.test.js`, `test/corpus.test.js`.
+
+**Ruling.**\
+The expansion may stop early at the net-write bound only when it is the last of the plan: after the requested items when the declaration has no phase, and otherwise after the last phase.\
+Before that, a later phase's consequence may write back what a rule wrote, so an entity the rules alone have touched so far is not yet a certain net write; each earlier expansion runs to its fixed point, which is linear in its writes (`D19`), and the net writes are judged once the phases are done.\
+In the last expansion no requested item or consequence can still write, so an entity only the rules touched is a certain net write, as `D19` argues, and stopping when more than the bound are certain refuses only an edit the final count would refuse.\
+A rule's write records its key, `<kind>.<field>.<option>` of the reference declaring it: `onTargetDelete` for an unlink or a cascade, `exclusivity` for a steal, `onBelowMin` for a minimum's cascade, `onUnreferenced` for a target deleted unreferenced.\
+For a breach of a reference rule or a shape, `details.writers` names the consequence or rule whose write the breach follows from, as its `opIndex` is read (`R38`; `D19`), and is absent where that write was a requested item's; for a condition's breach, which no one write can be read from, it names every consequence and rule that wrote its subject, consequences first, each in declared order.\
+Each entity's change over the edit is worked out once per write of it and frozen, and handed as it is to every consequence that hears it; consequences with one trigger share what it hears while nothing has been written since; and what a trigger hears, and the write it follows from, are read in one pass.\
+Measured with a Node timing, the best of three or median of five plans, 2,000 entities of a kind each set in one edit: 300 consequences listening with one trigger add about 1 ms to the 19 ms of planning the edit with none, where they cost about 730 ms; 300 with distinct triggers take about 165 ms, each handed all 2,000 of its changes.\
+The corpus's three cases of a consequence's write breaking a per-entity rule (`e9e0707`, `b3-16` to `b3-18`, merged unedited) pass with the rest of batch 3.
+
+**Why.**\
+An edit that changes nothing cannot write too much; and the contract asks a refusal to name the consequence or rule, so a rule that wrote the entity is named as a consequence is.
+
+**Alternatives refuted.**\
+Counting an entity as a certain write once a requested item or consequence can no longer write it - the scratch layer cannot know that before the last phase has run.\
+Keeping each consequence's matches apart and caching only the change records - 300 listeners with one trigger would still each read every change, about 290 ms where they now add about 1 ms.
+

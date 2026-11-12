@@ -92,12 +92,14 @@ export class Scratch implements GraphState {
 	readonly heldSince = new Map<string, Attribution>();
 	readonly shrunk = new Map<string, Attribution>();
 	/** Each top-level field of an entity, by the last write that changed it; and each entity, by its last write. */
-	readonly fieldCause = new Map<string, Attribution>();
+	private readonly fieldCauses = new Map<string, Map<string, Attribution>>();
 	readonly lastWrite = new Map<string, Attribution>();
-	/** The consequences that wrote each entity, any phase. */
+	/** The consequences and reference rules that wrote each entity, any phase, each by its key (D23, D25). */
 	readonly writtenBy = new Map<string, Set<string>>();
-	/** The targets an `onUnreferenced: "delete"` reference stopped holding, with the item that led there. */
-	readonly released = new Map<string, Attribution>();
+	/** Each entity's change over the edit, worked out once per write of it (D25). */
+	private readonly changes = new Map<string, { readonly seq: number; readonly change: GraphChangeRecord | null }>();
+	/** The targets an `onUnreferenced: "delete"` reference stopped holding, with the item that led there and that reference's rule key. */
+	readonly released = new Map<string, { readonly at: Attribution; readonly rule: string }>();
 
 	constructor(private readonly view: EntityView, private readonly declaration: CompiledDeclaration) {}
 
@@ -153,6 +155,11 @@ export class Scratch implements GraphState {
 		return out.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
 	}
 
+	/** The last write that changed a top-level field of an entity. */
+	fieldCause(id: string, field: string): Attribution | undefined {
+		return this.fieldCauses.get(id)?.get(field);
+	}
+
 	/** Where an identity stands in the order the edit first touched each. */
 	touchOrder(id: string): number {
 		return this.seen.get(id) ?? Number.MAX_SAFE_INTEGER;
@@ -163,15 +170,23 @@ export class Scratch implements GraphState {
 		return this.byKind.get(kind) ?? [];
 	}
 
-	/** An entity's change over the edit, or null where the edit left it as it found it, an entity created and deleted again included. */
+	/**
+	 * An entity's change over the edit, frozen, or null where the edit left it as it found it, an entity created and deleted again
+	 * included; worked out once per write of the entity, however many consequences ask (D25).
+	 */
 	change(id: string): GraphChangeRecord | null {
+		const seq = this.lastWrite.get(id)?.seq ?? -1;
+		const held = this.changes.get(id);
+		if (held !== undefined && held.seq === seq) return held.change;
 		const was = this.view.get(id);
 		const now = this.get(id);
-		if (was === undefined && now === undefined) return null;
-		const kind = (now ?? was)!.kind;
-		const fields = was !== undefined && now !== undefined ? changedFields(was.record, now.record) : Object.keys((now ?? was)!.record).sort();
-		if (was !== undefined && now !== undefined && fields.length === 0) return null;
-		return { kind, id, before: was?.record ?? null, after: now?.record ?? null, fields };
+		let change: GraphChangeRecord | null = null;
+		if (was !== undefined || now !== undefined) {
+			const fields = was !== undefined && now !== undefined ? changedFields(was.record, now.record) : Object.keys((now ?? was)!.record).sort();
+			if (was === undefined || now === undefined || fields.length > 0) change = Object.freeze({ kind: (now ?? was)!.kind, id, before: was?.record ?? null, after: now?.record ?? null, fields: Object.freeze(fields) });
+		}
+		this.changes.set(id, { seq, change });
+		return change;
 	}
 
 	/** The targets an entity's record holds, per reference field in declaration order; the record was checked when written. */
@@ -194,7 +209,8 @@ export class Scratch implements GraphState {
 
 	/**
 	 * Applies one step, its reversal read from the state just before it: `cause` the requested item it follows from, `by` the
-	 * consequence that wrote it or null, and `free` whether a requested item or a consequence wrote it rather than a rule.
+	 * key of the consequence or reference rule that wrote it, or null for a requested item, and `free` whether a requested item
+	 * or a consequence wrote it rather than a rule.
 	 */
 	write(step: GraphStep, cause: number, by: string | null = null, free = false): void {
 		const id = step.id;
@@ -226,7 +242,11 @@ export class Scratch implements GraphState {
 		const created = now !== null && was?.kind !== now.kind;
 		if (created || (now === null && was !== undefined)) this.presence.set(id, at);
 		if (now === null && was !== undefined) this.deleted.set(id, at);
-		if (now !== null) for (const field of created ? Object.keys(now.record) : changedFields(was!.record, now.record)) this.fieldCause.set(fieldKey(id, field), at);
+		if (now !== null) {
+			let causes = this.fieldCauses.get(id);
+			if (causes === undefined) this.fieldCauses.set(id, (causes = new Map()));
+			for (const field of created ? Object.keys(now.record) : changedFields(was!.record, now.record)) causes.set(field, at);
+		}
 		const lost: [string, string][] = [];
 		const gained: [string, string][] = [];
 		for (const ref of this.declaration.kinds.get(was?.kind ?? step.kind) ?? []) {
@@ -237,7 +257,7 @@ export class Scratch implements GraphState {
 				if (kept.has(target)) continue;
 				lost.push([ref.field, target]);
 				// a target an `onUnreferenced: "delete"` reference stopped holding is a candidate for deletion once nothing holds it
-				if (ref.onUnreferenced === "delete") this.released.set(target, at);
+				if (ref.onUnreferenced === "delete") this.released.set(target, { at, rule: `${(was?.kind ?? step.kind)}.${ref.field}.onUnreferenced` });
 			}
 			if (!created && now !== null && has.length < had.length) this.shrunk.set(fieldKey(id, ref.field), at);
 		}

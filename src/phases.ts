@@ -21,7 +21,7 @@ import { applyItem } from "./items.js";
 import { openReader } from "./reader.js";
 import type { ConditionReading } from "./reference-rules.js";
 import type { GraphRefusalCode } from "./refusal.js";
-import { type Attribution, fieldKey, type GraphChangeRecord, type GraphState, later, type Scratch } from "./scratch.js";
+import { type Attribution, type GraphChangeRecord, type GraphState, later, type Scratch } from "./scratch.js";
 import { isObject } from "./view.js";
 
 /** Why a phase or a condition stops the plan: the refusal's code and the facts it names. */
@@ -34,29 +34,34 @@ export interface PhaseFault {
 	readonly writers?: readonly string[];
 }
 
-/** Whether a consequence's trigger hears one change: an entity of its kinds created or deleted, or one of its named fields changed. */
-function hears(c: CompiledConsequence, change: GraphChangeRecord): boolean {
-	return c.clauses.some((clause) =>
-		(change.after === null && (clause.deleted?.includes(change.kind) ?? false))
-		|| (change.before === null && (clause.created?.includes(change.kind) ?? false))
-		|| (change.before !== null && change.after !== null && clause.changed?.kind === change.kind && clause.changed.fields.some((f) => change.fields.includes(f))));
-}
-
-/** The write a change follows from: an entity's creation or deletion, or the latest write of a field the trigger names. */
-function causeOfChange(s: Scratch, c: CompiledConsequence, change: GraphChangeRecord): Attribution | undefined {
-	if (change.before === null || change.after === null) return s.presence.get(change.id);
+/**
+ * Whether a consequence's trigger hears one change -- an entity of its kinds created or deleted, or one of its named fields
+ * changed -- and if so the write the change follows from: the entity's creation or deletion, or the latest write of a field the
+ * trigger names; `false` where it does not hear it. Plain loops, since it runs once per consequence per change heard.
+ */
+function heardFrom(s: Scratch, c: CompiledConsequence, change: GraphChangeRecord): Attribution | undefined | false {
+	const created = change.before === null;
+	const deleted = change.after === null;
+	let heard = false;
 	let at: Attribution | undefined;
 	for (const clause of c.clauses) {
-		if (clause.changed?.kind !== change.kind) continue;
-		for (const field of clause.changed.fields) if (change.fields.includes(field)) at = later(at, s.fieldCause.get(fieldKey(change.id, field)));
+		if (deleted ? clause.deleted?.includes(change.kind) : created ? clause.created?.includes(change.kind) : false) return s.presence.get(change.id);
+		if (created || deleted || clause.changed === undefined || clause.changed.kind !== change.kind) continue;
+		for (const field of clause.changed.fields) {
+			if (!change.fields.includes(field)) continue;
+			heard = true;
+			at = later(at, s.fieldCause(change.id, field));
+		}
 	}
-	return at;
+	return heard ? at : false;
 }
 
 /** Runs one phase over the edit so far, applying what its consequences write; the fault that stops it, or null. */
 export function runPhase(s: Scratch, d: CompiledDeclaration, phase: string): PhaseFault | null {
 	const index = d.listening.get(phase)!;
 	const claimed = new Map<string, string>(); // entity -> the consequence that wrote it in this run of the phase
+	// what a trigger hears, by its clauses, while nothing has been written since: consequences with one trigger share it (D25)
+	const heardBy = new Map<string, { readonly steps: number; readonly matches: readonly GraphChangeRecord[]; readonly cause: number }>();
 	const queued = new Set<CompiledConsequence>();
 	let pending: CompiledConsequence[] = [];
 	let next = 0;
@@ -81,23 +86,33 @@ export function runPhase(s: Scratch, d: CompiledDeclaration, phase: string): Pha
 	while (next < pending.length) {
 		const c = pending[next++]!;
 		last = c.order;
-		const matches: GraphChangeRecord[] = [];
-		const seen = new Set<string>();
-		for (const kind of c.kinds) {
-			for (const id of s.touchedOf(kind)) {
-				if (seen.has(id)) continue;
-				seen.add(id);
-				const change = s.change(id);
-				if (change !== null && hears(c, change)) matches.push(change);
+		let found = heardBy.get(c.signature);
+		if (found === undefined || found.steps !== s.steps.length) {
+			const list: GraphChangeRecord[] = [];
+			const seen = new Set<string>();
+			let at: Attribution | undefined;
+			for (const kind of c.kinds) {
+				for (const id of s.touchedOf(kind)) {
+					if (seen.has(id)) continue;
+					seen.add(id);
+					const change = s.change(id);
+					if (change === null) continue;
+					const from = heardFrom(s, c, change);
+					if (from === false) continue;
+					list.push(change);
+					at = later(at, from);
+				}
 			}
+			// one kind's identities are already in the order first touched; several kinds' are merged into it
+			if (c.kinds.length > 1) list.sort((a, b) => s.touchOrder(a.id) - s.touchOrder(b.id));
+			found = { steps: s.steps.length, matches: Object.freeze(list), cause: at?.cause ?? -1 };
+			heardBy.set(c.signature, found);
 		}
+		const { matches, cause } = found;
 		if (matches.length === 0) continue;
-		matches.sort((a, b) => s.touchOrder(a.id) - s.touchOrder(b.id));
-		let at: Attribution | undefined;
-		for (const m of matches) at = later(at, causeOfChange(s, c, m));
-		const cause = at?.cause ?? -1;
 		const failed = (code: GraphRefusalCode, ruleKey: string, subject: string): PhaseFault => ({ code, ruleKey, subject, measure: 1, opIndex: cause });
-		const heard = Object.freeze(matches.map((m) => Object.freeze({ kind: m.kind, id: m.id, before: m.before, after: m.after, fields: Object.freeze([...m.fields]) })));
+		// each change record is frozen once, when worked out, and handed as it is
+		const heard = matches;
 		const { reader, close } = openReader(s, d);
 		let returned: unknown;
 		try {

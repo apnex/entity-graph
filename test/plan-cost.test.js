@@ -8,7 +8,7 @@ import { createEntityGraph } from "../dist/index.js";
 
 const ref = (field, targets, holds, options = {}) => ({ field, targets, holds, onTargetDelete: "unlink", ...options });
 const graph = (kinds, entities) => {
-	const made = createEntityGraph({ kinds }, { position: 1, entities });
+	const made = createEntityGraph({ ...(kinds.some((k) => k.consequences) ? { phases: ["first"] } : {}), kinds }, { position: 1, entities });
 	assert.equal(made.ok, true, JSON.stringify(made.refusal));
 	return made.graph;
 };
@@ -45,4 +45,25 @@ test("a field set on an entity 20,000 others hold reads none of them", { timeout
 	for (let i = 0; i < 21; i++) times.push(timed(() => g.plan({ items: [{ op: "set", kind: "tag", id: "t", patch: { label: `l${i}` } }] }))[1]);
 	times.sort((a, b) => a - b);
 	assert.ok(times[10] < 3, `median ${times[10].toFixed(2)} ms`);
+});
+
+test("300 consequences listening to a kind an edit touches 2,000 times each read the edit's changes once worked out (D25)", { timeout: 20000 }, () => {
+	// each listener is handed all 2,000 changes, or writes what refuses the plan
+	const listeners = (distinct) => Array.from({ length: 300 }, (_, i) => ({ id: `c${i}`, phase: "first", trigger: { changed: { kind: "item", fields: distinct ? ["v", `f${i}`] : ["v"] } }, run: ({ matches }) => (matches.length === 2000 ? [] : [{ op: "remove", kind: "item", id: "missing" }]) }));
+	const entities = Array.from({ length: 2000 }, (_, i) => ({ kind: "item", id: `i${i}`, record: { v: 0, deep: { list: [1, 2, 3], text: "x".repeat(50) } } }));
+	const edit = { items: Array.from({ length: 2000 }, (_, i) => ({ op: "set", kind: "item", id: `i${i}`, patch: { v: 1 } })) };
+	// the best of three plans, so a test file running beside this one, or a cold start, does not decide it
+	const best = (g) => {
+		let fastest = Infinity;
+		for (let k = 0; k < 3; k++) {
+			const [r, ms] = timed(() => g.plan(edit));
+			assert.equal(r.ok, true, JSON.stringify(r.refusal));
+			fastest = Math.min(fastest, ms);
+		}
+		return fastest;
+	};
+	const sharedMs = best(graph([{ kind: "item", consequences: listeners(false) }], entities));
+	assert.ok(sharedMs < 250, `one trigger: planned in ${sharedMs.toFixed(0)} ms`);
+	const distinctMs = best(graph([{ kind: "item", consequences: listeners(true) }], entities));
+	assert.ok(distinctMs < 500, `300 distinct triggers: planned in ${distinctMs.toFixed(0)} ms`);
 });

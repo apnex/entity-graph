@@ -94,6 +94,8 @@ export interface CompiledConsequence {
 	readonly phase: string;
 	readonly order: number;
 	readonly clauses: readonly TriggerClause[];
+	/** The trigger as text, so consequences with one trigger can share what it hears. */
+	readonly signature: string;
 	readonly kinds: readonly string[];
 	readonly run: ConsequenceDeclaration["run"];
 }
@@ -327,7 +329,7 @@ function compileConsequences(kind: string, value: unknown, names: readonly strin
 		if (run === undefined) return { ok: false, path: `${at}.run`, fault: "missing" };
 		if (typeof run !== "function") return { ok: false, path: `${at}.run`, fault: "invalid" };
 		const kinds = [...new Set(trigger.clauses.flatMap((c) => [...(c.created ?? []), ...(c.deleted ?? []), ...(c.changed ? [c.changed.kind] : [])]))];
-		list.push(Object.freeze({ key, phase, order: declaredBefore + list.length, clauses: Object.freeze(trigger.clauses), kinds: Object.freeze(kinds), run: run as ConsequenceDeclaration["run"] }));
+		list.push(Object.freeze({ key, phase, order: declaredBefore + list.length, clauses: Object.freeze(trigger.clauses), signature: JSON.stringify(trigger.clauses), kinds: Object.freeze(kinds), run: run as ConsequenceDeclaration["run"] }));
 	}
 	return { ok: true, list };
 }

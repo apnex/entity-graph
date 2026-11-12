@@ -68,14 +68,17 @@ export function planEdit(view: EntityView, d: CompiledDeclaration, input: unknow
 		if (fault.code === "invalid-edit" || fault.code === "not-plain") return no(fault.code, fault.subject, i);
 		return withFacts(refuse(fault.code, fault.subject, i), fault.ruleKey ?? fault.code, 1);
 	}
-	// the rules expanded to a fixed point; 2. each phase once, in declared order, the rules expanded after each; 3. none again
+	// the rules expanded to a fixed point; 2. each phase once, in declared order, the rules expanded after each; 3. none again.
+	// Only the last expansion may stop at the bound: before it, a later phase's consequence may still write back what a rule
+	// wrote, so the earlier expansions run to their fixed point and the net writes are judged once the phases are done (D25)
 	const bound = (measure: number): GraphPlan => withFacts(refuse("too-many-writes", `bound ${PLAN_LIMITS.maxNetWrites}`), "net-writes", measure);
 	const expander = new RuleExpander(s, d);
-	if (!expander.run(PLAN_LIMITS.maxNetWrites)) return bound(s.certainWrites());
-	for (const phase of d.phases) {
+	const stopAt = (last: boolean) => (last ? PLAN_LIMITS.maxNetWrites : Number.POSITIVE_INFINITY);
+	if (!expander.run(stopAt(d.phases.length === 0))) return bound(s.certainWrites());
+	for (const [p, phase] of d.phases.entries()) {
 		const fault = runPhase(s, d, phase);
 		if (fault !== null) return withDetails(refuse(fault.code, fault.subject, fault.opIndex), { ruleKey: fault.ruleKey, measure: fault.measure, ...(fault.writers ? { writers: fault.writers } : {}) });
-		if (!expander.run(PLAN_LIMITS.maxNetWrites)) return bound(s.certainWrites());
+		if (!expander.run(stopAt(p === d.phases.length - 1))) return bound(s.certainWrites());
 	}
 	// the bound is judged before the rules' breaches, since an expansion stopped at it is not judged (D19)
 	const writes = s.netWrites();

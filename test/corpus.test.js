@@ -204,11 +204,11 @@ for (const c of CASES) {
 	});
 }
 
-test("the corpus is read whole: batch 1's 38 cases, batch 2's 32 and batch 3's 15, each named for its file; batch 4 is M4's", () => {
-	assert.deepEqual(BATCHES.map((b) => filesOf(b).length), [38, 32, 15]);
+test("the corpus is read whole: batch 1's 38 cases, batch 2's 32 and batch 3's 18, each named for its file; batch 4 is M4's", () => {
+	assert.deepEqual(BATCHES.map((b) => filesOf(b).length), [38, 32, 18]);
 	assert.deepEqual(fs.readdirSync(path.join(root, "corpus")).filter((f) => f.startsWith("batch-")).sort(), [...BATCHES, ...LATER], "every batch is run here or left to a later milestone by name");
 	for (const f of BATCHES.flatMap(filesOf)) assert.equal(JSON.parse(fs.readFileSync(f, "utf8")).case, path.basename(f, ".json"));
 	const counted = (batch) => CASES.filter((c) => c.batch === batch).flatMap((c) => (c.steps ?? []).filter((st) => st.plan)).map((st) => st.plan.outcome);
 	const tally = (batch) => [counted(batch).filter((o) => o === "accepted").length, counted(batch).filter((o) => o === "refused").length];
-	assert.deepEqual([tally(2), tally(3)], [[62, 26], [27, 9]], "batch 2's 88 plans, 62 accepted and 26 refused; batch 3's 36, 27 and 9");
+	assert.deepEqual([tally(2), tally(3)], [[62, 26], [33, 14]], "batch 2's 88 plans, 62 accepted and 26 refused; batch 3's 47, 33 and 14");
 });
