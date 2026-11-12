@@ -4,7 +4,7 @@
 // It packs the package -- or takes a tarball already packed, such as the one a release attaches -- installs
 // the file into an empty project with --omit=dev, finds no AGP package installed, so a consumer that does
 // not run AGP installs none of it, and imports every export of every path export-map.json names, by name,
-// in Node; a data path is read as JSON.
+// in Node; a data path is read as JSON. It then runs the corpus the package ships against the installed package.
 //
 // Usage:  node tools/consumer-test.mjs [--tarball FILE]
 import { execFileSync } from "node:child_process";
@@ -72,7 +72,16 @@ async function main() {
 	if (out.trim() !== "node-ok") fail(`Node: ${out}`);
 	step(`Node ${process.version} imported every export of ${Object.keys(map.paths).map((p) => specifierOf(map.package, p)).join(", ")} by name`);
 
-	// 4. the paths the contract says run in a browser, loaded in headless Chrome through an import map
+	// 4. the corpus the package ships, run against the package installed: this repository's corpus harness, reading the code, the
+	// cases and the world modules through their public paths in the project (test/support/under-test.js)
+	const run = execFileSync(process.execPath, ["--test", "--test-reporter=tap", path.join(root, "test", "corpus.test.js")], { cwd: root, encoding: "utf8", maxBuffer: 64 * 1024 * 1024, env: { ...process.env, ENTITY_GRAPH_CONSUMER: project }, stdio: ["ignore", "pipe", "inherit"] });
+	const count = (label) => Number(run.match(new RegExp(`^# ${label} (\\d+)$`, "m"))?.[1] ?? NaN);
+	if (!(count("tests") > 0) || count("pass") !== count("tests")) fail(`the shipped corpus: ${count("pass")} of ${count("tests")} passed`);
+	const proven = run.split("\n").some((line) => /^ok \d+ - /.test(line) && line.endsWith(`read from the package under test, in ${project}`));
+	if (!proven) fail("the corpus was not run against the installed package");
+	step(`ran the corpus ${map.package}/corpus ships against the installed package: ${count("tests")} tests, every one passing`);
+
+	// 5. the paths the contract says run in a browser, loaded in headless Chrome through an import map
 	if (BROWSER_PATHS.length > 0) await inChrome(project);
 }
 

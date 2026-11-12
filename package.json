@@ -1,6 +1,6 @@
 {
   "name": "@apnex/entity-graph",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
   "description": "Let an application declare once how its entities refer to one another and what must stay true of them, so it sees who refers to what as of a known position, and every edit, with all its consequences, lands whole or not at all and can be undone exactly.",
   "license": "MIT",
@@ -23,13 +23,16 @@
     "./entity-store": {
       "types": "./dist/entity-store-port.d.ts",
       "default": "./dist/entity-store-port.js"
-    }
+    },
+    "./corpus": "./dist/corpus.json",
+    "./corpus/worlds/document": "./corpus/worlds/document.mjs"
   },
   "files": [
-    "dist"
+    "dist",
+    "corpus"
   ],
   "scripts": {
-    "build": "tsc -p .",
+    "build": "tsc -p . && node tools/bundle-corpus.mjs",
     "test": "npm run build && node --test \"test/**/*.test.js\"",
     "docs:check": "tools/check-docs.sh",
     "vocabulary:check": "node tools/check-vocabulary.mjs"

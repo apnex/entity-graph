@@ -34,6 +34,14 @@ test("the export map names the package and exactly its exported paths", () => {
 
 for (const [p, entry] of Object.entries(map.paths)) {
 	test(`${publicName(p)} exposes what the map names`, async () => {
+		if (entry.data) {
+			// a data path is JSON, read as a consumer imports it
+			const data = (await import(publicName(p), { with: { type: "json" } })).default;
+			assert.ok(data && typeof data === "object", `${publicName(p)} holds data`);
+			assert.equal(entry.data.part, "entity-graph");
+			assert.ok(Array.isArray(entry.data.serves) && entry.data.serves.length > 0);
+			return;
+		}
 		const mod = await import(publicName(p));
 		assert.deepEqual(Object.keys(mod).sort(), Object.keys(entry.exports).sort());
 		for (const [name, use] of Object.entries(entry.exports)) {
@@ -45,7 +53,7 @@ for (const [p, entry] of Object.entries(map.paths)) {
 
 test("every contract row is served or deferred with a ruling, never both; every row is served, from M6", () => {
 	const rows = contractRows();
-	const served = new Set(Object.values(map.paths).flatMap((e) => Object.values(e.exports)).flatMap((x) => x.serves));
+	const served = new Set(Object.values(map.paths).flatMap((e) => (e.data ? [e.data] : Object.values(e.exports))).flatMap((x) => x.serves));
 	assert.deepEqual([...served].sort(), SERVED);
 	assert.deepEqual(map.deferred, DEFERRED);
 	assert.deepEqual([...rows].sort(), [...SERVED, ...Object.keys(DEFERRED)].sort(), "every row of CONTRACT.md, once");

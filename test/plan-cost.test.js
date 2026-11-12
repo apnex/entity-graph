@@ -65,10 +65,11 @@ test("300 consequences listening to a kind an edit touches 2,000 times each read
 	const listeners = (distinct) => Array.from({ length: 300 }, (_, i) => ({ id: `c${i}`, phase: "first", trigger: { changed: { kind: "item", fields: distinct ? ["v", `f${i}`] : ["v"] } }, run: ({ matches }) => (matches.length === 2000 ? [] : [{ op: "remove", kind: "item", id: "missing" }]) }));
 	const entities = Array.from({ length: 2000 }, (_, i) => ({ kind: "item", id: `i${i}`, record: { v: 0, deep: { list: [1, 2, 3], text: "x".repeat(50) } } }));
 	const edit = { items: Array.from({ length: 2000 }, (_, i) => ({ op: "set", kind: "item", id: `i${i}`, patch: { v: 1 } })) };
-	// the best of three plans, so a test file running beside this one, or a cold start, does not decide it
+	// the best of five plans, so a test file running beside this one, or a cold start, does not decide it (three were not enough
+	// once the suite ran more files beside it: 540 and 591 ms against the 165 ms measured alone, at M6's check and at M8)
 	const best = (g) => {
 		let fastest = Infinity;
-		for (let k = 0; k < 3; k++) {
+		for (let k = 0; k < 5; k++) {
 			const [r, ms] = timed(() => g.plan(edit));
 			assert.equal(r.ok, true, JSON.stringify(r.refusal));
 			fastest = Math.min(fastest, ms);

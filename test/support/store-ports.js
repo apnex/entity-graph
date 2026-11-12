@@ -7,8 +7,10 @@ import os from "node:os";
 import path from "node:path";
 import { createMemoryStoragePort, openEntityStore } from "@apnex/entity-store";
 import { createFileStoragePort } from "@apnex/entity-store/file-storage";
-import { createMemoryGraphPort } from "../../dist/index.js";
-import { createEntityStorePort } from "../../dist/entity-store-port.js";
+import { entityStoreAdapter, graphPackage } from "./under-test.js";
+
+const { createMemoryGraphPort } = graphPackage;
+const { createEntityStorePort } = entityStoreAdapter;
 
 const SHAPE = { $schema: "urn:apnex:shape-check:dialect:1", type: "object" };
 export const STORES = ["memory", "entity-store in memory", "entity-store on file"];
