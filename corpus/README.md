@@ -352,6 +352,7 @@ The new codes are:
 | `note-bound` | an edit whose undo record would not fit the port's bound on a note | `note-bound` | `"note"` |
 | `nothing-to-undo` | an undo when the history holds no landed edit not yet undone | `nothing-to-undo` | `"history"` |
 | `nothing-to-redo` | a redo when the history holds no undone edit | `nothing-to-redo` | `"history"` |
+| `history-superseded` | an undo or redo when an entity it would write no longer stands as its recorded writes left it | `history-superseded` | the entity's identity |
 
 Each has a measure of 1 except `note-bound`, whose measure is the record's size in bytes, and each has `opIndex` -1.
 
@@ -498,8 +499,15 @@ They rely on these questions *Design owed* lists: how the view is first filled (
 - **R43. A restart.** A graph made over a port that already holds changes fills its view from the store at its latest position, so it answers as the graph before it did at that position.
   It reads the undo records back from the notes on the store's changes, so undo and redo go on as they would have before the restart.
 - **R44. Undo.** An undo applies the recorded reversal of the latest landed edit not yet undone, or of every such edit down to the one that landed at `to`, as one edit and one change.
-  It restores each entity those edits changed to its state before the earliest of them that changed it, runs no consequence and expands no rule, since the recorded reversal already holds them, and so overwrites any later change another writer made to such an entity.
+  It is refused as `history-superseded`, keyed by the code, with the entity's identity as `subject`, a measure of 1 and `opIndex` -1, when an entity it would write no longer stands as the undone edit left it, each edit's in turn for an undo of several; a redo is refused alike when an entity it would write no longer stands as it stood before the edit.
+  Records are compared as plain data, the order of an object's members ignored, and an absent entity stands only as absent; the view and the store are left as they were.
+  Otherwise it restores each entity those edits changed to its state before the earliest of them that changed it, runs no consequence and expands no rule, since the recorded reversal already holds them; another writer's change to an entity it does not write stands.
   It is judged as any edit is, by shapes, the reference rules and the conditions, against the state it finds, refused only for a breach it introduces or raises, and by its expected position.
+  **Correction:** restated by draw's `H31-15` and entity-graph's `D37`, which read `D8`'s "so a reversal is never applied to a state it was not recorded against" and `VISION.md`'s "exactly what it changed" as refusing an undo over another writer's change.
+  The reading as first written is kept here, since the corpus never rewrites a reading silently:
+  "An undo applies the recorded reversal of the latest landed edit not yet undone, or of every such edit down to the one that landed at `to`, as one edit and one change."
+  "It restores each entity those edits changed to its state before the earliest of them that changed it, runs no consequence and expands no rule, since the recorded reversal already holds them, and so overwrites any later change another writer made to such an entity."
+  "It is judged as any edit is, by shapes, the reference rules and the conditions, against the state it finds, refused only for a breach it introduces or raises, and by its expected position."
 - **R45. Redo.** A redo applies again the recorded writes of the latest undone edit, one edit per redo, so after an undo of several edits the oldest of them is redone first; it is judged as an undo is.
   A commit that lands discards every undone edit, so a redo after it has nothing to redo; an undo or a redo is not itself an edit the history holds.
 - **R46. Nothing to undo or redo.** An undo when the history holds no landed edit not yet undone, an evicted edit counting as not held, is refused as `nothing-to-undo`; a redo with no undone edit, as `nothing-to-redo`; each with `"history"` as `subject`, a measure of 1 and `opIndex` -1.
