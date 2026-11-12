@@ -5,15 +5,23 @@
 // form, lists compared without regard to order; each refusal label maps to the code and to the member and fault the
 // refusal's subject must state, and every name the case lists must be a word of that subject. A start at a position above 0 is run twice, filled and
 // landed as one change into an empty view, and both must answer alike (corpus/README.md, *Steps*).
+//
+// Batches 3 and 4 name a world module and a variant in place of a declaration (corpus/README.md, *World modules*); the harness
+// adapts each to this implementation's form and nothing else: a consequence's `name` is its `id` and its function is called
+// with the corpus's protocol, `{ changes, view, context }`; a condition's `key` is its kind and `id`, its `check` called with
+// `{ view, context }`; a shape, written in a subset of JSON Schema, is handed to shape-check with its dialect named; and `view`
+// answers a record or null, and a kind's identities. Batch 4 is M4's, and is left to it by name, never by skipping a case.
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { test } from "node:test";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { createEntityGraph } from "../dist/index.js";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const BATCHES = ["batch-1", "batch-2"];
+const BATCHES = ["batch-1", "batch-2", "batch-3"];
+// the corpus's batches this milestone leaves to the next, by name (draw's H31-EG-M3)
+const LATER = ["batch-4"];
 const filesOf = (batch) => fs.readdirSync(path.join(root, "corpus", batch)).filter((f) => f.endsWith(".json")).sort().map((f) => path.join(root, "corpus", batch, f));
 const CASES = BATCHES.flatMap(filesOf).map((f) => JSON.parse(fs.readFileSync(f, "utf8")));
 
@@ -37,6 +45,9 @@ const LABELS = {
 	"onBelowMin-invalid": { depth: 3, member: "onBelowMin", fault: /^invalid$/ },
 	"min-invalid": { depth: 3, member: "min", fault: /^invalid$/ },
 	"unknown-reference-option": { depth: 3, fault: /^unknown$/ },
+	// batch 3's: `<kind>.consequences.<id>.<member>: undeclared <name>`
+	"phase-undeclared": { depth: 4, member: "phase", fault: /^undeclared \S+$/ },
+	"trigger-kind-undeclared": { depth: 4, member: "trigger", fault: /^undeclared \S+$/ },
 };
 /** The refusal code every declaration label maps to. */
 const DECLARATION_CODE = "invalid-declaration";
@@ -48,7 +59,37 @@ const DECLARATION_CODE = "invalid-declaration";
 const PLAN_CODES = {
 	"reference-rule": "rule-broken", "invalid-reference": "invalid-reference", "unknown-operation": "unknown-operation",
 	"entity-absent": "entity-absent", "entity-present": "entity-present", "identity-taken": "identity-taken", "undeclared-kind": "undeclared-kind",
+	// batch 3's
+	"shape-misfit": "shape-misfit", "condition": "condition-broken", "consequence-conflict": "consequence-conflict",
 };
+
+/** The world modules batches 3 and 4 name, each read once. */
+const WORLDS = Object.fromEntries(await Promise.all(fs.readdirSync(path.join(root, "corpus", "worlds")).filter((f) => f.endsWith(".mjs")).map(async (f) => [path.basename(f, ".mjs"), await import(pathToFileURL(path.join(root, "corpus", "worlds", f)).href)])));
+const DIALECT = "urn:apnex:shape-check:dialect:1";
+// the corpus's view over this implementation's reader: a record or null, and the identities of a kind
+const viewOf = (graph) => ({ get: (kind, id) => graph.get(kind, id)?.record ?? null, all: (kind) => graph.all(kind).map((e) => e.id) });
+
+/** A world's variant in this implementation's form (corpus/README.md, *What a module exports*, *The functions' protocol*). */
+function adapt(variant) {
+	return {
+		phases: variant.phases,
+		kinds: variant.kinds.map((k) => ({
+			kind: k.kind,
+			...(k.references !== undefined ? { references: k.references } : {}),
+			...(k.shape !== undefined ? { shape: { $schema: DIALECT, ...k.shape } } : {}),
+			...(k.conditions !== undefined ? { conditions: k.conditions.map((c) => ({ id: c.key.startsWith(`${k.kind}.`) ? c.key.slice(k.kind.length + 1) : c.key, check: (graph) => c.check({ view: viewOf(graph), context: undefined }) })) } : {}),
+			...(k.consequences !== undefined ? {
+				consequences: k.consequences.map((q) => ({
+					id: q.name, phase: q.phase, trigger: q.trigger,
+					run: ({ matches, graph }) => q.run({ changes: matches.map(({ kind, id, before, after }) => ({ kind, id, before, after })), view: viewOf(graph), context: undefined }),
+				})),
+			} : {}),
+			...(k.intentResolver !== undefined ? { intentResolver: k.intentResolver } : {}),
+		})),
+	};
+}
+/** The declaration a case names: its own, or its world's variant, adapted. */
+const declarationOf = (c) => (c.world === undefined ? c.declare : adapt(WORLDS[c.world][c.variant ?? "base"]));
 
 const sorted = (list) => [...list].map((x) => JSON.stringify(x)).sort();
 // everything the view holds, to show a plan changed none of it (corpus/README.md, *Planning changes no answer*)
@@ -80,15 +121,16 @@ function answer(graph, q) {
 }
 
 function runAccepted(c, mode) {
+	const declare = declarationOf(c);
 	const [first, ...rest] = c.steps;
 	assert.ok(first?.start, "the first step is a start");
 	let graph;
 	if (mode === "fill") {
-		const made = createEntityGraph(c.declare, { position: first.start.position, entities: first.start.entities });
+		const made = createEntityGraph(declare, { position: first.start.position, entities: first.start.entities });
 		assert.equal(made.ok, true, `refused: ${JSON.stringify(made.refusal)}`);
 		graph = made.graph;
 	} else {
-		const made = createEntityGraph(c.declare);
+		const made = createEntityGraph(declare);
 		assert.equal(made.ok, true, `refused: ${JSON.stringify(made.refusal)}`);
 		graph = made.graph;
 		const landed = graph.applyChange({ position: first.start.position, items: first.start.entities });
@@ -100,7 +142,7 @@ function runAccepted(c, mode) {
 			assert.equal(r.ok, true, `step ${i + 1}: the change at ${step.take.position} was refused: ${JSON.stringify(r.refusal)}`);
 		} else if (step.plan) {
 			// the edit's items are the implementation's own operations, create, change and remove, so they pass as they stand
-			const kinds = c.declare.kinds.map((k) => k.kind);
+			const kinds = declare.kinds.map((k) => k.kind);
 			const before = held(graph, kinds);
 			assert.equal(graph.position(), step.plan.position, `step ${i + 1}: the position planned from`);
 			const r = graph.plan({ items: step.plan.edit });
@@ -115,6 +157,10 @@ function runAccepted(c, mode) {
 				const want = step.plan.refusal;
 				assert.ok(Object.hasOwn(PLAN_CODES, want.code), `no code mapped for the label ${want.code}`);
 				const got = { part: r.refusal.part, code: r.refusal.code, ruleKey: r.refusal.details.ruleKey, subject: r.refusal.details.subject, measure: r.refusal.details.measure, opIndex: r.refusal.details.opIndex };
+				// batch 3's optional members, compared exactly where a case states them: the consequences that wrote the entity, in
+				// `details.writers` (docs/DECISIONS.md D23), and a condition's sentence
+				if (Object.hasOwn(want, "writers")) got.writers = r.refusal.details.writers;
+				if (Object.hasOwn(want, "sentence")) got.sentence = r.refusal.details.sentence;
 				assert.deepEqual(got, { ...want, code: PLAN_CODES[want.code] }, `step ${i + 1}: the refusal`);
 			}
 		} else if (step.ask) {
@@ -133,7 +179,7 @@ function runAccepted(c, mode) {
 for (const c of CASES) {
 	test(`corpus ${c.case}`, () => {
 		if (c.verdict === "refused") {
-			const made = createEntityGraph(c.declare);
+			const made = createEntityGraph(declarationOf(c));
 			assert.equal(made.ok, false, "the declaration was accepted");
 			assert.equal(made.refusal.part, c.refusal.part);
 			const label = LABELS[c.refusal.reason];
@@ -158,9 +204,11 @@ for (const c of CASES) {
 	});
 }
 
-test("the corpus is read whole: batch 1's 38 cases and batch 2's 32, each named for its file", () => {
-	assert.deepEqual(BATCHES.map((b) => filesOf(b).length), [38, 32]);
+test("the corpus is read whole: batch 1's 38 cases, batch 2's 32 and batch 3's 18, each named for its file; batch 4 is M4's", () => {
+	assert.deepEqual(BATCHES.map((b) => filesOf(b).length), [38, 32, 18]);
+	assert.deepEqual(fs.readdirSync(path.join(root, "corpus")).filter((f) => f.startsWith("batch-")).sort(), [...BATCHES, ...LATER], "every batch is run here or left to a later milestone by name");
 	for (const f of BATCHES.flatMap(filesOf)) assert.equal(JSON.parse(fs.readFileSync(f, "utf8")).case, path.basename(f, ".json"));
-	const plans = CASES.flatMap((c) => (c.steps ?? []).filter((st) => st.plan)).map((st) => st.plan.outcome);
-	assert.deepEqual([plans.filter((o) => o === "accepted").length, plans.filter((o) => o === "refused").length], [62, 26], "88 plans: 62 accepted, 26 refused");
+	const counted = (batch) => CASES.filter((c) => c.batch === batch).flatMap((c) => (c.steps ?? []).filter((st) => st.plan)).map((st) => st.plan.outcome);
+	const tally = (batch) => [counted(batch).filter((o) => o === "accepted").length, counted(batch).filter((o) => o === "refused").length];
+	assert.deepEqual([tally(2), tally(3)], [[62, 26], [33, 14]], "batch 2's 88 plans, 62 accepted and 26 refused; batch 3's 47, 33 and 14");
 });

@@ -1,0 +1,11 @@
+{
+  "case": "b3-13-refused-phase-undeclared",
+  "batch": 3,
+  "summary": "A consequence placed in a phase the declaration does not list is refused when the graph is created, naming the kind, the consequence and the phase.",
+  "covers": ["graph-declaration", "Consequences and the stopping rule"],
+  "readings": ["R9", "R25", "R36"],
+  "world": "document",
+  "variant": "undeclaredPhase",
+  "verdict": "refused",
+  "refusal": { "reason": "phase-undeclared", "part": "entity-graph", "names": ["figure", "autoCaption", "captions"] }
+}

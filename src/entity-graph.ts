@@ -10,7 +10,9 @@ import { type CompiledDeclaration, compileDeclaration, type GraphDeclaration } f
 import type { Referrer } from "./references.js";
 import { type GraphRefusal, refuse } from "./refusal.js";
 import { itemsOf, membersOf } from "./plain-members.js";
-import { type GraphEdit, type GraphPlan, planEdit } from "./planner.js";
+import { readConditions } from "./phases.js";
+import { type ConditionsBefore, type GraphEdit, type GraphPlan, planEdit } from "./planner.js";
+import { viewState } from "./scratch.js";
 import { EntityView, type GraphChange, type GraphEntity, readEachPlain } from "./view.js";
 
 /** Where a graph starts: the position its first entities are stated at, and those entities (docs/DECISIONS.md D12). */
@@ -46,8 +48,9 @@ export interface EntityGraph {
 	reachable(fromId: string, filter?: ReferenceFilter): Dated<{ reached: { kind: string | null; id: string }[] }>;
 	applyChange(change: GraphChange): { ok: true; position: number } | { ok: false; refusal: GraphRefusal };
 	/**
-	 * Plans an edit with the declared reference rules (D15): the steps, their reversal and the net writes, or a refusal; changes
-	 * no answer. `options.context` is read as plain JSON and not yet used: consequences read it from M3.
+	 * Plans an edit with the declared reference rules, phases, shapes and conditions (D15, D20 to D24): the steps, their reversal
+	 * and the net writes, or a refusal; changes no answer. `options.context` is read as plain JSON and not yet used: M4 hands it
+	 * to consequences, conditions and resolvers.
 	 */
 	plan(edit: GraphEdit, options?: { context?: unknown }): GraphPlan;
 }
@@ -95,6 +98,14 @@ export function createEntityGraph(declaration: GraphDeclaration, opening?: Graph
 	const query = (subject: string) => ({ ok: false as const, refusal: refuse("invalid-query", subject) });
 	const isId = (value: unknown): value is string => typeof value === "string";
 	const at = () => view.position();
+	// whether a plan is running, so a consequence or condition calling back in is refused (D22); and the conditions' breaches as
+	// the view stands, read once per position (D21)
+	let planning = false;
+	let held: { position: number; reading: ReturnType<ConditionsBefore> } | null = null;
+	const conditionsBefore: ConditionsBefore = () => {
+		if (held === null || held.position !== view.position()) held = { position: view.position(), reading: readConditions(d, viewState(view)) };
+		return held.reading;
+	};
 
 	const graph: EntityGraph = {
 		position: at,
@@ -159,6 +170,7 @@ export function createEntityGraph(declaration: GraphDeclaration, opening?: Graph
 			return { ok: true, position: at(), reached };
 		},
 		applyChange(change) {
+			if (planning) return { ok: false, refusal: refuse("reentrant", "applyChange") };
 			return view.take(change);
 		},
 		plan(edit, options) {
@@ -169,7 +181,13 @@ export function createEntityGraph(declaration: GraphDeclaration, opening?: Graph
 				if (stray !== undefined) return { ok: false, refusal: refuse("invalid-edit", `options.${stray}`) };
 				if (given["context"] !== undefined && !readPlainJson(given["context"]).ok) return { ok: false, refusal: refuse("not-plain", "options.context") };
 			}
-			return planEdit(view, d, edit);
+			if (planning) return { ok: false, refusal: refuse("reentrant", "plan") };
+			planning = true;
+			try {
+				return planEdit(view, d, edit, conditionsBefore);
+			} finally {
+				planning = false;
+			}
 		},
 	};
 	return { ok: true, graph: Object.freeze(graph) };

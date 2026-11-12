@@ -14,6 +14,12 @@ export type GraphRefusalCode =
 	| "empty-edit"
 	| "unknown-operation"
 	| "rule-broken"
+	| "shape-misfit"
+	| "condition-broken"
+	| "condition-failed"
+	| "consequence-failed"
+	| "consequence-conflict"
+	| "reentrant"
 	| "too-many-writes"
 	| "stale-position"
 	| "empty-change"
@@ -34,6 +40,12 @@ export interface GraphRefusalDetails {
 	measure: number;
 	opIndex: number;
 	sentence: string | null;
+	/**
+	 * The consequences that wrote the entity a refusal concerns, each `<kind>.<id>`, in declared order: present for an entity a
+	 * consequence wrote and for the conflict fault, absent otherwise. Proposed in docs/DECISIONS.md D23 and owed to zorg, since the
+	 * contract's refusal form names no member for it.
+	 */
+	writers?: readonly string[];
 }
 
 /** A refusal in the shared form. */
@@ -96,6 +108,36 @@ const TEXTS: Readonly<Record<GraphRefusalCode, { what: string; why: string; fix:
 		what: "The edit was refused: it would leave a declared rule more broken than it found it.",
 		why: "An edit is judged on the state it would leave, each breach of a rule by its key and measure; one it introduces, or whose measure it raises, refuses it.",
 		fix: "Change the edit so the rule in details.ruleKey holds for the entity in details.subject, or holds no worse than before; details.opIndex names the requested item that led there.",
+	},
+	"shape-misfit": {
+		what: "The edit was refused: a record it writes does not fit its kind's shape.",
+		why: "A kind's records are judged against the shape it declares, through shape-check: a requested write that misfits is refused at its item, and an entity a consequence or a rule wrote that misfits when the edit found it fitting refuses the edit.",
+		fix: "Change the edit, or the consequence in details.writers, so the record of the entity in details.subject fits its kind's shape.",
+	},
+	"condition-broken": {
+		what: "The edit was refused: it would leave one of the application's conditions more broken than it found it.",
+		why: "A condition over the whole set is judged on the state the edit would leave, each breach by its subject and measure; one the edit introduces, or whose measure it raises, refuses it.",
+		fix: "Change the edit so the condition in details.ruleKey holds for details.subject, or holds no worse than before; details.sentence is the condition's own account.",
+	},
+	"condition-failed": {
+		what: "The edit was refused: one of the application's conditions did not answer.",
+		why: "A condition answers a list of breaches, each a subject, a measure above nothing and a sentence, as plain data; one that throws, answers otherwise, or reaches for what it was handed, cannot be judged.",
+		fix: "Correct the condition in details.ruleKey.",
+	},
+	"consequence-failed": {
+		what: "The edit was refused: one of the application's consequences did not answer.",
+		why: "A consequence answers a list of writes as plain data; one that throws, answers otherwise, or reaches for what it was handed, cannot be applied.",
+		fix: "Correct the consequence in details.ruleKey; details.subject is the entity whose change it heard.",
+	},
+	"consequence-conflict": {
+		what: "The edit was refused: two consequences wrote one entity in one run of a phase.",
+		why: "Within a run of a phase each entity is written by one consequence at most, and two writing it is a fault, never resolved by letting one win.",
+		fix: "Change the consequences in details.writers so one of them writes the entity in details.subject, or move one to another phase.",
+	},
+	"reentrant": {
+		what: "Refused: the graph was asked to change or plan while it was planning.",
+		why: "A consequence or condition is called while the graph plans, and may read what it is handed but may not change the view or start another plan.",
+		fix: "Return writes from the consequence instead, and take a change in once the plan has answered; details.subject names the call refused.",
 	},
 	"too-many-writes": {
 		what: "The edit was refused: what it would write, with everything the rules make of it, is more than one change may hold.",

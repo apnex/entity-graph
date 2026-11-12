@@ -1,0 +1,42 @@
+{
+  "case": "b4-04-context-read-by-condition",
+  "batch": 4,
+  "summary": "The context's figure limit is read by the condition, on the state the edit found and the state it would leave alike: a higher limit admits a third figure, a lower one leaves a standing breach alone but refuses raising it, each refusal carrying the sentence the condition wrote.",
+  "covers": ["plan-graph-change", "Edit context", "Judging and refusals"],
+  "readings": ["R1", "R2", "R14", "R15", "R18", "R23", "R24", "R25", "R27", "R28", "R32", "R34"],
+  "world": "document",
+  "variant": "base",
+  "verdict": "accepted",
+  "steps": [
+    { "start": { "position": 0, "entities": [
+      { "kind": "section", "id": "s1", "record": { "heading": "Intro", "parent": null, "cites": [] } },
+      { "kind": "section", "id": "s2", "record": { "heading": "Method", "parent": null, "cites": [] } },
+      { "kind": "figure", "id": "f1", "record": { "title": "Map", "section": "s1", "number": 1 } },
+      { "kind": "figure", "id": "f2", "record": { "title": "Chart", "section": "s1", "number": 2 } },
+      { "kind": "caption", "id": "c1", "record": { "body": "Figure 1: Map", "figure": "f1" } },
+      { "kind": "caption", "id": "c2", "record": { "body": "Figure 2: Chart", "figure": "f2" } }
+    ] } },
+    { "plan": { "position": 0, "context": { "figureLimit": 3 }, "edit": [
+      { "op": "create", "kind": "figure", "id": "f3", "record": { "title": "Plot", "section": "s1", "number": 3 } }
+    ], "outcome": "accepted", "writes": [
+      { "op": "put", "kind": "figure", "id": "f3", "record": { "title": "Plot", "section": "s1", "number": 3 } },
+      { "op": "put", "kind": "caption", "id": "cap-f3", "record": { "body": "Figure 3: Plot", "figure": "f3" } }
+    ] } },
+    { "plan": { "position": 0, "context": { "figureLimit": 1 }, "edit": [
+      { "op": "create", "kind": "figure", "id": "f3", "record": { "title": "Plot", "section": "s2", "number": 1 } }
+    ], "outcome": "accepted", "writes": [
+      { "op": "put", "kind": "figure", "id": "f3", "record": { "title": "Plot", "section": "s2", "number": 1 } },
+      { "op": "put", "kind": "caption", "id": "cap-f3", "record": { "body": "Figure 1: Plot", "figure": "f3" } }
+    ] } },
+    { "plan": { "position": 0, "context": { "figureLimit": 1 }, "edit": [
+      { "op": "create", "kind": "figure", "id": "f3", "record": { "title": "Plot", "section": "s1", "number": 3 } }
+    ], "outcome": "refused", "refusal": { "part": "entity-graph", "code": "condition", "ruleKey": "section.figure-limit", "subject": "s1", "measure": 2, "opIndex": -1, "sentence": "Section s1 holds 3 figures; a section holds at most 1." } } },
+    { "plan": { "position": 0, "context": { "figureLimit": 3, "captionPrefix": "Fig." }, "edit": [
+      { "op": "create", "kind": "figure", "id": "f3", "record": { "title": "Plot", "section": "s1", "number": 3 } },
+      { "op": "create", "kind": "figure", "id": "f4", "record": { "title": "Photo", "section": "s1", "number": 4 } }
+    ], "outcome": "refused", "refusal": { "part": "entity-graph", "code": "condition", "ruleKey": "section.figure-limit", "subject": "s1", "measure": 1, "opIndex": -1, "sentence": "Section s1 holds 4 figures; a section holds at most 3." } } },
+    { "ask": { "position": 0, "questions": [
+      { "q": "all", "kind": "figure", "answer": ["f1", "f2"] }
+    ] } }
+  ]
+}

@@ -243,7 +243,7 @@ test("opIndex names the item a breach follows from, not the item that last wrote
 		{ kind: "badge", references: [ref("team", ["team"], "one", { onTargetDelete: "refuse" })] },
 	];
 	const t = graph(teams, [e("member", "m1"), e("member", "m2"), e("member", "m3"), e("team", "red", { members: ["m1", "m2"] }), e("badge", "bx", { team: "red" })]);
-	assert.deepEqual(refused(t.plan({ items: [set("team", "red", { members: ["m1"] }), set("team", "red", { label: "z" })] })).details, { ruleKey: "badge.team.onTargetDelete", subject: "bx", measure: 1, opIndex: 0, sentence: null });
+	assert.deepEqual(refused(t.plan({ items: [set("team", "red", { members: ["m1"] }), set("team", "red", { label: "z" })] })).details, { ruleKey: "badge.team.onTargetDelete", subject: "bx", measure: 1, opIndex: 0, sentence: null, writers: ["team.members.onBelowMin"] }, "RESTATED at M3 (D25): the rule whose deletion of red the breach follows from, named");
 	assert.equal(at(t, [create("team", "blue", { members: ["m1", "m3"] }), set("team", "blue", { label: "z" })]), 0, "blue took m1 from red at item 0");
 });
 

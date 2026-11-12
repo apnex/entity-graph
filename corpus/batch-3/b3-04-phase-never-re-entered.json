@@ -1,0 +1,43 @@
+{
+  "case": "b3-04-phase-never-re-entered",
+  "batch": 3,
+  "summary": "A figure whose title is emptied is removed by dropBlank in the later index phase, and the numbering phase, already completed, is not entered again, so the figure after it keeps its number; recount, declared after dropBlank in that phase, sees the removal; the same figure removed by the request is renumbered after.",
+  "covers": ["plan-graph-change", "Consequences and the stopping rule"],
+  "readings": ["R1", "R2", "R14", "R15", "R17", "R23", "R25", "R26", "R27", "R28"],
+  "world": "document",
+  "variant": "indexed",
+  "verdict": "accepted",
+  "steps": [
+    { "start": { "position": 0, "entities": [
+      { "kind": "section", "id": "s1", "record": { "heading": "Intro", "parent": null, "cites": [] } },
+      { "kind": "section", "id": "s2", "record": { "heading": "Method", "parent": null, "cites": [] } },
+      { "kind": "figure", "id": "f1", "record": { "title": "Map", "section": "s1", "number": 1 } },
+      { "kind": "figure", "id": "f2", "record": { "title": "Chart", "section": "s1", "number": 2 } },
+      { "kind": "figure", "id": "f3", "record": { "title": "Plot", "section": "s2", "number": 1 } },
+      { "kind": "caption", "id": "c1", "record": { "body": "Figure 1: Map", "figure": "f1" } },
+      { "kind": "caption", "id": "c2", "record": { "body": "Figure 2: Chart", "figure": "f2" } },
+      { "kind": "caption", "id": "c3", "record": { "body": "Figure 1: Plot", "figure": "f3" } },
+      { "kind": "index", "id": "ix", "record": { "count": 3 } }
+    ] } },
+    { "plan": { "position": 0, "edit": [
+      { "op": "change", "kind": "figure", "id": "f1", "record": { "title": "", "section": "s1", "number": 1 } }
+    ], "outcome": "accepted", "writes": [
+      { "op": "del", "kind": "figure", "id": "f1" },
+      { "op": "del", "kind": "caption", "id": "c1" },
+      { "op": "put", "kind": "index", "id": "ix", "record": { "count": 2 } }
+    ] } },
+    { "plan": { "position": 0, "edit": [
+      { "op": "remove", "kind": "figure", "id": "f1" }
+    ], "outcome": "accepted", "writes": [
+      { "op": "del", "kind": "figure", "id": "f1" },
+      { "op": "del", "kind": "caption", "id": "c1" },
+      { "op": "put", "kind": "figure", "id": "f2", "record": { "title": "Chart", "section": "s1", "number": 1 } },
+      { "op": "put", "kind": "caption", "id": "c2", "record": { "body": "Figure 1: Chart", "figure": "f2" } },
+      { "op": "put", "kind": "index", "id": "ix", "record": { "count": 2 } }
+    ] } },
+    { "ask": { "position": 0, "questions": [
+      { "q": "get", "kind": "figure", "id": "f2", "answer": { "title": "Chart", "section": "s1", "number": 2 } },
+      { "q": "get", "kind": "figure", "id": "f1", "answer": { "title": "Map", "section": "s1", "number": 1 } }
+    ] } }
+  ]
+}

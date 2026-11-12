@@ -1,0 +1,36 @@
+{
+  "case": "b3-10-condition-worsened",
+  "batch": 3,
+  "summary": "A section already holding three figures may not be given a fourth, refused with the raised measure and the condition's sentence; an unrelated edit, and a change to one of its figures that adds none, leave the breach as it was and are accepted.",
+  "covers": ["plan-graph-change", "Judging and refusals"],
+  "readings": ["R1", "R2", "R3", "R14", "R15", "R18", "R23", "R24", "R25", "R27", "R28", "R32"],
+  "world": "document",
+  "variant": "base",
+  "verdict": "accepted",
+  "steps": [
+    { "start": { "position": 0, "entities": [
+      { "kind": "section", "id": "s1", "record": { "heading": "Intro", "parent": null, "cites": [] } },
+      { "kind": "section", "id": "s2", "record": { "heading": "Method", "parent": null, "cites": [] } },
+      { "kind": "figure", "id": "f1", "record": { "title": "Map", "section": "s1", "number": 1 } },
+      { "kind": "figure", "id": "f2", "record": { "title": "Chart", "section": "s1", "number": 2 } },
+      { "kind": "figure", "id": "f3", "record": { "title": "Graph", "section": "s1", "number": 3 } }
+    ] } },
+    { "plan": { "position": 0, "edit": [
+      { "op": "create", "kind": "figure", "id": "f4", "record": { "title": "Photo", "section": "s1", "number": 4 } }
+    ], "outcome": "refused", "refusal": { "part": "entity-graph", "code": "condition", "ruleKey": "section.figure-limit", "subject": "s1", "measure": 2, "opIndex": -1, "sentence": "Section s1 holds 4 figures; a section holds at most 2." } } },
+    { "plan": { "position": 0, "edit": [
+      { "op": "change", "kind": "section", "id": "s2", "record": { "heading": "Methods", "parent": null, "cites": [] } }
+    ], "outcome": "accepted", "writes": [
+      { "op": "put", "kind": "section", "id": "s2", "record": { "heading": "Methods", "parent": null, "cites": [] } }
+    ] } },
+    { "plan": { "position": 0, "edit": [
+      { "op": "change", "kind": "figure", "id": "f3", "record": { "title": "Table", "section": "s1", "number": 3 } }
+    ], "outcome": "accepted", "writes": [
+      { "op": "put", "kind": "figure", "id": "f3", "record": { "title": "Table", "section": "s1", "number": 3 } }
+    ] } },
+    { "ask": { "position": 0, "questions": [
+      { "q": "all", "kind": "figure", "answer": ["f1", "f2", "f3"] },
+      { "q": "all", "kind": "caption", "answer": [] }
+    ] } }
+  ]
+}

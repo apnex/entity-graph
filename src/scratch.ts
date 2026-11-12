@@ -12,6 +12,20 @@ import { samePlain } from "./plain-members.js";
 import type { Referrer } from "./references.js";
 import { deepFreeze, type EntityView, type GraphEntity, type GraphRecord, heldBy } from "./view.js";
 
+/**
+ * Who a write follows from (D19, D23): the requested item it follows from, the consequence that wrote it -- null for a requested
+ * item or a reference rule -- and its place among the steps, so of two writes following from one item the later is told.
+ */
+export interface Attribution {
+	readonly cause: number;
+	readonly by: string | null;
+	readonly seq: number;
+}
+
+/** The later of two attributions: by the item each follows from, then by step. */
+export const later = (a: Attribution | undefined, b: Attribution | undefined): Attribution | undefined =>
+	a === undefined ? b : b === undefined ? a : b.cause > a.cause || (b.cause === a.cause && b.seq > a.seq) ? b : a;
+
 /** One write of a plan: an entity's whole state after it, or its deletion. */
 export type GraphStep = { op: "put"; kind: string; id: string; record: GraphRecord } | { op: "del"; kind: string; id: string };
 
@@ -30,7 +44,29 @@ const NONE: ReadonlyMap<string, readonly string[]> = new Map();
 export const fieldKey = (id: string, field: string): string => `${id}\u0000${field}`;
 export const holdingKey = (id: string, field: string, target: string): string => `${id}\u0000${field}\u0000${target}`;
 
-export class Scratch {
+/** The entities a reader or a judge reads: the scratch layer as the edit has it, or the view as the edit found it. */
+export interface GraphState {
+	get(id: string): GraphEntity | undefined;
+	allOf(kind: string): GraphEntity[];
+	referrersOf(target: string): Referrer[];
+	targetsOf(id: string): ReadonlyMap<string, readonly string[]>;
+}
+
+/** The view as a state, as the edit found it. */
+export function viewState(view: EntityView): GraphState {
+	return { get: (id) => view.get(id), allOf: (kind) => view.all(kind), referrersOf: (t) => view.index.referrersOf(t), targetsOf: (id) => view.index.targetsOf(id) };
+}
+
+/** One entity's change over the edit: as the edit found it and as it stands, and its top-level fields that differ, sorted. */
+export interface GraphChangeRecord {
+	readonly kind: string;
+	readonly id: string;
+	readonly before: GraphRecord | null;
+	readonly after: GraphRecord | null;
+	readonly fields: readonly string[];
+}
+
+export class Scratch implements GraphState {
 	/** Identity -> the entity as the edit has it, or null where the edit deleted it. */
 	private readonly laid = new Map<string, GraphEntity | null>();
 	/** Target -> laid referrer -> the fields of it holding the target, for the entities laid here alone. */
@@ -40,21 +76,30 @@ export class Scratch {
 	private readonly undo: GraphStep[] = [];
 	/** Every step applied, as the rules read it. */
 	readonly log: LoggedStep[] = [];
-	/** Each identity the edit touched, in the order first touched; and how many the requested items touched. */
+	/** Each identity the edit touched, in the order first touched, by kind, and which a requested item or a consequence wrote. */
 	readonly touched: string[] = [];
-	private readonly seen = new Set<string>();
-	private requested = 0;
+	private readonly seen = new Map<string, number>();
+	private readonly byKind = new Map<string, string[]>();
+	readonly kindsTouched: string[] = [];
+	private readonly free = new Set<string>();
 	/**
 	 * The requested item each change follows from (D19): the identities the edit deleted, by the deletion; the presence of an
 	 * entity, by the item that created or deleted it; a target held through a reference, by the item that made it held; and a
 	 * reference, by the item that last left it holding fewer targets, its entity's creation included.
 	 */
-	readonly deleted = new Map<string, number>();
-	readonly presence = new Map<string, number>();
-	readonly heldSince = new Map<string, number>();
-	readonly shrunk = new Map<string, number>();
-	/** The targets an `onUnreferenced: "delete"` reference stopped holding, with the item that led there. */
-	readonly released = new Map<string, number>();
+	readonly deleted = new Map<string, Attribution>();
+	readonly presence = new Map<string, Attribution>();
+	readonly heldSince = new Map<string, Attribution>();
+	readonly shrunk = new Map<string, Attribution>();
+	/** Each top-level field of an entity, by the last write that changed it; and each entity, by its last write. */
+	private readonly fieldCauses = new Map<string, Map<string, Attribution>>();
+	readonly lastWrite = new Map<string, Attribution>();
+	/** The consequences and reference rules that wrote each entity, any phase, each by its key (D23, D25). */
+	readonly writtenBy = new Map<string, Set<string>>();
+	/** Each entity's change over the edit, worked out once per write of it (D25). */
+	private readonly changes = new Map<string, { readonly seq: number; readonly change: GraphChangeRecord | null }>();
+	/** The targets an `onUnreferenced: "delete"` reference stopped holding, with the item that led there and that reference's rule key. */
+	readonly released = new Map<string, { readonly at: Attribution; readonly rule: string }>();
 
 	constructor(private readonly view: EntityView, private readonly declaration: CompiledDeclaration) {}
 
@@ -100,6 +145,50 @@ export class Scratch {
 		return this.view.index.referrersOf(target);
 	}
 
+	/** The entities of a kind as the edit has them, in identity order. */
+	allOf(kind: string): GraphEntity[] {
+		const out = this.view.all(kind).filter((x) => !this.laid.has(x.id));
+		for (const id of this.byKind.get(kind) ?? []) {
+			const now = this.laid.get(id);
+			if (now) out.push(now);
+		}
+		return out.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+	}
+
+	/** The last write that changed a top-level field of an entity. */
+	fieldCause(id: string, field: string): Attribution | undefined {
+		return this.fieldCauses.get(id)?.get(field);
+	}
+
+	/** Where an identity stands in the order the edit first touched each. */
+	touchOrder(id: string): number {
+		return this.seen.get(id) ?? Number.MAX_SAFE_INTEGER;
+	}
+
+	/** The identities of a kind the edit touched, in the order first touched. */
+	touchedOf(kind: string): readonly string[] {
+		return this.byKind.get(kind) ?? [];
+	}
+
+	/**
+	 * An entity's change over the edit, frozen, or null where the edit left it as it found it, an entity created and deleted again
+	 * included; worked out once per write of the entity, however many consequences ask (D25).
+	 */
+	change(id: string): GraphChangeRecord | null {
+		const seq = this.lastWrite.get(id)?.seq ?? -1;
+		const held = this.changes.get(id);
+		if (held !== undefined && held.seq === seq) return held.change;
+		const was = this.view.get(id);
+		const now = this.get(id);
+		let change: GraphChangeRecord | null = null;
+		if (was !== undefined || now !== undefined) {
+			const fields = was !== undefined && now !== undefined ? changedFields(was.record, now.record) : Object.keys((now ?? was)!.record).sort();
+			if (was === undefined || now === undefined || fields.length > 0) change = Object.freeze({ kind: (now ?? was)!.kind, id, before: was?.record ?? null, after: now?.record ?? null, fields: Object.freeze(fields) });
+		}
+		this.changes.set(id, { seq, change });
+		return change;
+	}
+
 	/** The targets an entity's record holds, per reference field in declaration order; the record was checked when written. */
 	held(entity: GraphEntity): Map<string, readonly string[]> {
 		const out = new Map<string, readonly string[]>();
@@ -110,22 +199,22 @@ export class Scratch {
 		return out;
 	}
 
-	/** Marks the end of the requested items: what is touched after is touched by the rules alone. */
-	endRequested(): void {
-		this.requested = this.touched.length;
+	/**
+	 * The entities the rules alone touched: each is a net write, since a rule only takes a reference or an entity away, so an
+	 * entity no requested item or consequence wrote cannot return to the state the edit found it in (D19, D23).
+	 */
+	certainWrites(): number {
+		return this.touched.length - this.free.size;
 	}
 
 	/**
-	 * The entities the rules alone touched: each is a net write, since a rule only takes a reference or an entity away, so an
-	 * entity no requested item wrote cannot return to the state the edit found it in (D19).
+	 * Applies one step, its reversal read from the state just before it: `cause` the requested item it follows from, `by` the
+	 * key of the consequence or reference rule that wrote it, or null for a requested item, and `free` whether a requested item
+	 * or a consequence wrote it rather than a rule.
 	 */
-	certainWrites(): number {
-		return this.touched.length - this.requested;
-	}
-
-	/** Applies one step, its reversal read from the state just before it, `cause` the requested item that led to it. */
-	write(step: GraphStep, cause: number): void {
+	write(step: GraphStep, cause: number, by: string | null = null, free = false): void {
 		const id = step.id;
+		const at: Attribution = { cause, by, seq: this.steps.length };
 		const was = this.get(id);
 		this.undo.push(was === undefined ? { op: "del", kind: step.kind, id } : { op: "put", kind: was.kind, id, record: was.record });
 		const before = was ? this.held(was) : NONE;
@@ -135,13 +224,29 @@ export class Scratch {
 		if (now !== null) this.lay(now);
 		this.steps.push(step.op === "put" ? { op: "put", kind: step.kind, id, record: now!.record } : step);
 		if (!this.seen.has(id)) {
-			this.seen.add(id);
+			this.seen.set(id, this.touched.length);
 			this.touched.push(id);
+			if (!this.byKind.has(step.kind)) {
+				this.byKind.set(step.kind, []);
+				this.kindsTouched.push(step.kind);
+			}
+			this.byKind.get(step.kind)!.push(id);
+		}
+		if (free) this.free.add(id);
+		this.lastWrite.set(id, at);
+		if (by !== null) {
+			if (!this.writtenBy.has(id)) this.writtenBy.set(id, new Set());
+			this.writtenBy.get(id)!.add(by);
 		}
 		const after = now ? this.held(now) : NONE;
 		const created = now !== null && was?.kind !== now.kind;
-		if (created || (now === null && was !== undefined)) this.presence.set(id, cause);
-		if (now === null && was !== undefined) this.deleted.set(id, cause);
+		if (created || (now === null && was !== undefined)) this.presence.set(id, at);
+		if (now === null && was !== undefined) this.deleted.set(id, at);
+		if (now !== null) {
+			let causes = this.fieldCauses.get(id);
+			if (causes === undefined) this.fieldCauses.set(id, (causes = new Map()));
+			for (const field of created ? Object.keys(now.record) : changedFields(was!.record, now.record)) causes.set(field, at);
+		}
 		const lost: [string, string][] = [];
 		const gained: [string, string][] = [];
 		for (const ref of this.declaration.kinds.get(was?.kind ?? step.kind) ?? []) {
@@ -152,9 +257,9 @@ export class Scratch {
 				if (kept.has(target)) continue;
 				lost.push([ref.field, target]);
 				// a target an `onUnreferenced: "delete"` reference stopped holding is a candidate for deletion once nothing holds it
-				if (ref.onUnreferenced === "delete") this.released.set(target, cause);
+				if (ref.onUnreferenced === "delete") this.released.set(target, { at, rule: `${(was?.kind ?? step.kind)}.${ref.field}.onUnreferenced` });
 			}
-			if (!created && now !== null && has.length < had.length) this.shrunk.set(fieldKey(id, ref.field), cause);
+			if (!created && now !== null && has.length < had.length) this.shrunk.set(fieldKey(id, ref.field), at);
 		}
 		if (now !== null) {
 			for (const ref of this.declaration.kinds.get(now.kind) ?? []) {
@@ -162,9 +267,9 @@ export class Scratch {
 				for (const target of after.get(ref.field) ?? []) {
 					if (had.has(target)) continue;
 					gained.push([ref.field, target]);
-					this.heldSince.set(holdingKey(id, ref.field, target), cause);
+					this.heldSince.set(holdingKey(id, ref.field, target), at);
 				}
-				if (created) this.shrunk.set(fieldKey(id, ref.field), cause);
+				if (created) this.shrunk.set(fieldKey(id, ref.field), at);
 			}
 		}
 		this.log.push({ id, was, now, lost, gained });
@@ -217,4 +322,9 @@ export class Scratch {
 		}
 		return out;
 	}
+}
+
+/** The top-level fields two records differ in, compared as plain data, sorted. */
+export function changedFields(a: GraphRecord, b: GraphRecord): string[] {
+	return [...new Set([...Object.keys(a), ...Object.keys(b)])].filter((k) => Object.hasOwn(a, k) !== Object.hasOwn(b, k) || !samePlain(a[k], b[k])).sort();
 }

@@ -1,0 +1,11 @@
+{
+  "case": "b3-14-refused-trigger-kind-undeclared",
+  "batch": 3,
+  "summary": "A consequence whose trigger names a kind the declaration does not declare is refused when the graph is created, naming the kind it is declared on, the consequence and the kind undeclared.",
+  "covers": ["graph-declaration", "Consequences and the stopping rule"],
+  "readings": ["R9", "R25", "R36"],
+  "world": "document",
+  "variant": "undeclaredTriggerKind",
+  "verdict": "refused",
+  "refusal": { "reason": "trigger-kind-undeclared", "part": "entity-graph", "names": ["figure", "autoCaption", "table"] }
+}

@@ -1,0 +1,39 @@
+{
+  "case": "b4-02-resolver-judged-against-earlier-items",
+  "batch": 4,
+  "summary": "The resolver passes an item that names its figure through unchanged and names the next one past it; a record it writes that misfits the shape is refused at its item under the identity it chose; and it passes a removal through.",
+  "covers": ["plan-graph-change", "Intent resolvers", "Edit context", "Judging and refusals"],
+  "readings": ["R1", "R2", "R14", "R15", "R17", "R23", "R24", "R25", "R27", "R28", "R31", "R34", "R35"],
+  "world": "document",
+  "variant": "resolving",
+  "verdict": "accepted",
+  "steps": [
+    { "start": { "position": 0, "entities": [
+      { "kind": "section", "id": "s1", "record": { "heading": "Intro", "parent": null, "cites": [] } },
+      { "kind": "section", "id": "s2", "record": { "heading": "Method", "parent": null, "cites": [] } },
+      { "kind": "figure", "id": "f1", "record": { "title": "Map", "section": "s1", "number": 1 } },
+      { "kind": "caption", "id": "c1", "record": { "body": "Figure 1: Map", "figure": "f1" } }
+    ] } },
+    { "plan": { "position": 0, "context": { "section": "s2" }, "edit": [
+      { "op": "create", "kind": "figure", "id": "f5", "record": { "title": "Five", "section": "s2", "number": 1 } },
+      { "op": "create", "kind": "figure", "record": { "title": "Next" } }
+    ], "outcome": "accepted", "writes": [
+      { "op": "put", "kind": "figure", "id": "f5", "record": { "title": "Five", "section": "s2", "number": 1 } },
+      { "op": "put", "kind": "figure", "id": "f6", "record": { "title": "Next", "section": "s2", "number": 2 } },
+      { "op": "put", "kind": "caption", "id": "cap-f5", "record": { "body": "Figure 1: Five", "figure": "f5" } },
+      { "op": "put", "kind": "caption", "id": "cap-f6", "record": { "body": "Figure 2: Next", "figure": "f6" } }
+    ] } },
+    { "plan": { "position": 0, "edit": [
+      { "op": "create", "kind": "figure", "record": { "title": 7 } }
+    ], "outcome": "refused", "refusal": { "part": "entity-graph", "code": "shape-misfit", "ruleKey": "figure.shape", "subject": "f2", "measure": 1, "opIndex": 0 } } },
+    { "plan": { "position": 0, "edit": [
+      { "op": "remove", "kind": "figure", "id": "f1" }
+    ], "outcome": "accepted", "writes": [
+      { "op": "del", "kind": "figure", "id": "f1" },
+      { "op": "del", "kind": "caption", "id": "c1" }
+    ] } },
+    { "ask": { "position": 0, "questions": [
+      { "q": "all", "kind": "figure", "answer": ["f1"] }
+    ] } }
+  ]
+}

@@ -19,25 +19,36 @@
  * states, and the edit is refused for a breach it introduces or whose measure it raises; a partial repair is allowed.
  */
 import type { CompiledDeclaration, CompiledReference } from "./declaration.js";
-import { fieldKey, type GraphStep, holdingKey, type Scratch } from "./scratch.js";
+import { type Attribution, fieldKey, type GraphStep, holdingKey, later, type Scratch } from "./scratch.js";
 import type { GraphEntity, GraphRecord } from "./view.js";
 
-/** One breach: its stable key, the rule's key and the entity it concerns, its measure, and the requested item that led there. */
-export interface Breach {
-	readonly key: string;
+/** One breach of a condition: its rule key `<kind>.<id>`, the subject the condition named, its measure and its own sentence. */
+export interface ConditionReading {
+	readonly ruleKey: string;
+	readonly subject: string;
+	readonly measure: number;
+	readonly sentence: string;
+}
+
+/** What a refusal for a broken rule states: its code, rule key, subject, measure, the item it follows from, and a condition's sentence. */
+export interface Verdict {
+	readonly code: "rule-broken" | "shape-misfit" | "condition-broken";
 	readonly ruleKey: string;
 	readonly subject: string;
 	readonly measure: number;
 	readonly opIndex: number;
+	readonly sentence: string | null;
+	/** The consequences that wrote the entity the breach concerns, in declared order, or null where none did (D23). */
+	readonly writers: readonly string[] | null;
 }
 
-/** A breach as read in one state, with what it is read from: the entity and reference, and the targets or holders it counts. */
+/** A breach as read in one state, with what it is read from: the entity and reference, and the targets, holders or misfits it counts. */
 interface Reading {
 	readonly key: string;
 	readonly ruleKey: string;
 	readonly subject: string;
 	readonly measure: number;
-	readonly rule: "targets" | "onTargetDelete" | "min" | "exclusivity";
+	readonly rule: "targets" | "onTargetDelete" | "min" | "exclusivity" | "shape";
 	readonly id: string;
 	readonly kind: string;
 	readonly field: string;
@@ -53,110 +64,128 @@ function without(record: GraphRecord, ref: CompiledReference, target: string): G
 const refOf = (d: CompiledDeclaration, kind: string, field: string): CompiledReference | undefined => d.kinds.get(kind)?.find((r) => r.field === field);
 
 /**
- * Expands the declared rules over the edit so far, until nothing more follows: true at the fixed point, false where it stopped
- * because more than `bound` net writes are certain (D19).
+ * Expands the declared rules over the edit so far, until nothing more follows (D18, D19, D23). It keeps what it has read, so
+ * after each phase it reads only the writes made since it last ran: the planner runs it once after the requested items and
+ * once after each phase. A hold gained on a target the edit deleted -- as a consequence can make after the deletion was
+ * expanded -- sends the target round again, so `onTargetDelete` acts on its new referrer too.
  */
-export function expandRules(s: Scratch, d: CompiledDeclaration, bound: number): boolean {
-	const put = (entity: GraphEntity, record: GraphRecord, cause: number) => s.write({ op: "put", kind: entity.kind, id: entity.id, record }, cause);
-	const remove = (entity: GraphEntity, cause: number) => s.write({ op: "del", kind: entity.kind, id: entity.id }, cause);
-	const over = () => s.certainWrites() > bound;
+export class RuleExpander {
 	// what the writes since each phase last ran changed: deletions, steal holdings, entities, and targets that lost a holder
-	const deletions: string[] = [];
-	const stealing = new Map<string, Set<string>>(); // target -> "kind\0field" of the steal references to read for it
-	const written = new Set<string>();
-	const unheld = new Set<string>();
-	let read = 0;
-	const steal = (kind: string, field: string, target: string) => {
-		if (refOf(d, kind, field)?.exclusivity !== "steal") return;
-		if (!stealing.has(target)) stealing.set(target, new Set());
-		stealing.get(target)!.add(`${kind}\u0000${field}`);
-	};
-	const drain = () => {
-		for (; read < s.log.length; read++) {
-			const { id, was, now, lost, gained } = s.log[read]!;
-			if (now === null && was !== undefined) deletions.push(id);
-			if (now !== null) written.add(id);
+	private read = 0;
+	private readonly deletions: string[] = [];
+	private readonly stealing = new Map<string, Set<string>>(); // target -> "kind\0field" of the steal references to read for it
+	private readonly written = new Set<string>();
+	private readonly unheld = new Set<string>();
+
+	constructor(private readonly s: Scratch, private readonly d: CompiledDeclaration) {}
+
+	private steal(kind: string, field: string, target: string): void {
+		if (refOf(this.d, kind, field)?.exclusivity !== "steal") return;
+		if (!this.stealing.has(target)) this.stealing.set(target, new Set());
+		this.stealing.get(target)!.add(`${kind}\u0000${field}`);
+	}
+
+	private drain(): void {
+		const s = this.s;
+		for (; this.read < s.log.length; this.read++) {
+			const { id, was, now, lost, gained } = s.log[this.read]!;
+			if (now === null && was !== undefined) this.deletions.push(id);
+			if (now !== null) this.written.add(id);
 			for (const [field, target] of lost) {
-				steal(was!.kind, field, target);
-				unheld.add(target);
+				this.steal(was!.kind, field, target);
+				this.unheld.add(target);
 			}
-			for (const [field, target] of gained) steal(now!.kind, field, target);
+			for (const [field, target] of gained) {
+				this.steal(now!.kind, field, target);
+				if (s.get(target) === undefined && s.deleted.has(target)) this.deletions.push(target);
+			}
 		}
-	};
-	for (;;) {
-		let changed = false;
-		// onTargetDelete, for each target deleted since this phase last ran; one deleted during it waits for the next round
-		drain();
-		for (const target of deletions.splice(0)) {
-			if (s.get(target) !== undefined) continue;
-			for (const r of s.referrersOf(target)) {
-				const holder = s.get(r.id);
-				const ref = refOf(d, r.kind, r.field);
-				if (holder === undefined || ref === undefined || ref.onTargetDelete === "refuse") continue;
-				if (ref.onTargetDelete === "cascade-delete") remove(holder, s.deleted.get(target) ?? -1);
-				else put(holder, without(holder.record, ref, target), s.deleted.get(target) ?? -1);
+	}
+
+	/** True at the fixed point; false where it stopped because more than `bound` net writes are certain (D19). */
+	run(bound: number): boolean {
+		const { s, d } = this;
+		// each write names the rule that made it, `<kind>.<field>.<option>` of the reference declaring it (D25)
+		const put = (entity: GraphEntity, record: GraphRecord, cause: number, rule: string) => s.write({ op: "put", kind: entity.kind, id: entity.id, record }, cause, rule);
+		const remove = (entity: GraphEntity, cause: number, rule: string) => s.write({ op: "del", kind: entity.kind, id: entity.id }, cause, rule);
+		const over = () => s.certainWrites() > bound;
+		for (;;) {
+			let changed = false;
+			// onTargetDelete, for each target deleted since this phase last ran; one deleted during it waits for the next round
+			this.drain();
+			for (const target of this.deletions.splice(0)) {
+				if (s.get(target) !== undefined) continue;
+				const cause = s.deleted.get(target)?.cause ?? -1;
+				for (const r of s.referrersOf(target)) {
+					const holder = s.get(r.id);
+					const ref = refOf(d, r.kind, r.field);
+					if (holder === undefined || ref === undefined || ref.onTargetDelete === "refuse") continue;
+					const rule = `${r.kind}.${r.field}.onTargetDelete`;
+					if (ref.onTargetDelete === "cascade-delete") remove(holder, cause, rule);
+					else put(holder, without(holder.record, ref, target), cause, rule);
+					changed = true;
+					if (over()) return false;
+				}
+			}
+			// exclusivity: steal, for each target whose holders through a steal reference changed
+			this.drain();
+			const pairs = [...this.stealing];
+			this.stealing.clear();
+			for (const [target, refs] of pairs) {
+				for (const kf of refs) {
+					const [kind, field] = kf.split("\u0000") as [string, string];
+					const ref = refOf(d, kind, field)!;
+					const holders = s.referrersOf(target).filter((r) => r.kind === kind && r.field === field);
+					if (holders.length < 2) continue;
+					const fresh = holders.filter((r) => !s.heldBefore(r.id, kind, field, target));
+					if (fresh.length !== 1) continue; // none new, a standing breach; two or more new, judged below
+					const cause = s.heldSince.get(holdingKey(fresh[0]!.id, field, target))?.cause ?? -1;
+					for (const r of holders) {
+						if (r.id === fresh[0]!.id) continue;
+						const holder = s.get(r.id)!;
+						put(holder, without(holder.record, ref, target), cause, `${kind}.${field}.exclusivity`);
+						changed = true;
+						if (over()) return false;
+					}
+				}
+			}
+			// onBelowMin: cascade-delete, for each entity written since this phase last ran that the edit found and left further
+			// below a minimum than it found it; one the edit created is judged instead (D19)
+			this.drain();
+			const entities = [...this.written];
+			this.written.clear();
+			for (const id of entities) {
+				const entity = s.get(id);
+				if (entity === undefined || s.before(id)?.kind !== entity.kind) continue;
+				for (const ref of d.kinds.get(entity.kind) ?? []) {
+					if (ref.min === null || ref.onBelowMin !== "cascade-delete") continue;
+					const now = s.targetsOf(id).get(ref.field)?.length ?? 0;
+					const was = s.targetsBefore(id).get(ref.field)?.length ?? 0;
+					if (now < ref.min && now < was) {
+						remove(entity, s.shrunk.get(fieldKey(id, ref.field))?.cause ?? -1, `${entity.kind}.${ref.field}.onBelowMin`);
+						changed = true;
+						if (over()) return false;
+						break;
+					}
+				}
+			}
+			// onUnreferenced: delete, for each target a reference declaring it stopped holding, once nothing holds it
+			this.drain();
+			const targets = [...this.unheld];
+			this.unheld.clear();
+			for (const target of targets) {
+				const released = s.released.get(target);
+				const entity = s.get(target);
+				if (released === undefined || entity === undefined || s.referrersOf(target).length > 0) continue;
+				s.released.delete(target);
+				remove(entity, released.at.cause, released.rule);
 				changed = true;
 				if (over()) return false;
 			}
+			if (!changed) break; // the fixed point: no rule has anything more to do
 		}
-		// exclusivity: steal, for each target whose holders through a steal reference changed
-		drain();
-		const pairs = [...stealing];
-		stealing.clear();
-		for (const [target, refs] of pairs) {
-			for (const kf of refs) {
-				const [kind, field] = kf.split("\u0000") as [string, string];
-				const ref = refOf(d, kind, field)!;
-				const holders = s.referrersOf(target).filter((r) => r.kind === kind && r.field === field);
-				if (holders.length < 2) continue;
-				const fresh = holders.filter((r) => !s.heldBefore(r.id, kind, field, target));
-				if (fresh.length !== 1) continue; // none new, a standing breach; two or more new, judged below
-				const cause = s.heldSince.get(holdingKey(fresh[0]!.id, field, target)) ?? -1;
-				for (const r of holders) {
-					if (r.id === fresh[0]!.id) continue;
-					const holder = s.get(r.id)!;
-					put(holder, without(holder.record, ref, target), cause);
-					changed = true;
-					if (over()) return false;
-				}
-			}
-		}
-		// onBelowMin: cascade-delete, for each entity written since this phase last ran that the edit found and left further below
-		// a minimum than it found it; one the edit created is judged instead (D19)
-		drain();
-		const entities = [...written];
-		written.clear();
-		for (const id of entities) {
-			const entity = s.get(id);
-			if (entity === undefined || s.before(id)?.kind !== entity.kind) continue;
-			for (const ref of d.kinds.get(entity.kind) ?? []) {
-				if (ref.min === null || ref.onBelowMin !== "cascade-delete") continue;
-				const now = s.targetsOf(id).get(ref.field)?.length ?? 0;
-				const was = s.targetsBefore(id).get(ref.field)?.length ?? 0;
-				if (now < ref.min && now < was) {
-					remove(entity, s.shrunk.get(fieldKey(id, ref.field)) ?? -1);
-					changed = true;
-					if (over()) return false;
-					break;
-				}
-			}
-		}
-		// onUnreferenced: delete, for each target a reference declaring it stopped holding, once nothing holds it
-		drain();
-		const targets = [...unheld];
-		unheld.clear();
-		for (const target of targets) {
-			const cause = s.released.get(target);
-			const entity = s.get(target);
-			if (cause === undefined || entity === undefined || s.referrersOf(target).length > 0) continue;
-			s.released.delete(target);
-			remove(entity, cause);
-			changed = true;
-			if (over()) return false;
-		}
-		if (!changed) break; // the fixed point: no rule has anything more to do
+		return true;
 	}
-	return true;
 }
 
 /**
@@ -183,12 +212,30 @@ function entityBreaches(d: CompiledDeclaration, entity: GraphEntity, targets: Re
 }
 
 /**
- * The breaches the edit introduced or worsened, in order of the item each follows from and then of key: read in both states
- * over what the edit can have changed (D19). A referrer's breaches about an entity change only where the entity's presence or
- * kind does, so the referrers of an entity whose record alone changed are not read; and a breach of exclusivity worsens only
- * through a new holder, which the edit touched.
+ * An entity's misfits against its kind's shape (D24), as a breach of measure 1 -- an entity fits or it does not (the corpus's
+ * R30) -- counting each misfit, named `<pointer> <keyword>`, so the write that introduced one can be found.
  */
-export function newBreaches(s: Scratch, d: CompiledDeclaration): Breach[] {
+function shapeBreach(d: CompiledDeclaration, entity: GraphEntity): Reading | null {
+	const shape = d.shapes.get(entity.kind);
+	if (shape === undefined) return null;
+	const verdict = shape.judge(entity.record as never);
+	if (verdict.verdict !== "misfit") return null;
+	const counted = verdict.misfits.map((m) => `${m.pointer} ${m.keyword}`);
+	return { key: `${entity.kind}.shape@${entity.id}`, ruleKey: `${entity.kind}.shape`, subject: entity.id, measure: 1, rule: "shape", id: entity.id, kind: entity.kind, field: "", counted };
+}
+
+/** The top-level field a misfit's pointer names, its JSON pointer escapes undone. */
+const fieldOfMisfit = (counted: string): string => counted.slice(1, counted.indexOf(" ")).split("/")[0]!.replace(/~1/g, "/").replace(/~0/g, "~");
+
+/**
+ * Judges the edit (D18, D19, D21, D23, D24): the breaches of the reference rules and shapes the edit introduced or worsened,
+ * read in both states over what it can have changed, each refused for the item it follows from; and, if none, the breaches
+ * of the conditions, which follow from the edit as a whole. Every entity a consequence wrote is judged so, as every entity is,
+ * and a refusal concerning one names the consequences that wrote it (the corpus's R30). A referrer's breaches about an entity
+ * change only where the entity's presence or kind does, so the referrers of an entity whose record alone changed are not read;
+ * and a breach of exclusivity worsens only through a new holder, which the edit touched.
+ */
+export function judge(s: Scratch, d: CompiledDeclaration, conditionsBefore: ReadonlyMap<string, ConditionReading>, conditionsAfter: ReadonlyMap<string, ConditionReading>): Verdict | null {
 	const entities = new Set<string>();
 	const exclusive = new Map<string, Map<string, readonly [string, string]>>(); // target -> "kind.field" -> [kind, field], the exclusive references to read for it
 	for (const id of s.touched) {
@@ -207,6 +254,7 @@ export function newBreaches(s: Scratch, d: CompiledDeclaration): Breach[] {
 			}
 		}
 	}
+	const touched = new Set(s.touched);
 	const read = (after: boolean): Map<string, Reading> => {
 		const get = (id: string) => (after ? s.get(id) : s.before(id));
 		const out = new Map<string, Reading>();
@@ -215,6 +263,9 @@ export function newBreaches(s: Scratch, d: CompiledDeclaration): Breach[] {
 			const entity = get(id);
 			if (entity === undefined) continue;
 			for (const b of entityBreaches(d, entity, after ? s.targetsOf(id) : s.targetsBefore(id), get, wasPresent)) out.set(b.key, b);
+			// a shape reads its entity's record alone, so only an entity the edit wrote can misfit anew
+			const misfit = touched.has(id) ? shapeBreach(d, entity) : null;
+			if (misfit !== null) out.set(misfit.key, misfit);
 		}
 		for (const [target, refs] of exclusive) {
 			const referrers = after ? s.referrersOf(target) : s.referrersBefore(target);
@@ -226,37 +277,64 @@ export function newBreaches(s: Scratch, d: CompiledDeclaration): Breach[] {
 		}
 		return out;
 	};
+	// the consequences and rules that wrote an entity, the consequences first, each in declared order, or null where none did: a
+	// condition's breach names those of its subject, since no write of the whole set can be read from it (D25)
+	const order = new Map(d.consequences.map((c) => [c.key, c.order]));
+	for (const [kind, refs] of d.kinds) for (const ref of refs) for (const option of ["onTargetDelete", "exclusivity", "onBelowMin", "onUnreferenced"]) order.set(`${kind}.${ref.field}.${option}`, order.size);
+	const writersOf = (id: string): readonly string[] | null => {
+		const by = s.writtenBy.get(id);
+		return by === undefined ? null : [...by].sort((a, b) => order.get(a)! - order.get(b)!);
+	};
 	const before = read(false);
-	const found: Breach[] = [];
+	const found: (Verdict & { key: string })[] = [];
 	for (const b of read(true).values()) {
 		const was = before.get(b.key);
-		if (b.measure > (was?.measure ?? 0)) found.push({ key: b.key, ruleKey: b.ruleKey, subject: b.subject, measure: b.measure, opIndex: causeOf(s, b, was) }); // introduced, or worsened
+		if (b.measure <= (was?.measure ?? 0)) continue; // neither introduced nor worsened
+		// the consequence or rule whose write the breach follows from (the corpus's R38; D25)
+		const { at } = attributionOf(s, b, was);
+		found.push({ key: b.key, code: b.rule === "shape" ? "shape-misfit" : "rule-broken", ruleKey: b.ruleKey, subject: b.subject, measure: b.measure, opIndex: at?.cause ?? -1, sentence: null, writers: at?.by ? [at.by] : null });
 	}
-	return found.sort((a, b) => a.opIndex - b.opIndex || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
+	found.sort((a, b) => a.opIndex - b.opIndex || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
+	if (found.length > 0) {
+		const { key: _key, ...verdict } = found[0]!;
+		return verdict;
+	}
+	// the conditions, by key, each following from the edit as a whole (the corpus's R32)
+	for (const key of [...conditionsAfter.keys()].sort()) {
+		const c = conditionsAfter.get(key)!;
+		if (c.measure <= (conditionsBefore.get(key)?.measure ?? 0)) continue;
+		return { code: "condition-broken", ruleKey: c.ruleKey, subject: c.subject, measure: c.measure, opIndex: -1, sentence: c.sentence, writers: s.get(c.subject) === undefined ? null : writersOf(c.subject) };
+	}
+	return null;
 }
 
 /**
- * The requested item a breach follows from (the corpus's R21; D19), read from what the breach counts that it did not count
- * before: for `min`, the item that last left the reference holding fewer targets, its entity's creation included; for
- * `exclusivity`, the newest of the holders the edit made, each by the item that made it hold the target; and for `targets`
- * and `onTargetDelete`, the latest of the targets newly counted, each by the item that made the reference hold it where the
- * edit did, and otherwise by the item that created or deleted the target. A write of the entity that changed none of these
- * is no cause.
+ * The write a breach follows from (the corpus's R21; D19, D23), read from what the breach counts that it did not count before
+ * the edit, and the entity that write concerns: for `min`, the write that last left the reference holding fewer targets, its
+ * entity's creation included; for `exclusivity`, the latest of the writes that made each new holder hold the target, and that
+ * holder; for `targets` and `onTargetDelete`, the latest over the targets newly counted, each by the write that made the
+ * reference hold it where the edit did, and otherwise by the write that created or deleted the target; and for a shape, the
+ * latest over the misfits newly counted, each by the write that last changed the field it names.
  */
-function causeOf(s: Scratch, b: Reading, was: Reading | undefined): number {
-	if (b.rule === "min") return s.shrunk.get(fieldKey(b.id, b.field)) ?? -1;
+function attributionOf(s: Scratch, b: Reading, was: Reading | undefined): { at: Attribution | undefined; entity: string } {
+	if (b.rule === "min") return { at: s.shrunk.get(fieldKey(b.id, b.field)), entity: b.id };
 	const before = new Set(was?.counted ?? []);
-	let found = -1;
+	let at: Attribution | undefined;
+	let entity = b.id;
 	for (const one of b.counted) {
 		if (before.has(one)) continue;
-		if (b.rule === "exclusivity") {
-			if (!s.heldBefore(one, b.kind, b.field, b.id)) found = Math.max(found, s.heldSince.get(holdingKey(one, b.field, b.id)) ?? -1);
-			continue;
+		if (b.rule === "shape") {
+			at = later(at, s.fieldCause(b.id, fieldOfMisfit(one)) ?? s.lastWrite.get(b.id));
+		} else if (b.rule === "exclusivity") {
+			if (s.heldBefore(one, b.kind, b.field, b.id)) continue;
+			const next = later(at, s.heldSince.get(holdingKey(one, b.field, b.id)));
+			if (next !== at) entity = one;
+			at = next;
+		} else {
+			at = later(at, s.heldBefore(b.id, b.kind, b.field, one) ? s.presence.get(one) : s.heldSince.get(holdingKey(b.id, b.field, one)));
 		}
-		const cause = s.heldBefore(b.id, b.kind, b.field, one) ? s.presence.get(one) : s.heldSince.get(holdingKey(b.id, b.field, one));
-		found = Math.max(found, cause ?? -1);
 	}
-	return found;
+	return { at, entity };
 }
 
 export type { GraphStep };
