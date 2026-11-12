@@ -421,3 +421,115 @@ Answering the deletion of the old kind and the creation of the new for one ident
 Refusing deep records at the boundary of both `applyChange` and `plan` - `applyChange` already takes them, and comparing without recursion costs nothing for records of ordinary depth.\
 Bounding on every entity touched - an edit whose items return entities to the state found would be refused below the bound.
 
+
+---
+
+## D20 - M3 is built: application consequences in declared phases, the conflict fault, held writes, conditions and shapes, `graph-declaration` and `plan-graph-change` still deferred for M4
+
+**Ruled by:** the build plan, approved by the director as draw's `H31-10` (2026-11-11, draw's `dev/DECISIONS.md`), on the contract co-signed by zorg (`zorg/docs/DECISIONS.md` `D76`); the as-built choices are the builder's of M3, proposed for zorg's review where they settle something the contract leaves open, as `D21` to `D24` do.\
+**Affects:** `src/declaration.ts`, `src/phases.ts`, `src/items.ts`, `src/reader.ts`, `src/scratch.ts`, `src/reference-rules.ts`, `src/planner.ts`, `src/refusal.ts`, `src/entity-graph.ts`, `package.json`, `export-map.json`, `test/`.
+
+**Ruling.**\
+A declaration states its `phases` in order, and each kind its `shape`, its `consequences` and its `conditions` (`D21`, `D24`); a malformed one is refused at creation, naming its part, and the index from each kind to the consequences of each phase listening to it is built once.\
+Planning follows the stopping rule exactly: the requested items are applied and the reference rules expanded to a fixed point; each declared phase runs once, in order, its consequences in declared order each seeing the writes before it, and the rules are expanded again when the phase completes; a completed phase is never entered again.\
+Two consequences writing one entity in one run of a phase is a fault; every entity a consequence or a rule wrote is judged, as every entity the edit touched is, by its shape, the reference rules and the conditions, by key and measure (`D23`); and a consequence or condition cannot change the view (`D22`).\
+shape-check is taken at its `0.2.0` release, so a shape may name dialect 1 or dialect 2 and entity-graph holds no dialect of its own.\
+Measured with a Node timing, medians of 21 to 51 plans on views of 1,001, 10,001 and 100,001 entities: a plan running two phases, two consequences called, takes about 0.07 to 0.09 ms at each size; declaring 300 more consequences listening to a kind the edit does not touch leaves it about 0.1 ms; and a condition that reads every entity of a kind costs what that reading costs, about 0.24, 1.5 and 22 ms on the three views.\
+The neutral corpus's batch 3 (`6d74240`, merged unedited) passes all 15 cases, batches 1 and 2 still passing; batch 4 is M4's, left to it by name.\
+`graph-declaration` and `plan-graph-change` stay deferred under this ruling until M4 serves them whole: what they still owe is the intent resolver, read from the declaration and applied before each requested item, and the edit context, read as plain JSON and handed to consequences, conditions and resolvers.
+
+**Why.**\
+The plan's M3 lands the hybrid the contract states - declared reference rules and the application's own consequences under one stopping rule - with every write held to the same rules, needing nothing still being built.
+
+**Alternatives refuted.**\
+Serving either row at M3 - the resolver and the context are terms of both rows that M3 does not build.\
+Staying on shape-check `0.1.0` until M8 - a consumer's dialect 2 shapes would be refused in the meantime, and `0.2.0` accepts every dialect 1 shape as `0.1.0` did.
+
+---
+
+## D21 - Proposed reading: phases, consequences and conditions as declared and as run
+
+**Proposed by:** the builder of M3, 2026-11-11, for zorg's review, reading `CONTRACT.md`'s *Consequences and the stopping rule* and *Judging and refusals*; it takes the neutral corpus's readings `R25` to `R29`, `R32` and `R36` (`corpus/README.md`).\
+**Affects:** `src/declaration.ts`, `src/phases.ts`, `src/planner.ts`.
+
+**Reading.**\
+A declaration's `phases` is a non-empty list of distinct names, in running order, and may be left out by a declaration with no consequence.\
+A kind's consequence is `{ id, phase, trigger, run }`, keyed `<kind>.<id>`; its trigger is one clause or a list of them, each `{ created: [kinds] }`, `{ deleted: [kinds] }` or `{ changed: { kind, fields } }`, every kind declared; a phase or a kind it names that the declaration does not is refused, its subject `<kind>.consequences.<id>.phase` or `.trigger` and the fault `undeclared <name>`.\
+A kind's condition is `{ id, check }`, keyed `<kind>.<id>`.\
+Consequences run in declared order, the kinds as listed and each kind's consequences as listed (`R26`); each runs at most once in a run of its phase, when its turn comes, if the edit so far then holds a change its trigger hears, and is handed every such change (`R27`).\
+A change is read against the state the edit found: an entity created, one deleted, or one of the named top-level fields differing, compared as plain data, on an entity present in both; so an entity created and removed in one edit is no change.\
+A kind first touched during a phase brings the consequences listening to it, declared after the one that touched it, into the same run.\
+`run` is called with `{ matches, graph }`: each match `{ kind, id, before, after, fields }`, the records as the edit found them and as they stand, and `graph` a reader of the edit so far (`D22`); it returns a list of writes in the edit's own form, `create`, `change`, `set` or `remove`, each checked and applied as a requested item is, and a write a requested item could not make is refused with that fault's code, the consequence's key as `details.ruleKey` and the write's identity as `subject`.\
+A write of a consequence carries the requested item the changes it heard follow from (`R33`; `D19`): an entity's creation or deletion, or the latest write of a field its trigger names.\
+Two different consequences writing one entity, by any write, in one run of a phase is refused as `consequence-conflict`, keyed by the code, the entity as `subject`, the number of consequences that wrote it as `measure`, `opIndex` -1, and the two in `details.writers` (`R29`; `D23`); a consequence writing what a requested item, a rule or an earlier phase wrote is no fault.\
+After every phase the rules expand from the writes since they last ran; a hold a consequence gained on a target the edit deleted sends that target round again, so `onTargetDelete` acts on its new referrer.\
+A condition's `check` is called with a reader and answers a list of `{ subject, measure, sentence }`, each subject named once and each measure above nothing; it is run on the state the edit found, read once per view position, and on the state the edit would leave, and each breach is keyed `<rule key>@<subject>` and refused as `condition-broken` when new or worse, its `sentence` carried verbatim and its `opIndex` -1 (`R32`).\
+A condition's breach is reported only where no breach of a reference rule or a shape is, since those name the item they follow from.\
+The net-write bound counts the entities only the rules touched as certain writes, since a consequence, like a requested item, may write an entity back as the edit found it; it is judged again on the net writes once the phases are done.
+
+**Why.**\
+The contract's stopping rule bounds planning by its phases, and the corpus reads "the next consequence sees it" as covering triggers as well as state; reading each change against the state the edit found makes a trigger hear what the edit does rather than how it was written.
+
+**Alternatives refuted.**\
+Fixing a phase's consequences when it begins, as draw's planner does - a consequence listening to a kind an earlier consequence of the phase first touched would not hear the change the contract says it sees.\
+Naming the second consequence as the conflict's `ruleKey` and the item it followed from as its `opIndex`, as this branch first built - the fault is between two consequences, not of one item.
+
+---
+
+## D22 - Proposed reading: a consequence or condition cannot change the view
+
+**Proposed by:** the builder of M3, 2026-11-11, for zorg's review, on the brief's purity requirement and `CONTRACT.md`'s "a pure function".\
+**Affects:** `src/reader.ts`, `src/phases.ts`, `src/entity-graph.ts`.
+
+**Reading.**\
+Everything a consequence or condition is handed is frozen - the matches, each record, every entity and list its reader answers - and its reader answers only during the call it is handed to, throwing when asked afterwards or for a kind the declaration does not hold.\
+What it returns is read once as plain JSON through shape-check, running none of its code.\
+A consequence that throws, returns what is not plain data or not a list, or reaches for what it was handed is refused as `consequence-failed`, its key as `details.ruleKey` and the entity whose change it heard as `subject`; a condition so failing is refused as `condition-failed`.\
+While a graph plans, its `applyChange` and `plan` refuse as `reentrant`, so a function that closes over the graph cannot change the view or start another plan.\
+What is not contained: a function that never returns, and a function's writes to its own variables or to the world outside, which no component can prevent; the rule is that none of it reaches the view.
+
+**Why.**\
+Planning changes no answer, so nothing the application's functions do may reach the view, and a function's failure is the application's to see, named, rather than an exception from inside planning.
+
+**Alternatives refuted.**\
+Copying what each function is handed instead of freezing it - a function's change to its copy would go unseen, where freezing makes it throw in strict-mode code and the plan names it.
+
+---
+
+## D23 - Proposed reading: held writes are judged as every write is, and a refusal concerning one names its writers in `details.writers`, a member owed to zorg
+
+**Proposed by:** the builder of M3, 2026-11-11, for zorg's review, reading `CONTRACT.md`'s *Consequence writes held to request rules*; it takes the corpus's readings `R30` and `R33`.\
+**Owed to zorg:** the new member `details.writers`, since the contract's refusal form names `details` as `{ ruleKey, subject, measure, opIndex, sentence }` and no member can name a consequence there; this branch adds it in the code and leaves `CONTRACT.md`'s terms as they are until zorg rules.\
+**Affects:** `src/reference-rules.ts`, `src/refusal.ts`, `src/planner.ts`, `src/phases.ts`.
+
+**Reading.**\
+Every entity a consequence or a reference rule wrote is judged as it stands in the result by its shape, the reference rules and the conditions, by key and measure, as every entity the edit touched is: refused for a breach it introduces or raises, so an entity that already failed and fails no worse is not (`R30`).\
+The refusal names the rule broken - its code and `ruleKey` - the entity in `subject`, and the requested item behind the consequence's matching changes as `opIndex` (`R33`).\
+A refusal concerning an entity a consequence wrote names the consequences that wrote it, in any phase, each `<kind>.<id>` in declared order, in `details.writers`: the referrer for a breach of `targets`, `onTargetDelete` or `min`, the new holder for a breach of `exclusivity`, the entity for a shape, and a condition's subject where it names an entity.\
+The conflict fault names its two consequences there too (`D21`); a refusal concerning no entity a consequence wrote carries no `writers`.
+
+**Why.**\
+The contract asks the refusal to name the consequence, and also names the rule broken, the entity and the item; with `ruleKey` naming the rule, as batch 2's refusals of rule writes do, the consequence needs a member of its own, and the corpus proposes the same one.
+
+**Alternatives refuted.**\
+Naming the consequence in `ruleKey` under a code of its own, `held-write`, as this branch first built - the rule broken would then be named nowhere, and a rule write's refusal, which names the rule, would read differently from a consequence write's.\
+Carrying the consequence in `sentence` - that member is an application condition's own words, carried verbatim.
+
+---
+
+## D24 - Proposed reading: shapes are judged through shape-check, a requested write at its item and every other write on the result
+
+**Proposed by:** the builder of M3, 2026-11-11, for zorg's review, reading `CONTRACT.md`'s *Judging and refusals*; it takes the corpus's readings `R30` and `R31`.\
+**Affects:** `src/declaration.ts`, `src/items.ts`, `src/reference-rules.ts`.
+
+**Reading.**\
+A kind's `shape` is a shape document handed to shape-check's `prepareShapeDocument` once, at creation; one shape-check refuses is refused, its subject `<kind>.shape<pointer>: invalid`, the pointer of shape-check's first problem.\
+A requested write whose record misfits its kind's shape is refused at its item, before any rule is judged and whether or not the entity fit before, as `shape-misfit` keyed `<kind>.shape`, the entity as `subject`, a measure of 1 and the item as `opIndex` (`R31`); a reference's form is checked before its shape.\
+An entity a consequence or a rule wrote is judged on the result, a misfit a breach of measure 1, so one that misfit before and misfits after is not refused (`R30`); its `opIndex` is the latest write that changed a top-level field a newly counted misfit names.\
+The view takes in a change or an opening without judging shapes, as it applies no rule (`D12`).
+
+**Why.**\
+The contract says a shape misfit of a requested write refuses the plan, without the held writes' exception for an entity that already failed; and a shape is fitted or misfitted, so its measure cannot rise.
+
+**Alternatives refuted.**\
+Judging a requested write's shape on the result by its number of misfits, a partial repair allowed, as this branch first built - the contract states the exception for consequence writes alone.
