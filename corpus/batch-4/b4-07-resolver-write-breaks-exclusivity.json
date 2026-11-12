@@ -1,0 +1,42 @@
+{
+  "case": "b4-07-resolver-write-breaks-exclusivity",
+  "batch": 4,
+  "summary": "In a three-item edit, the caption the resolver attaches to the latest figure, which already has a caption, breaks exclusivity on the result and is refused at the rewritten item's index, 1 or 2 as the item stands, unmoved by a figure a later item creates; removing the other caption in the same edit is accepted.",
+  "covers": ["plan-graph-change", "Intent resolvers", "Reference rules", "Judging and refusals"],
+  "readings": ["R1", "R2", "R14", "R15", "R18", "R19", "R21", "R23", "R24", "R25", "R27", "R28", "R35"],
+  "world": "document",
+  "variant": "captionResolving",
+  "verdict": "accepted",
+  "steps": [
+    { "start": { "position": 0, "entities": [
+      { "kind": "section", "id": "s1", "record": { "heading": "Intro", "parent": null, "cites": [] } },
+      { "kind": "section", "id": "s2", "record": { "heading": "Method", "parent": null, "cites": [] } },
+      { "kind": "figure", "id": "f1", "record": { "title": "Map", "section": "s1", "number": 1 } },
+      { "kind": "figure", "id": "f2", "record": { "title": "Chart", "section": "s1", "number": 2 } },
+      { "kind": "caption", "id": "c1", "record": { "body": "Figure 1: Map", "figure": "f1" } },
+      { "kind": "caption", "id": "c2", "record": { "body": "Figure 2: Chart", "figure": "f2" } }
+    ] } },
+    { "plan": { "position": 0, "edit": [
+      { "op": "create", "kind": "section", "id": "s3", "record": { "heading": "Notes", "parent": null, "cites": [] } },
+      { "op": "create", "kind": "caption", "id": "c9", "record": { "body": "Extra" } },
+      { "op": "create", "kind": "figure", "id": "f7", "record": { "title": "Photo", "section": "s2", "number": 1 } }
+    ], "outcome": "refused", "refusal": { "part": "entity-graph", "code": "reference-rule", "ruleKey": "caption.figure.exclusivity", "subject": "f2", "measure": 1, "opIndex": 1 } } },
+    { "plan": { "position": 0, "edit": [
+      { "op": "create", "kind": "section", "id": "s3", "record": { "heading": "Notes", "parent": null, "cites": [] } },
+      { "op": "create", "kind": "section", "id": "s4", "record": { "heading": "Appendix", "parent": null, "cites": [] } },
+      { "op": "create", "kind": "caption", "id": "c9", "record": { "body": "Extra" } }
+    ], "outcome": "refused", "refusal": { "part": "entity-graph", "code": "reference-rule", "ruleKey": "caption.figure.exclusivity", "subject": "f2", "measure": 1, "opIndex": 2 } } },
+    { "plan": { "position": 0, "edit": [
+      { "op": "remove", "kind": "caption", "id": "c2" },
+      { "op": "create", "kind": "caption", "id": "c9", "record": { "body": "Extra" } },
+      { "op": "create", "kind": "section", "id": "s3", "record": { "heading": "Notes", "parent": null, "cites": [] } }
+    ], "outcome": "accepted", "writes": [
+      { "op": "del", "kind": "caption", "id": "c2" },
+      { "op": "put", "kind": "caption", "id": "c9", "record": { "body": "Extra", "figure": "f2" } },
+      { "op": "put", "kind": "section", "id": "s3", "record": { "heading": "Notes", "parent": null, "cites": [] } }
+    ] } },
+    { "ask": { "position": 0, "questions": [
+      { "q": "referrersOf", "id": "f2", "answer": [ { "kind": "caption", "id": "c2", "field": "figure" } ] }
+    ] } }
+  ]
+}
