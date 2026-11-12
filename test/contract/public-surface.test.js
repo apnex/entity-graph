@@ -15,10 +15,10 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", ".
 const pkg = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
 const map = JSON.parse(fs.readFileSync(path.join(root, "export-map.json"), "utf8"));
 const publicName = (p) => (p === "." ? pkg.name : `${pkg.name}/${p.slice(2)}`);
-// RESTATED at M4 (docs/DECISIONS.md D26): graph-declaration and plan-graph-change are served, and reversible-history and
-// positioned-graph-sync deferred, under D26, to M5 and M6
-const SERVED = ["dated-graph-view", "graph-declaration", "plan-graph-change"];
-const DEFERRED = { "reversible-history": "D26", "positioned-graph-sync": "D26" };
+// RESTATED at M4 (docs/DECISIONS.md D26) and M5 (D32): reversible-history is served, and positioned-graph-sync deferred, under
+// D32, to M6
+const SERVED = ["dated-graph-view", "graph-declaration", "plan-graph-change", "reversible-history"];
+const DEFERRED = { "positioned-graph-sync": "D32" };
 
 const contractRows = () => {
 	const lines = fs.readFileSync(path.join(root, "CONTRACT.md"), "utf8").split("\n");
@@ -44,7 +44,7 @@ for (const [p, entry] of Object.entries(map.paths)) {
 	});
 }
 
-test("every contract row is served or deferred with a ruling, never both; the served rows are M1's and M4's", () => {
+test("every contract row is served or deferred with a ruling, never both; the served rows are M1's, M4's and M5's", () => {
 	const rows = contractRows();
 	const served = new Set(Object.values(map.paths).flatMap((e) => Object.values(e.exports)).flatMap((x) => x.serves));
 	assert.deepEqual([...served].sort(), SERVED);

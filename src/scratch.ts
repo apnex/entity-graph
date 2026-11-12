@@ -66,6 +66,13 @@ export interface GraphChangeRecord {
 	readonly fields: readonly string[];
 }
 
+/** Thrown by a write past the plan's step limit, and caught where the plan is answered (D35). */
+export class StepLimitReached extends Error {
+	constructor(readonly steps: number) {
+		super(`the plan took more than its limit of steps, at ${steps}`);
+	}
+}
+
 export class Scratch implements GraphState {
 	/** Identity -> the entity as the edit has it, or null where the edit deleted it. */
 	private readonly laid = new Map<string, GraphEntity | null>();
@@ -101,7 +108,7 @@ export class Scratch implements GraphState {
 	/** The targets an `onUnreferenced: "delete"` reference stopped holding, with the item that led there and that reference's rule key. */
 	readonly released = new Map<string, { readonly at: Attribution; readonly rule: string }>();
 
-	constructor(private readonly view: EntityView, private readonly declaration: CompiledDeclaration) {}
+	constructor(private readonly view: EntityView, private readonly declaration: CompiledDeclaration, private readonly maxSteps = Number.POSITIVE_INFINITY) {}
 
 	/** The entity as the edit has it so far. */
 	get(id: string): GraphEntity | undefined {
@@ -214,6 +221,8 @@ export class Scratch implements GraphState {
 	 */
 	write(step: GraphStep, cause: number, by: string | null = null, free = false): void {
 		const id = step.id;
+		// the step limit, so an expansion no bound would end is refused before its record is built (D25, D35)
+		if (this.steps.length >= this.maxSteps) throw new StepLimitReached(this.steps.length + 1);
 		const at: Attribution = { cause, by, seq: this.steps.length };
 		const was = this.get(id);
 		this.undo.push(was === undefined ? { op: "del", kind: step.kind, id } : { op: "put", kind: was.kind, id, record: was.record });

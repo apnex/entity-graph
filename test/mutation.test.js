@@ -5,7 +5,8 @@
 // the rules expanded once; a worsening let through, only a new breach refused -- each caught by a scenario the contract answers.
 // M3's: a phase re-entered, the conflict let through, a held write not judged, a condition's worsening let through.
 // M4's: a resolver called against the edit as it was found, its writes given the wrong index, the context not handed to a
-// resolver, a consequence or a condition. Each mutant must land, or its verdict would measure nothing.
+// resolver, a consequence or a condition. M5's: a consequence run on undo, a reversal recorded after its write, a pinned edit
+// evicted below the hard limit, the note's bound left unchecked. Each mutant must land, or its verdict would measure nothing.
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
@@ -104,6 +105,33 @@ const contextToCondition = (createEntityGraph) => {
 	const r = g.plan({ items: [{ op: "create", kind: "note", id: "b", record: {} }] }, { context: { limit: 2 } });
 	return r.ok ? null : { what: "the context did not reach a condition", got: r };
 };
+// M5's scenarios: an undo runs no consequence and restores the state before the edit; a pinned oldest edit holds below the hard
+// limit; an undo record past the note's bound is refused by the graph, before the store sees it
+const overPort = (mod, declaration, entities, options = {}) => mod.createEntityGraph(declaration, { position: 0, entities }, { port: mod.createMemoryGraphPort(options.port ?? {}), ...(options.history ? { history: options.history } : {}) }).graph;
+const undoRunsNothing = (createEntityGraph, mod) => {
+	let ran = 0;
+	const count = { id: "count", phase: "first", trigger: [{ created: ["item"] }, { deleted: ["item"] }], run: () => (ran++, []) };
+	const g = overPort(mod, { phases: ["first"], kinds: [{ kind: "item", consequences: [count] }] }, []);
+	g.commit({ items: [{ op: "create", kind: "item", id: "a", record: {} }] });
+	const r = g.undo();
+	return r.ok && ran === 1 && g.all("item").entities.length === 0 ? null : { what: "a consequence ran on undo", ran, got: r };
+};
+const undoRestoresBefore = (createEntityGraph, mod) => {
+	const g = overPort(mod, { kinds: [{ kind: "item" }] }, [{ kind: "item", id: "a", record: { v: 1 } }]);
+	g.commit({ items: [{ op: "set", kind: "item", id: "a", patch: { v: 2 } }] });
+	const r = g.undo();
+	return r.ok && g.get("item", "a").entity?.record.v === 1 ? null : { what: "the reversal was read after its write", got: r };
+};
+const pinHolds = (createEntityGraph, mod) => {
+	const g = overPort(mod, { kinds: [{ kind: "item" }] }, [], { history: { count: 1, hardCount: 3, pin: ({ writes }) => writes.some((w) => w.id === "a") } });
+	for (const id of ["a", "b", "c"]) g.commit({ items: [{ op: "create", kind: "item", id, record: {} }] });
+	return g.history().edits.length === 3 ? null : { what: "a pinned edit was evicted below the hard limit", got: g.history() };
+};
+const noteBoundChecked = (createEntityGraph, mod) => {
+	const g = overPort(mod, { kinds: [{ kind: "item" }] }, [], { port: { noteBound: 100 } });
+	const r = g.commit({ items: [{ op: "create", kind: "item", id: "a", record: { text: "x".repeat(200) } }] });
+	return r.ok === false && r.refusal.code === "note-bound" ? null : { what: "the note's bound was not checked before the store", got: r };
+};
 const MUTANTS = [
 	{ name: "a stale reverse entry", file: "references.js", needle: "this.drop(id); // the references it held before this change" },
 	{ name: "a missed delete", file: "references.js", needle: "this.drop(id); // a deleted entity refers to nothing" },
@@ -120,12 +148,16 @@ const MUTANTS = [
 	{ name: "the context not handed to a resolver", file: "resolvers.js", needle: "freeze({ item, graph: reader, context })", replacement: "freeze({ item, graph: reader, context: undefined })", check: contextToResolver },
 	{ name: "the context not handed to a consequence", file: "phases.js", needle: "freeze({ matches: heard, graph: reader, context })", replacement: "freeze({ matches: heard, graph: reader, context: undefined })", check: contextToConsequence },
 	{ name: "the context not handed to a condition", file: "phases.js", needle: "freeze({ graph: reader, context })", replacement: "freeze({ graph: reader, context: undefined })", check: contextToCondition },
+	{ name: "a consequence run on undo", file: "replay.js", needle: "const writes = s.netWrites();", replacement: "for (const phase of d.phases) runPhase(s, d, phase, context); const writes = s.netWrites();", also: [["import { readConditions } from \"./phases.js\";", "import { readConditions, runPhase } from \"./phases.js\";"]], check: undoRunsNothing },
+	{ name: "a reversal recorded after its write", file: "entity-graph.js", needle: "[w.kind, w.id, view.get(w.id)?.record ?? null, w.op === \"put\" ? w.record : null]", replacement: "[w.kind, w.id, w.op === \"put\" ? w.record : null, w.op === \"put\" ? w.record : null]", check: undoRestoresBefore },
+	{ name: "a pinned edit evicted below the hard limit", file: "history.js", needle: "if (oldest.pinned && held <= hardCount && size <= hardBytes)", replacement: "if (false)", check: pinHolds },
+	{ name: "the note's bound left unchecked", file: "entity-graph.js", needle: "if (bytes > port.noteBound)", replacement: "if (false)", check: noteBoundChecked },
 	{ name: "a condition's worsening let through: only a new breach refuses", file: "reference-rules.js", needle: "if (c.measure <= (conditionsBefore.get(key)?.measure ?? 0))", replacement: "if (conditionsBefore.has(key))", check: conditionWorseningRefused },
 ];
 
 test("each scenario a mutant is caught by answers as the contract says on the built package", async () => {
-	const { createEntityGraph } = await import(pathToFileURL(path.join(root, "dist", "index.js")).href);
-	for (const mutant of MUTANTS) if (mutant.check) assert.equal(mutant.check(createEntityGraph), null, `${mutant.name}: the scenario fails unmutated`);
+	const mod = await import(pathToFileURL(path.join(root, "dist", "index.js")).href);
+	for (const mutant of MUTANTS) if (mutant.check) assert.equal(mutant.check(mod.createEntityGraph, mod), null, `${mutant.name}: the scenario fails unmutated`);
 });
 
 for (const mutant of MUTANTS) {
@@ -135,11 +167,16 @@ for (const mutant of MUTANTS) {
 		try {
 			fs.cpSync(path.join(root, "dist"), dir, { recursive: true });
 			const file = path.join(dir, mutant.file);
-			const before = fs.readFileSync(file, "utf8");
-			assert.equal(before.split(mutant.needle).length, 2, `the needle is in ${mutant.file} exactly once, or the mutant does not land`);
-			fs.writeFileSync(file, before.replace(mutant.needle, mutant.replacement ?? "/* removed by the mutant */"));
-			const { createEntityGraph } = await import(pathToFileURL(path.join(dir, "index.js")).href);
-			const found = mutant.check ? mutant.check(createEntityGraph) : checkExactness(createEntityGraph, { seed: 3, streams: 10, steps: 30 });
+			let text = fs.readFileSync(file, "utf8");
+			// a mutant is one edit, or several in one file (`also`), each needle there exactly once
+			for (const [needle, replacement] of [[mutant.needle, mutant.replacement], ...(mutant.also ?? [])]) {
+				assert.equal(text.split(needle).length, 2, `the needle is in ${mutant.file} exactly once, or the mutant does not land: ${needle}`);
+				text = text.replace(needle, replacement ?? "/* removed by the mutant */");
+			}
+			fs.writeFileSync(file, text);
+			const mod = await import(pathToFileURL(path.join(dir, "index.js")).href);
+			const { createEntityGraph } = mod;
+			const found = mutant.check ? mutant.check(createEntityGraph, mod) : checkExactness(createEntityGraph, { seed: 3, streams: 10, steps: 30 });
 			assert.notEqual(found, null, `${mutant.name} was not caught`);
 		} finally {
 			fs.rmSync(dir, { recursive: true, force: true });

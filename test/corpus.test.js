@@ -16,11 +16,14 @@ import fs from "node:fs";
 import path from "node:path";
 import { test } from "node:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { createEntityGraph } from "../dist/index.js";
+import { createEntityGraph, createMemoryGraphPort } from "../dist/index.js";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 // every batch directory the corpus holds, none left out (draw's H31-EG-M4)
-const BATCHES = fs.readdirSync(path.join(root, "corpus")).filter((f) => /^batch-\d+$/.test(f)).sort((a, b) => Number(a.slice(6)) - Number(b.slice(6)));
+// every batch directory the corpus holds but those a later milestone builds for, left to it by name (draw's H31-EG-M5)
+const LATER = ["batch-6"];
+const DIRECTORIES = fs.readdirSync(path.join(root, "corpus")).filter((f) => /^batch-\d+$/.test(f)).sort((a, b) => Number(a.slice(6)) - Number(b.slice(6)));
+const BATCHES = DIRECTORIES.filter((b) => !LATER.includes(b));
 const filesOf = (batch) => fs.readdirSync(path.join(root, "corpus", batch)).filter((f) => f.endsWith(".json")).sort().map((f) => path.join(root, "corpus", batch, f));
 const CASES = BATCHES.flatMap(filesOf).map((f) => JSON.parse(fs.readFileSync(f, "utf8")));
 
@@ -62,7 +65,35 @@ const PLAN_CODES = {
 	"shape-misfit": "shape-misfit", "condition": "condition-broken", "consequence-conflict": "consequence-conflict",
 	// batch 4's
 	"invalid-context": "invalid-context",
+	// batch 5's
+	"store-moved": "store-moved", "note-bound": "note-bound", "nothing-to-undo": "nothing-to-undo", "nothing-to-redo": "nothing-to-redo",
 };
+
+/** A value with every `{ "$fixture": name }` in it replaced by what the world module's fixture answers (batch 5, R50). */
+const fixed = (c, value) => {
+	if (Array.isArray(value)) return value.map((v) => fixed(c, v));
+	if (value === null || typeof value !== "object") return value;
+	if (Object.keys(value).length === 1 && typeof value.$fixture === "string") return WORLDS[c.world].fixtures[value.$fixture]();
+	return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, fixed(c, v)]));
+};
+/** A world variant's history bounds in this implementation's form: the same names, the pin handed `{ position, writes }` (R47). */
+const historyOf = (c) => {
+	const h = c.world === undefined ? undefined : WORLDS[c.world][c.variant ?? "base"].history;
+	return h === undefined ? undefined : { count: h.count, bytes: h.bytes, hardCount: h.hardCount, hardBytes: h.hardBytes, pin: ({ position, writes }) => h.pin({ position, writes }) };
+};
+/** A refusal compared with a case's: its facts, `measureAbove` where the case gives one, and writers and a sentence where stated. */
+function compareRefusal(where, refusal, want) {
+	assert.ok(Object.hasOwn(PLAN_CODES, want.code), `no code mapped for the label ${want.code}`);
+	const got = { part: refusal.part, code: refusal.code, ruleKey: refusal.details.ruleKey, subject: refusal.details.subject, measure: refusal.details.measure, opIndex: refusal.details.opIndex };
+	if (Object.hasOwn(want, "writers")) got.writers = refusal.details.writers;
+	if (Object.hasOwn(want, "sentence")) got.sentence = refusal.details.sentence;
+	const { measureAbove, ...rest } = want;
+	if (measureAbove !== undefined) {
+		assert.ok(got.measure > measureAbove, `${where}: measure ${got.measure} is not above ${measureAbove}`);
+		delete got.measure;
+	}
+	assert.deepEqual(got, { ...rest, code: PLAN_CODES[want.code] }, `${where}: the refusal`);
+}
 
 /** The world modules batches 3 and 4 name, each read once. */
 const WORLDS = Object.fromEntries(await Promise.all(fs.readdirSync(path.join(root, "corpus", "worlds")).filter((f) => f.endsWith(".mjs")).map(async (f) => [path.basename(f, ".mjs"), await import(pathToFileURL(path.join(root, "corpus", "worlds", f)).href)])));
@@ -126,7 +157,14 @@ function runAccepted(c, mode) {
 	const [first, ...rest] = c.steps;
 	assert.ok(first?.start, "the first step is a start");
 	let graph;
-	if (mode === "fill") {
+	// batches 5 and 6 run over an in-memory store port, its note bound the case's or the reference store's (R39)
+	const port = c.batch >= 5 ? createMemoryGraphPort({ position: first.start.position, ...(c.port?.noteBound === undefined ? {} : { noteBound: c.port.noteBound }) }) : undefined;
+	if (port !== undefined) {
+		const history = historyOf(c);
+		const made = createEntityGraph(declare, { position: first.start.position, entities: fixed(c, first.start.entities) }, { port, ...(history === undefined ? {} : { history }) });
+		assert.equal(made.ok, true, `refused: ${JSON.stringify(made.refusal)}`);
+		graph = made.graph;
+	} else if (mode === "fill") {
 		const made = createEntityGraph(declare, { position: first.start.position, entities: first.start.entities });
 		assert.equal(made.ok, true, `refused: ${JSON.stringify(made.refusal)}`);
 		graph = made.graph;
@@ -166,16 +204,49 @@ function runAccepted(c, mode) {
 				if (Object.hasOwn(want, "sentence")) got.sentence = r.refusal.details.sentence;
 				assert.deepEqual(got, { ...want, code: PLAN_CODES[want.code] }, `step ${i + 1}: the refusal`);
 			}
+		} else if (step.commit || step.undo || step.redo) {
+			// batch 5: a commit, an undo or a redo, landed at the port's next position or refused, the store and view as they were
+			const s = step.commit ?? step.undo ?? step.redo;
+			const where = `step ${i + 1}`;
+			const kinds = declare.kinds.map((k) => k.kind);
+			const before = held(graph, kinds);
+			assert.equal(graph.position(), s.position, `${where}: the position planned from`);
+			const options = Object.hasOwn(s, "context") ? { context: s.context } : Object.hasOwn(s, "contextFrom") ? { context: WORLDS[c.world].contexts[s.contextFrom]() } : undefined;
+			const r = step.commit ? graph.commit({ items: fixed(c, s.edit) }, options) : step.undo ? graph.undo(s.to, options) : graph.redo(options);
+			if (s.outcome === "landed") {
+				assert.equal(r.ok, true, `${where}: refused: ${JSON.stringify(r.refusal)}`);
+				assert.equal(r.position, s.landedAt, `${where}: landed at`);
+				assert.deepEqual(sorted(r.writes), sorted(fixed(c, s.writes)), `${where}: the net writes`);
+				assert.equal(graph.position(), s.landedAt, `${where}: the view moved to the change`);
+			} else {
+				assert.equal(s.outcome, "refused");
+				assert.equal(r.ok, false, `${where}: landed: ${JSON.stringify(r.writes)}`);
+				compareRefusal(where, r.refusal, s.refusal);
+				assert.equal(port.position(), s.storePosition, `${where}: the store's position`);
+				assert.equal(held(graph, kinds), before, `${where}: the view as it was`);
+			}
+		} else if (step.other) {
+			// another writer's change, landed on the port at its next position; the graph does not see it until a sync (R42)
+			const landed = port.change({ writes: fixed(c, step.other.writes).map(item), expectedPosition: port.position() });
+			assert.deepEqual(landed, { ok: true, position: step.other.position }, `step ${i + 1}: the other writer's change`);
+		} else if (step.sync) {
+			for (const change of port.changes(graph.position()).changes) {
+				if (change.position > step.sync.position) break;
+				const r = graph.applyChange({ position: change.position, items: change.writes });
+				assert.equal(r.ok, true, `step ${i + 1}: the change at ${change.position}: ${JSON.stringify(r.refusal)}`);
+			}
+			assert.equal(graph.position(), step.sync.position, `step ${i + 1}: synced to`);
 		} else if (step.ask) {
 			assert.equal(graph.position(), step.ask.position, `step ${i + 1}: position()`);
 			for (const q of step.ask.questions) {
 				const got = answer(graph, q);
 				const where = `step ${i + 1}, ${JSON.stringify({ ...q, answer: undefined })}`;
 				assert.equal(got.position, step.ask.position, `${where}: the position the answer states`);
-				if (got.list) assert.deepEqual(sorted(got.value), sorted(q.answer), where);
-				else assert.deepEqual(got.value, q.answer, where);
+				const want = fixed(c, q.answer);
+				if (got.list) assert.deepEqual(sorted(got.value), sorted(want), where);
+				else assert.deepEqual(got.value, want, where);
 			}
-		} else assert.fail(`step ${i + 1} is neither take, plan nor ask`);
+		} else assert.fail(`step ${i + 1} is neither take, plan, commit, undo, redo, other, sync nor ask`);
 	}
 }
 
@@ -203,15 +274,19 @@ for (const c of CASES) {
 		}
 		assert.equal(c.verdict, "accepted");
 		runAccepted(c, "fill");
-		if (c.steps[0].start.position > 0 && c.steps[0].start.entities.length > 0) runAccepted(c, "land");
+		if (c.batch < 5 && c.steps[0].start.position > 0 && c.steps[0].start.entities.length > 0) runAccepted(c, "land");
 	});
 }
 
-test("the corpus is read whole: batch 1's 38 cases, batch 2's 32, batch 3's 18 and batch 4's 7, each named for its file", () => {
-	assert.deepEqual(BATCHES.map((b) => filesOf(b).length), [38, 32, 18, 7]);
-	assert.deepEqual(BATCHES, ["batch-1", "batch-2", "batch-3", "batch-4"], "every batch directory, run");
+test("the corpus is read whole: batch 1's 38 cases, batch 2's 32, batch 3's 18, batch 4's 7 and batch 5's 14, each named for its file; batch 6 is M6's", () => {
+	assert.deepEqual(BATCHES.map((b) => filesOf(b).length), [38, 32, 18, 7, 14]);
+	assert.deepEqual(DIRECTORIES, [...BATCHES, ...LATER], "every batch directory, run here or left to a later milestone by name");
 	for (const f of BATCHES.flatMap(filesOf)) assert.equal(JSON.parse(fs.readFileSync(f, "utf8")).case, path.basename(f, ".json"));
 	const counted = (batch) => CASES.filter((c) => c.batch === batch).flatMap((c) => (c.steps ?? []).filter((st) => st.plan)).map((st) => st.plan.outcome);
 	const tally = (batch) => [counted(batch).filter((o) => o === "accepted").length, counted(batch).filter((o) => o === "refused").length];
 	assert.deepEqual([tally(2), tally(3), tally(4)], [[62, 26], [33, 14], [12, 10]], "batch 2's 88 plans, 62 accepted and 26 refused; batch 3's 47, 33 and 14; batch 4's 22, 12 and 10");
+	// batch 5's commits, undos and redos, landed and refused
+	const acts = {};
+	for (const c of CASES.filter((x) => x.batch === 5)) for (const st of c.steps) for (const act of ["commit", "undo", "redo"]) if (st[act]) acts[`${act} ${st[act].outcome}`] = (acts[`${act} ${st[act].outcome}`] ?? 0) + 1;
+	assert.deepEqual(acts, { "commit landed": 34, "commit refused": 1, "undo landed": 24, "undo refused": 13, "redo landed": 5, "redo refused": 2 });
 });

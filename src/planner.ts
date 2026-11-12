@@ -15,7 +15,7 @@ import { type PhaseFault, readConditions, runPhase } from "./phases.js";
 import { type ConditionReading, judge, RuleExpander } from "./reference-rules.js";
 import { type GraphRefusal, type GraphRefusalCode, refuse } from "./refusal.js";
 import { resolveItem } from "./resolvers.js";
-import { type GraphStep, Scratch } from "./scratch.js";
+import { type GraphStep, Scratch, StepLimitReached } from "./scratch.js";
 import { type EntityView, type GraphRecord, isObject, readEachPlain } from "./view.js";
 
 /**
@@ -27,8 +27,11 @@ export type ConditionsBefore = (context: unknown) => { ok: true; breaches: Reado
 /** The faults of a resolver's write that are the resolver's own: a write that is no item, or names no declared kind (D27). */
 const RESOLVER_FAULTS: ReadonlySet<GraphRefusalCode> = new Set(["invalid-edit", "unknown-operation", "undeclared-kind", "not-plain"]);
 
-/** The bounds of a plan (D17): at most this many requested items, and this many net writes after the rules. */
-export const PLAN_LIMITS = Object.freeze({ maxEditItems: 2000, maxNetWrites: 2000 });
+/**
+ * The bounds of a plan (D17, D35): at most this many requested items, this many net writes after the rules, and this many steps,
+ * ten times the net writes, so an expansion is refused before it costs more than its record could hold.
+ */
+export const PLAN_LIMITS = Object.freeze({ maxEditItems: 2000, maxNetWrites: 2000, maxSteps: 20_000 });
 
 /**
  * One requested item (D18): a `create` of an entity absent at that point, with its whole record; a `change` of one present,
@@ -72,11 +75,21 @@ export function planEdit(view: EntityView, d: CompiledDeclaration, input: unknow
 	const read = readEachPlain(listed);
 	if (!read.ok) return no("not-plain", `items[${read.at}]`, read.at);
 
+	const s = new Scratch(view, d, PLAN_LIMITS.maxSteps);
+	try {
+		return planOn(s, view, d, read.items, context, conditionsBefore, no);
+	} catch (thrown) {
+		if (!(thrown instanceof StepLimitReached)) throw thrown;
+		return withFacts(refuse("too-many-steps", `bound ${PLAN_LIMITS.maxSteps}`), "steps", thrown.steps);
+	}
+}
+
+/** The plan itself, on its scratch layer: the stopping rule, the bound, and judging. */
+function planOn(s: Scratch, view: EntityView, d: CompiledDeclaration, items: readonly unknown[], context: unknown, conditionsBefore: ConditionsBefore, no: (code: GraphRefusalCode, subject: string, opIndex?: number) => GraphPlan): GraphPlan {
 	// 1. each requested item, after its kind's resolver, applied; a fault refused at the first item that faults (the corpus's R22)
-	const s = new Scratch(view, d);
 	const itemFault = (fault: ItemFault, i: number): GraphPlan =>
 		fault.code === "invalid-edit" || fault.code === "not-plain" ? no(fault.code, fault.subject, i) : withFacts(refuse(fault.code, fault.subject, i), fault.ruleKey ?? fault.code, 1);
-	for (const [i, item] of read.items.entries()) {
+	for (const [i, item] of items.entries()) {
 		const kind = isObject(item) && typeof item["kind"] === "string" ? item["kind"] : undefined;
 		const resolver = kind === undefined ? undefined : d.resolvers.get(kind);
 		if (resolver === undefined) {
