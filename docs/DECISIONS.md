@@ -364,7 +364,7 @@ Bounding the request alone - an edit of one item can cascade past the store's bo
 
 **Proposed by:** the builder of M2, 2026-11-11, for zorg's review, reading `CONTRACT.md`'s *Reference rules*, *Consequences and the stopping rule* and *Judging and refusals*; it takes the neutral corpus's readings `R14` and `R16` to `R24` (`corpus/README.md`), and settles five questions the corpus leaves uncovered, each named below.\
 **Affects:** `src/planner.ts`, `src/reference-rules.ts`, `src/refusal.ts`.\
-**Corrected by `D19` (2026-11-11), after the independent check of `d105140`:** its first settlement is reversed, an entity an edit creates below a `"cascade-delete"` minimum now refused rather than deleted, with `min` judged under either `onBelowMin`; and `opIndex` had named the item that last wrote the entity, not the item the breach follows from.\
+**Corrected by `D19` (2026-11-11), after the independent check of `d105140`:** its first settlement is reversed, an identity the view did not hold, created below a `"cascade-delete"` minimum, now refused rather than deleted, with `min` judged under either `onBelowMin`; and `opIndex` had named the item that last wrote the entity, not the item the breach follows from.\
 The text below is kept as it was proposed.
 
 **Reading.**\
@@ -394,11 +394,14 @@ Letting the later of two new holders steal from the earlier - the contract's `st
 `opIndex` names the requested item a breach follows from, read from what the breach counts that it did not count before the edit (correcting `D18`).\
 For `min`, it is the item that last left the reference holding fewer targets than before that write, the entity's creation included.\
 For `exclusivity`, it is the latest of the items that made each new holder hold the target.\
-For `targets` and `onTargetDelete`, it is the latest over the targets newly counted, each by the item that made the reference hold it where the edit did, and otherwise by the item that created or deleted the target.\
+For `targets` and `onTargetDelete`, it is the latest over the targets newly counted, each by the item that made the reference hold it where the reference did not hold it when the edit found it, and otherwise by the item that created or deleted the target.\
+So where a target the reference held was dropped and held again around its deletion, the deletion is named, though the breach needs both items; the corpus's `R21` leaves that case out.\
 A write of the entity that changed none of these is no cause, and each consequence carries its cause by the same reading: a steal, the item that made its new holder hold the target; a minimum's cascade, the item that left the reference short; an `onTargetDelete` consequence, the item that deleted the target.\
 A `create` of an identity the edit found held by another kind is refused `identity-taken`, a `remove` of it earlier in the edit notwithstanding, so no plan's net writes name one identity under two kinds (`D14`); an identity the view did not hold may be created, removed and created as another kind in one edit, one net write.\
-`onBelowMin: "cascade-delete"` deletes only an entity the edit found, left below its minimum and below what it held (`R17`); one the edit creates is never so deleted, and `min` is judged under either `onBelowMin`, so an entity the edit creates below a minimum, or creates and then leaves below it, is refused under `<kind>.<field>.min` (correcting `D18`'s first settlement).\
+`onBelowMin: "cascade-delete"` deletes an entity left below its minimum and below what its identity held when the edit found it (`R17`), and `min` is judged under either `onBelowMin` (correcting `D18`'s first settlement).\
+So an identity the view did not hold, created below its minimum, or created and then left below it, is refused under `<kind>.<field>.min`; one the view held, removed and created again below its minimum, is judged against what it held before, as `R17` says, and so deleted where it holds less.\
 Under `"cascade-delete"` no other entity can hold a new or worse `min` breach, since the expansion has deleted it, so judging both values changes no other answer.\
+Judging `min` under `"cascade-delete"` goes beyond the corpus's `R18`, which defines a `min` breach only for a reference whose `onBelowMin` is `"refuse"`; it is proposed for zorg's review with the rest of this decision.\
 The expansion stops as soon as more net writes than the bound are certain, and the plan is refused `too-many-writes`, its `measure` the net writes then certain (refining `D17`).\
 Every entity the rules alone touched is a net write, since a rule only takes a reference or an entity away, so an entity no requested item wrote cannot return to the state the edit found it in; the edit's items touch at most 2,000, so a plan stops within about twice the bound's writes.\
 The bound is judged before the rules' breaches, since an expansion stopped at it is not judged.\
